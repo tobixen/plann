@@ -10,7 +10,11 @@ There is another project out there, "Command-line Interface for Google Calendar"
 
 There is a "competing" project at https://github.com/geier/khal - you may want to check it out - it's more mature but probably more complex.  It's using a "vsyncdir" backend - if I've understood it correctly, that involves building a local copy of the calendar.  The philosophy behind calendar-cli is slightly different, calendar-cli is supposed to be a simple cli-based caldav+ical client.  No synchronization, no local storage, just client-side operations.
 
+There is also a python package kal on pypi - with the description set to "Personal assistant cli tool", and it's not mine.  (That may be quite bad).
+
 ## New vs old interface
+
+Based on user feedback I decided to fork calendar-cli into kal.
 
 DO YOU HAVE OPINIONS ON WHAT COLOR TO PAINT THE BIKE SHED WITH?  VISIT https://github.com/tobixen/calendar-cli/issues/88 NOW!
 
