@@ -1,17 +1,16 @@
-calendar-cli
-============
+# kal
 
 Simple command-line CalDav client, making it possible to add calendar events, browse an agenda and doing task management towards a caldav server.
 
-Other tools
------------
+This is the experimental new version of my old [calendar-cli project](https://github.com/tobixen/calendar-cli/).  The old repository was forked, hence there are a lot of references to calendar-cli everywhere, and this repository includes all the old code.  This will be cleaned up eventually.
+
+## Other tools
 
 There is another project out there, "Command-line Interface for Google Calendar", previously located at pypi under the calendar-cli name.  It has now been renamed to gcalendar-cli to avoid name conflict, and is available at https://pypi.python.org/pypi/gcalendar-cli/
 
 There is a "competing" project at https://github.com/geier/khal - you may want to check it out - it's more mature but probably more complex.  It's using a "vsyncdir" backend - if I've understood it correctly, that involves building a local copy of the calendar.  The philosophy behind calendar-cli is slightly different, calendar-cli is supposed to be a simple cli-based caldav+ical client.  No synchronization, no local storage, just client-side operations.
 
-New vs old interface
---------------------
+## New vs old interface
 
 DO YOU HAVE OPINIONS ON WHAT COLOR TO PAINT THE BIKE SHED WITH?  VISIT https://github.com/tobixen/calendar-cli/issues/88 NOW!
 
@@ -19,8 +18,7 @@ calendar-cli.py is the old interface, it will hang around and be supported for s
 
 I wanted a short and easy command name, since `cal(1)` is already a popular Unix command, I'm considering to install it into /usr/bin with the name `kal`, but I'm a bit uncertain (seems either like a bad typo or an attempt on localizing the command into my native language?)
 
-Usage examples
---------------
+## Usage examples
 
 The commands and options will be described further down, however examples often beats documentation.
 
@@ -28,22 +26,19 @@ First, check the tests folder - the file tests.sh shows some basic usage example
 
 In the examples folder there is a script I was using on a regular basis for task management for a while.
 
-Installation
-------------
+## Installation
 
 calendar-cli depends on quite some python libraries, i.e. pytz, caldav, etc.  "sudo ./setup.py install" should take care of all those eventually.
 
 The calendar-cli executable can be executed as it is, or copied to /usr/bin.  Make sure to copy the content - as of v0.12, calendar-cli is actually a symlink to calendar_cli.py.  This mess will be fixed up in v1.0.
 
-Support
--------
+## Support
 
 \#calendar-cli at irc.oftc.net, eventually t-calendar-cli@tobixen.no, eventually the issue tracker at https://github.com/tobixen/calendar-cli/issues
 
 Before reaching out, please make sure all the dependencies are installed and that you've installed the latest version of the caldav python library.
 
-Rationale
----------
+## Rationale
 
 GUIs and Web-UIs are nice for some purposes, but I really find the command line unbeatable when it comes to:
 
@@ -52,8 +47,7 @@ GUIs and Web-UIs are nice for some purposes, but I really find the command line 
 
 When I started writing calendar-cli, all I could find was cadaver and the CalDAVClientLibrary.  Both of those seems to be a bit shortcoming; they seem to miss the iCalendar parsing/generation, and there are things that simply cannot be done through those tools.
 
-Synopsis
---------
+## Synopsis
 
     calendar-cli.py [global options] [command] [command options] [subcommand] [subcommand options] [subcommand arguments] ...
 
@@ -124,8 +118,7 @@ With the todo-command, there are quite some options available (i.e. --categories
 
 The file TASK_MANAGEMENT.md contains some thoughts on how to organize tasks.
 
-Configuration file
-------------------
+## Configuration file
 
 Configuration file is by default located in $HOME/.config/calendar.conf.  calendar-cli expects it to be in json syntax, while kal supports both json and yaml.  You may run `calendar-cli --interactive-config` if you don't feel comfortable with hand-crafting configuration in json syntax, though this feature is not tested regularly.
 
@@ -217,8 +210,7 @@ private:
   contains: [ 'private-calendar', 'brothel-appointments' ]
 ```
 
-Usage example
--------------
+## Usage example
 
 Add a calendar item "testevent" at 2013-10-01:
 
@@ -228,15 +220,13 @@ Add a calendar item "testevent" at 2013-10-01:
 
 See USAGE.MD for instructions on how to use kal.
 
-Objectives
-----------
+## Objectives
 
 * It should be really easy and quick to add a todo-list item from the command line.
 * It should be really easy and quick to add a calendar item from the command line.
 * It should be possible to get out lists ("agenda") of calendar items and todo-items.
 * Interface for copying calendar items between calendars, even between calendars on distinct caldav servers
 
-Roadmap
--------
+## Roadmap
 
 See NEXT_LEVEL.md and NEW_CLI.md for the direction the project is heading.
