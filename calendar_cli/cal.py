@@ -887,9 +887,9 @@ def check_due(ctx, limit, lookahead):
         if input == 'ignore':
             continue
         elif input == 'split':
-            interactive_split_task(obj, ctx)
+            interactive_split_task(ctx, obj)
         elif input.startswith('postpone'):
-            obj.set_due(parse_add_dur(due, input.split(' ')[1]), move_dtstart=True)
+            obj.set_due(parse_add_dur(max(due, datetime.datetime.now()), input.split(' ')[1]), move_dtstart=True)
         elif input == 'complete':
             obj.complete(handle_rrule=True)
         elif input == 'cancel':
@@ -1010,7 +1010,6 @@ def interactive_split_task(ctx, obj):
         default = f"Plan how to do {summary}"
         while True:
             summary = click.prompt("Name for the subtask", default=default)
-            import pdb; pdb.set_trace()
             default=""
             if not summary:
                 break
@@ -1020,7 +1019,7 @@ def interactive_split_task(ctx, obj):
         new_estimate = click.prompt("what is the remaining estimate for the parent task?", default=new_estimate_suggestion)
         obj.set_duration(parse_add_dur(None, new_estimate), movable_attr='dtstart')
         postpone = click.prompt("Should we postpone the parent task?", default='0h')
-        obj.set_due(parse_add_dur(comp['DUE'].dt, postpone), move_dtstart=True)
+        obj.set_due(parse_add_dur(max(comp['DUE'].dt, datetime.datetime.now()), postpone), move_dtstart=True)
         obj.save()
 
 @interactive.command()
