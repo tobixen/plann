@@ -1,6 +1,6 @@
 # kal
 
-Simple command-line CalDav client, making it possible to add calendar events, browse an agenda and do task management.
+Simple command-line CalDAV client, making it possible to add calendar events, browse an agenda and do task management.
 
 This is the experimental new version of my old [calendar-cli project](https://github.com/tobixen/calendar-cli/).  The old repository was forked, hence there are a lot of references to calendar-cli everywhere, and this repository includes all the old code.  This will be cleaned up eventually.
 
