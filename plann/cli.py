@@ -13,14 +13,14 @@ https://github.com/tobixen/calendar-cli/issues/88
 """
 
 ## This file should preferably just be a thin interface between public
-## python libraries and the command line.  Logics that isn't strictly
-## tied to the cli as such but also does not fit into other libraries
-## may be moved out to a separate library file.
+## python libraries (including the plann library) and the command
+## line.
 
-## This file aims to be smaller than the old calendar-cli while
-## offering more featuores.
+## TODO: there is some logic in this file that isn't strictly tied to the
+## cli as such.  It should be moved out and made available through
+## `from plann import ...`
 
-from calendar_cli.metadata import metadata
+from plann.metadata import metadata
 __version__ = metadata["version"]
 
 import click
@@ -33,8 +33,8 @@ import datetime
 import logging
 import re
 from icalendar import prop, Timezone
-from calendar_cli.template import Template
-from calendar_cli.config import interactive_config, config_section, read_config, expand_config_section
+from plann.template import Template
+from plann.config import interactive_config, config_section, read_config, expand_config_section
 
 list_type = list
 
