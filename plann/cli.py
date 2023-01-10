@@ -857,7 +857,7 @@ def interactive(ctx):
 
 
 @interactive.command()
-@click.option('--limit', help='If more than limit overdue tasks are found, probably we should do a mass procrastination rather than going through one and one task', default=8)
+@click.option('--limit', help='If more than limit overdue tasks are found, probably we should do a mass procrastination rather than going through one and one task')
 @click.option('--lookahead', help='Look-ahead time - check tasks that needs to be completed in the near future', default='+12h')
 @click.pass_context
 def check_due(ctx, limit, lookahead):
