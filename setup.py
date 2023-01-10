@@ -5,7 +5,7 @@ import os
 
 from setuptools import setup, find_packages
 
-from calendar_cli.metadata import metadata
+from plann.metadata import metadata
 metadata_ = metadata.copy()
 
 for x in metadata:
@@ -14,8 +14,7 @@ for x in metadata:
         metadata_.pop(x)
 
 setup(
-    packages=['calendar_cli',
-              ],
+    packages=['plann'],
     classifiers=[
         #"Development Status :: ..."
         "Environment :: Web Environment",
@@ -26,8 +25,7 @@ setup(
         "Topic :: Internet :: WWW/HTTP",
         "Topic :: Internet :: WWW/HTTP :: Dynamic Content :: CGI Tools/Libraries",
     ],
-    scripts=['bin/calendar-cli.py', 'bin/calendar-cli'],
-    py_modules=['cal'],
+    py_modules=['plann'],
     install_requires=[
         'icalendar',
         'caldav>=0.12-dev0',
@@ -39,7 +37,7 @@ setup(
     ],
     entry_points={
         'console_scripts': [
-            'kal = calendar_cli.cal:cli',
+            'plann = plann.cli:cli',
         ],
     },
    **metadata_
