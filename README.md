@@ -1,4 +1,4 @@
-# kal
+# plann
 
 Simple command-line CalDAV client, making it possible to add calendar events, browse an agenda and do task management.
 
