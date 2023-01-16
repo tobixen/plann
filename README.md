@@ -8,17 +8,13 @@ This is the experimental new version of my old [calendar-cli project](https://gi
 
 There is a "competing" project at https://github.com/geier/khal - you may want to check it out - it's more mature but probably more complex.  It's using a "vsyncdir" backend - if I've understood it correctly, that involves building a local copy of the calendar.  The philosophy behind calendar-cli is slightly different, calendar-cli is supposed to be a simple cli-based caldav+ical client.  No synchronization, no local storage, just client-side operations.
 
-There is also a python package kal on pypi - with the description set to "Personal assistant cli tool", and it's not mine.  (That may be quite bad. However, `kal` has not been finalized as a project or binary name.)
-
 ## New vs old interface
 
-Based on user feedback I decided to fork `calendar-cli` into `kal`.
+Based on user feedback I decided to fork `calendar-cli` into `plann`.
 
 DO YOU HAVE OPINIONS ON WHAT COLOR TO PAINT THE BIKE SHED WITH?  VISIT https://github.com/tobixen/calendar-cli/issues/88 NOW!
 
 calendar-cli.py is the old interface, it will hang around and be supported for some time to come.  cal.py is the new interface, but until version 1.0 is ready, there will still be functionality in calendar-cli that isn't mirrored to cal.py.
-
-I wanted a short and easy command name, since `cal(1)` is already a popular Unix command, I'm considering to install it into /usr/bin with the name `kal`, but I'm a bit uncertain (seems either like a bad typo or an attempt on localizing the command into my native language?)
 
 ## Usage examples
 
@@ -28,7 +24,7 @@ First, check the tests folder - the file tests.sh shows some basic usage example
 
 ## Installation
 
-`kal` depends on quite some python libraries, i.e. pytz, caldav, etc.  "sudo ./setup.py install" should take care of all those eventually.
+`plann` depends on quite some python libraries, i.e. pytz, caldav, etc.  "sudo ./setup.py install" should take care of all those eventually.
 
 ## Support
 
@@ -43,13 +39,13 @@ GUIs and Web-UIs are nice for some purposes, but I really find the command line 
 * Minor stuff that is repeated often.  Writing something like "todo add make a calendar-cli system" or "calendar add 'tomorrow 15:40+2h' doctor appointment" is (for me) faster than navigating into some web calendar interface and add an item there.
 * Things that are outside the scope of the UI.  Here is one of many tasks I'd like to do: "go through the work calendar, find all new calendar events that are outside office hours, check up with the personal calendar if there are potential conflicts, add some information at the personal calendar if appropriate", and vice versa - it has to be handled very manually if doing it through any normal calendar application as far as I know, but if having some simple CLI or python library I could easily make some interactive script that would help me doing the operation above.
 
-When I started writing `calendar-cli`, the predecessor to `kal`, all I could find was cadaver and the CalDAVClientLibrary.  Both of those seems to be a bit shortcoming; they seem to miss the iCalendar parsing/generation, and there are things that simply cannot be done through those tools.
+When I started writing `calendar-cli`, the predecessor to `plann`, all I could find was cadaver and the CalDAVClientLibrary.  Both of those seems to be a bit shortcoming; they seem to miss the iCalendar parsing/generation, and there are things that simply cannot be done through those tools.
 
 ## Synopsis
 
-    kal [global options] [command] [command options] [subcommand] [subcommand options] [subcommand arguments] ...
+    plann [global options] [command] [command options] [subcommand] [subcommand options] [subcommand arguments] ...
 
-I'm intending to make it easier by allowing `kal` to be symlinked to the various commands and also to allow the options to be placed wherever.
+I'm intending to make it easier by allowing `plann` to be symlinked to the various commands and also to allow the options to be placed wherever.
 
 ### Global options
 
@@ -61,10 +57,10 @@ Always consult --help for up-to-date and complete listings of options.
 The list below will only contain the most important options and may
 not be up-to-date and may contain features not implemented yet.
 
-* --caldav-url, --caldav-user, --caldav-pass: how to connect to the CalDAV server.  Fits better into a configuration file. (CONFIGURATION FILE NOT YET IMPLEMENTED IN `kal`)
+* --caldav-url, --caldav-user, --caldav-pass: how to connect to the CalDAV server.  Fits better into a configuration file. (CONFIGURATION FILE NOT YET IMPLEMENTED IN `plann`)
 * --calendar-url: url to the calendar one wants to use.  A relative URL (path) or a calendar-id is also accepted.
 * --config-file: use a specific configuration file (default: $HOME/.config/calendar.conf)
-* --config-section: use a specific section from the config file (i.e. to select a different caldav-server to connect to) (CONFIGURATION FILE NOT YET IMPLEMENTED IN `kal`)
+* --config-section: use a specific section from the config file (i.e. to select a different caldav-server to connect to) (CONFIGURATION FILE NOT YET IMPLEMENTED IN `plann`)
 * --icalendar: Write or read icalendar to/from stdout/stdin
 * --nocaldav: don't connect to a caldav server
 * --timezone: any "naive" timestamp should be considered to belong to the given time zone, timestamps outputted should be in this time zone, timestamps given through options should be considered to be in this time zone (Olson database identifiers, like UTC or Europe/Helsinki). (default: local timezone)
@@ -73,14 +69,14 @@ The caldav URL should be something like i.e. http://some.davical.server/caldav.p
 
 ### Commands
 
-Currently, `kal` takes three distinct commands:
+Currently, `plann` takes three distinct commands:
 * add: adds new events/items to todo lists/calendars
 * select: select/search/filter tasks/events to list/modify/mark complete and so forth
 * test: simply verify that the server can be connected to with the credentials that are supplied
 
 ### Event time specification
 
-Supported since `calendar_cli` (predecessor to `kal`) v0.12:
+Supported since `calendar_cli` (predecessor to `plann`) v0.12:
 
 * anything recognized by dateutil.parser.parse()
 * An iso time stamp, followed with the duration, using either + or space as separator.  Duration is a number postfixed by s for seconds, m for minutes, h for hours, d for days, w for weeks and y for years (i.e. 2013-09-10T13:37+30d)
@@ -111,9 +107,9 @@ The file TASK_MANAGEMENT.md contains some thoughts on how to organize tasks.
 
 ## Configuration file
 
-Configuration file is by default located in $HOME/.config/calendar.conf.  `kal` supports both json and yaml.
+Configuration file is by default located in $HOME/.config/calendar.conf.  `plann` supports both json and yaml.
 
-(I considered .ini, but I was told that it's actually not a standard.  I'd like any calendar application to be able to access the file, hence calendar.conf and not kal.conf)
+(I considered .ini, but I was told that it's actually not a standard.  I'd like any calendar application to be able to access the file, hence calendar.conf and not plann.conf)
 
 The file may look like this:
 
@@ -163,11 +159,11 @@ Sections may also include calendar urls or ids, and sections may inherit other s
   }
 ```
 
-* kal will accept a parameter `calendar_name`, which should match with the display name of the calendar.
+* `plann` will accept a parameter `calendar_name`, which should match with the display name of the calendar.
 
-* YAML seems to have more traction than JSON when it comes to configuration that is supposed to be read and edited by humans, hence `kal` will accept configuration files in yaml as well as json.
+* YAML seems to have more traction than JSON when it comes to configuration that is supposed to be read and edited by humans, hence `plann` will accept configuration files in yaml as well as json.
 
-* Since `kal` may operate at many calendars at one time, I decided to add the keyword "contains" to have one config section refer to multiple other config sections.
+* Since `plann` may operate at many calendars at one time, I decided to add the keyword "contains" to have one config section refer to multiple other config sections.
 
 Example:
 
@@ -199,13 +195,13 @@ private:
 
 Add a calendar item "testevent" at 2013-10-01:
 
-    ./kal --calendar-url=http://calendar.bekkenstenveien53c.oslo.no/caldav.php/tobias/calendar/ --caldav-server=http://calendar.bekkenstenveien53c.oslo.no/caldav.php --caldav-user=myusername --caldav-pass=mypassphrase add event testevent 2013-10-01
+    ./plann --calendar-url=http://calendar.bekkenstenveien53c.oslo.no/caldav.php/tobias/calendar/ --caldav-server=http://calendar.bekkenstenveien53c.oslo.no/caldav.php --caldav-user=myusername --caldav-pass=mypassphrase add event testevent 2013-10-01
 
 Add a todo item "change oil":
 
-    ./kal --calendar-url=http://calendar.bekkenstenveien53c.oslo.no/caldav.php/tobias/calendar/ --caldav-server=http://calendar.bekkenstenveien53c.oslo.no/caldav.php --caldav-user=myusername --caldav-pass=mypassphrase add todo "change oil"
+    ./plann --calendar-url=http://calendar.bekkenstenveien53c.oslo.no/caldav.php/tobias/calendar/ --caldav-server=http://calendar.bekkenstenveien53c.oslo.no/caldav.php --caldav-user=myusername --caldav-pass=mypassphrase add todo "change oil"
 
-See USAGE.MD for further instructions on how to use kal.
+See USAGE.MD for further instructions on how to use `plann`.
 
 ## Objectives
 
