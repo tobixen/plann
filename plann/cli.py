@@ -618,7 +618,7 @@ def complete(ctx, **kwargs):
 @click.option('--hours-per-day', help='how many hours per day you expect to be able to dedicate to those tasks/events', default=4)
 @click.option('--limit', help='break after finding this many "panic"-items', default=4096)
 @click.pass_context
-def calculate_panic_time(ctx, hours_per_day, limit):
+def check_for_panic(ctx, hours_per_day, limit):
     """Check if we need to panic
 
     Assuming we can spend a limited time per day on those tasks
@@ -637,13 +637,13 @@ def calculate_panic_time(ctx, hours_per_day, limit):
     TODO: Only tasks supported so far.  It should also warn on
     overlapping events and substract time spent on events.
     """
-    return _calculate_panic_time(ctx, hours_per_day, limit, output=True)
+    return _check_for_panic(ctx, hours_per_day, limit, output=True)
 
 ## TODO: this should probably be moved somewhere else, as it's "extra
 ## functionality".  The scope for this package (and particularly for
 ## this file) is merely to provide a command-line interface, logic
 ## ought to go somewhere else.
-def _calculate_panic_time(ctx, hours_per_day, limit, output=True):
+def _check_for_panic(ctx, hours_per_day, limit, output=True):
     tot_slack = None
     min_slack = None
     dur_multiplicator = 24/hours_per_day
@@ -921,7 +921,7 @@ def _dismiss_panic(ctx, hours_per_day):
     _select(ctx=ctx, todo=True, sort_key=['{DTSTART.dt:?{DUE.dt:?(0000)?}?%F %H:%M:%S}{PRIORITY:?0?}'])
     objs = ctx.obj['objs']
     get_dtstart = lambda x: _ensure_ts((x.icalendar_component.get('dtstart') or x.icalendar_component.get('due')).dt)
-    (panic_objs, min_slack, tot_slack, panic_time) = _calculate_panic_time(ctx=ctx, output=False, hours_per_day=hours_per_day, limit=1)
+    (panic_objs, min_slack, tot_slack, panic_time) = _check_for_panic(ctx=ctx, output=False, hours_per_day=hours_per_day, limit=1)
 
     if not panic_objs:
         click.echo("No need to panic :-)")
