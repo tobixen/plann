@@ -30,7 +30,7 @@ I installed a version a decade ago, didn't upgrade it ever, and it worked out we
 
 https://radicale.org/
 
-Also a relatively new server, written in Python, though apparently less actively maintained than Xandikos.  It's also included in the test suite of the python caldav library, hence the caldav client library is tested very frequently against Radicale.  It's also very easy to set up.
+A relatively new server, written in Python, though apparently less actively maintained than Xandikos.  It's included in the test suite of the python caldav library, so it's well-tested.  It's also very easy to set up.
 
 Radicale also seems to be something that should be considered.  I'm not sure if it supports multiple users, but at least it does not support the scheduling RFC.  It seems like the only showstopper is https://github.com/Kozea/Radicale/issues/1280 - which looks like something that I could probably fix myself if/when I get time for it.
 
