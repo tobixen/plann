@@ -1,6 +1,6 @@
 # What CalDAV-server to choose?
 
-TLDR-summary: Choose DAViCal - though, if you're going to self-host it, then be aware that it involves some work to set it up.  You may also consider Radicale and  SOGo.
+TLDR-summary: To use plann heavily both to manage calendars and do heavy task management, none of the calendar servers out there are good enough.  I ended up with DAViCal, but had to fix some bugs and make a workaround in plann.
 
 ## Requirements
 
@@ -9,10 +9,12 @@ To be able to efficiently use `plann` version 1.0 (no, it has not been released 
 * Tasks (VTODO component type)
 * Searching on text fields
 * Searching on categories
+* Relatively complex searches
 * Recurring events
 * Recurring tasks
+* Relationships (RELATED-TO property type)
 
-Also, I have on the long term list to also make it easy to add journal entries after a meeting has been held or a task has been done - then the calendar should also support the VJOURNAL component type.
+I have on the long term list to also make it easy to add journal entries after a meeting has been held or a task has been done - then the calendar should also support the VJOURNAL component type.
 
 Perhaps at some point in the future, I will also add support for "scheduling" (basically, sending meeting invites and respond to them).
 
@@ -24,7 +26,7 @@ DAViCal seems to be one of the most standard-compliant caldav servers out there,
 
 It's written in PHP, needs a database backend (PostgreSQL) and a webserver frontend (Apache is probably easiest - though I went for php-fpm and nginx).
 
-I installed a version a decade ago, didn't upgrade it ever, and it worked out well enough.  While tossing out obsoleted hardware, obsoleted ISP, etc, I tried reinstalling it on Archlinux, 2023.  It was not a very pleasant experience.  As of 2023-01, I would recommend disregarding the article on the Archlinux wiki completely (https://wiki.archlinux.org/title/DAViCal - well, it's a Wiki, I should probably improve on it).  I got version 1.1.10 installed, and it was not even possible to create users - due to a bug that was fixed in 1.1.11.  I found another showstopping bug (https://gitlab.com/davical-project/davical/-/issues/280) but managed to work around that one.  Huff.
+I installed a version a decade ago, didn't upgrade it ever, and it worked out well enough.  Revisiting it with the newest version of plann in 2023, things didn't work out very well - to get it to play well with plann I needed to write up pull request https://gitlab.com/davical-project/davical/-/merge_requests/101 and https://gitlab.com/davical-project/davical/-/merge_requests/102, and I still need to find a workaround for the last issue at https://gitlab.com/davical-project/davical/-/issues/281
 
 ### Radicale
 
@@ -32,9 +34,21 @@ https://radicale.org/
 
 A relatively new server, written in Python, though apparently less actively maintained than Xandikos.  It's included in the test suite of the python caldav library, so it's well-tested.  It's also very easy to set up.
 
-Radicale also seems to be something that should be considered.  I'm not sure if it supports multiple users, but at least it does not support the scheduling RFC.  It seems like the only showstopper is https://github.com/Kozea/Radicale/issues/1280 - which looks like something that I could probably fix myself if/when I get time for it.
+It does not support the scheduling RFC, but it does support multiple users and some kind of permission settings.
+
+Radicale seems to be less maintained than Xandikos.  Category search was broken with a simple traceback, this has been an open issue for more than two years, I proposed a one-line workaround in https://github.com/Kozea/Radicale/issues/1125 with no feedback for several months.  Someone has submitted a more proper fix in https://github.com/Kozea/Radicale/pull/1280 (... and I've added test code in pull request #1281).  Hence, my recommendation is to patch up Radicale if going for this option - but still, it fails as it's unable to do date-searches for uncompleted tasks.  I gave up on Radicale due to this.
 
 Radicale also supports address books (VCARD).
+
+### Xandikos
+
+https://www.xandikos.org/
+
+Relatively new server, written in Python, stores all data in a local git-repository.  Super-easy to set up and get started with.  Quite standard-complient.  Compability is ensured, as it's included in the python caldav library test suite, and hence tested almost on every commit.  All features in plann as of 2023-01 was working flawlessly against Xandikos.  I would definitely recommend Xandikos if/when it will support recurrances - the missing support for recurring events and task is a big show-stopper for me.
+
+Xandikos does not support multiple users and access controls (I would still use it for my family - one calendar for each person, and no personal secrets stored in the calendars).  The lack of multi-user support also means support for scheduling is missing.
+
+Xandikos also supports address books (VCARD).
 
 ### SOGo
 
@@ -47,16 +61,6 @@ SOGo has been around for as long as the python caldav library.
 I was earlier dismissing it because of the lack of expand support - though, now the python caldav library can do client-side expand, so it's not important anymore.  I should revisit and test it more thoroughly again.
 
 SOGo did not support journals last time I checked.
-
-### Xandikos
-
-https://www.xandikos.org/
-
-Relatively new server, written in Python, stores all data in a local git-repository.  Super-easy to set up and get started with.  Quite standard-complient.  Compability is ensured, as it's included in the python caldav library test suite, and hence tested almost on every commit.  I would definitely recommend Xandikos if/when it will support recurrances.  The missing support for recurring events and task is a big show-stopper for me.  When this is fixed, I will most likely recommend Xandikos.
-
-Xandikos does not support multiple users and access controls (I would still use it for my family - one calendar for each person, and no personal secrets stored in the calendars).  The lack of multi-user support also means support for scheduling is missing.
-
-Xandikos also supports address books (VCARD).
 
 ### Robur
 
@@ -123,5 +127,20 @@ I haven't revisited this one, but when testing it long long time ago it didn't s
 
 ## Things I should consider testing for
 
-* Possibility to add tasks and events to the same calendar.  I know most servers supports it and that Zimbra does not support it, but should explicitly test this on all the servers.
-* Possibility to ask for events and tasks in the same report query.  This is important for plann, as this is the default search mode.  For xandikos, one has to explicitly add --todo or --event to get anything from a search.  I should check if this is the same for other implementations.
+The current test suite is sort of a by-product of the Python CalDAV library.  Originally the idea was to just verify that the library would interoperate with different clients.  Eventually it has grown into a test-suite that verifies how complient the different CalDAV servers are.  I would eventually like to fork it out into a separate product - a CalDAV complience checker.  The current code does not go far enough:
+
+* It does not check if it's possible to add tasks and events (VTODO and VEVENT) to the same calendar.  I know most servers supports it and that Zimbra does not support it, but should explicitly test this on all the servers.
+* The possibility to ask for events and tasks in the same report query.  This is important for plann, as this is the default search mode.  For xandikos, sometimes the search requests come out empty unless one explicitly adds --todo or --event.  I should check if this is the same for other implementations.
+* Expansion support - I should write up dedicated tests to catch weather the server supports expansion or not (since the caldav library now does expansion on the client side, the earlier tests does not show this anymore)
+* Compatibility matrix - currently I'm editing it by hand all until all the tests are passing - but I should write code that autodetects what kind of flaws the various servers have.
+* Compatibility matrix should not be "hidden" in the test folder, it should be made available both to the caldav library and to plann, allowing the tools to do workarounds if needed.
+
+## Conclusion
+
+I've been working with the CalDAV protocol and iCalendar format now for almost ten years.  Initially I hoped not to have to deal with the CalDAV standard itself, I hoped that I could just use other python libraries for interfacing towards the calendar server, but it didn't work out very well - soon enough I ended up with the maintainer hat for the python CalDAV client library.
+
+Let me be completely honest about it - I'm not happy, neither about the CalDAV standard nor the iCalendar standard.  The protocols seems to be not very well thought-through, there are quite some problems with them.  While the iCalendar standard is thriving, things are apparently not working out that well for the CalDAV standard.  It's needed to install extra software on Android to support CalDAV - but yet, as far as I know, that's the only standard we have for two-way server/client calendaring communication.  The alternative to using CalDAV is to sync the clients by downloading the full ics feed for the whole calendar every time it's synced, or to keep a local copy of all the calendar events and send/receive calendaring data on event-basis over other protocols, like email attachments.  Neither of the solutions are good.
+
+The CalDAV protocol seems to be designed so that the client can be relatively simple while most of the work is done on the server side.  That was also my idea for plann.  One can do relatively complicated searches through CalDAV, but to ensure compatibility with all the broken servers out there, the only option seems to be to frequently download the complete calendar and do all filtring operations on the client side.
+
+It may be a minor problem when performing a search query and the server returns too much.  This may be handled on the client side - I'm considering to add code to filter away the extra data.  However, the bigger problem is when a report query returns nothing, or returns only a fraction of the components it should return.  That may cause one to miss appointments and forget about important tasks.  Not good!

@@ -32,6 +32,7 @@ import dateutil.parser
 import datetime
 import logging
 import re
+import sys
 from icalendar import prop, Timezone
 from plann.template import Template
 from plann.config import interactive_config, config_section, read_config, expand_config_section
@@ -51,7 +52,7 @@ list_type = list
 ## /usr/lib/*/site-packages/click/types.py on how to do this.
 
 ## TODO: maybe find those attributes through the icalendar library? icalendar.cal.singletons, icalendar.cal.multiple, etc
-attr_txt_one = ['location', 'description', 'geo', 'organizer', 'summary', 'class', 'rrule']
+attr_txt_one = ['location', 'description', 'geo', 'organizer', 'summary', 'class', 'rrule', 'status']
 attr_txt_many = ['category', 'comment', 'contact', 'resources', 'parent', 'child']
 attr_time = ['dtstamp', 'dtstart', 'due', 'dtend', 'duration']
 attr_int = ['priority']
@@ -212,7 +213,10 @@ def find_calendars(args, raise_errors):
         calendars = []
         tries = 0
         for calendar_url in list_(args.get('calendar_url')):
-            calendar=principal.calendar(cal_id=calendar_url)
+            if '/' in calendar_url:
+                calendar = principal.calendar(cal_url=calendar_url)
+            else:
+                calendar = principal.calendar(cal_id=calendar_url)
             tries += 1
             if _try(calendar.get_display_name, {}, calendar.url):
                 calendars.append(calendar)
@@ -233,7 +237,7 @@ def find_calendars(args, raise_errors):
 @click.option('--config-section', default=["default"], multiple=True)
 @click.option('--caldav-url', help="Full URL to the caldav server", metavar='URL')
 @click.option('--caldav-username', '--caldav-user', help="Full URL to the caldav server", metavar='URL')
-@click.option('--caldav-password', '--caldav-pass', help="Full URL to the caldav server", metavar='URL')
+@click.option('--caldav-password', '--caldav-pass', help="Password for the caldav server", metavar='URL')
 @click.option('--calendar-url', help="Calendar id, path or URL", metavar='cal', multiple=True)
 @click.option('--calendar-name', help="Calendar name", metavar='cal', multiple=True)
 @click.option('--raise-errors/--print-errors', help="Raise errors found on calendar discovery")
@@ -324,7 +328,7 @@ def _set_attr_options(verb="", desc=""):
 @click.option('--skip-parents/--include-parents', help="Skip parents if it's children is selected.  Useful for finding tasks that can be started if parent depends on child", default=False)
 @click.option('--skip-children/--include-children', help="Skip children if it's parent is selected.  Useful for getting an overview of the big picture if children are subtasks", default=False)
 @click.option('--limit', help='Number of objects to show', type=int)
-@click.option('--offset', help='SKip the first objects', type=int)
+@click.option('--offset', help='Skip the first objects', type=int)
 @click.pass_context
 def select(*largs, **kwargs):
     """Search command, allows listing, editing, etc
@@ -523,6 +527,15 @@ def print_uid(ctx):
     This can also be achieved by using select with template and limit
     """
     click.echo(ctx.obj['objs'][0].icalendar_component['UID'])
+
+@select.command()
+@click.pass_context
+def print_ical(ctx):
+    """
+    Dumps everything selected as an ICS feed
+    """
+    for obj in ctx.obj['objs']:
+        click.echo(obj.data)
 
 @select.command()
 @click.option('--multi-delete/--no-multi-delete', default=None, help="Delete multiple things without confirmation prompt")
@@ -730,13 +743,28 @@ def add(ctx, **kwargs):
 @click.option('-d', '--ical-data', '--ical', help="ical object to be added")
 @click.option('-f', '--ical-file', type=click.File('rb'), help="file containing ical data")
 def ical(ctx, ical_data, ical_file):
+    ical = ""
     if (ical_file):
-        ical = ical_file.read()
+        ical = ical + ical_file.read().decode()
+    if (ical_data):
+        ical = ical + ical_data
+    if not ical:
+        ical = sys.stdin.read()
     if ctx.obj['ical_fragment']:
         ical = ical.replace('\nEND:', f"{ctx.obj['ical_fragment']}\nEND:")
-    for c in ctx.obj['calendars']:
-        ## TODO: this may not be an event - should make a Calendar.save_object method
-        c.save_event(ical_data)
+    if 'BEGIN:VCALENDAR' in ical:
+        ical = ical.lstrip()
+        icals = []
+        while ical.startswith("BEGIN:VCALENDAR\n"):
+            pos = ical.find("\nEND:VCALENDAR\n") + 15
+            icals.append(ical[:pos])
+            ical = ical[pos:].lstrip()
+    else:
+        icals = [ ical ]
+    for ical in icals:
+        for c in ctx.obj['calendars']:
+            ## TODO: this may not be an event - should make a Calendar.save_object method
+            c.save_event(ical)
 
 def _process_set_args(ctx, kwargs):
     ctx.obj['set_args'] = {}
@@ -788,6 +816,7 @@ def _add_todo(ctx, **kwargs):
     for cal in ctx.obj['calendars']:
         todo = cal.save_todo(ical=ctx.obj.get('ical_fragment', ""), **ctx.obj['set_args'], no_overwrite=True)
         click.echo(f"uid={todo.id}")
+    return todo
 
 @add.command()
 ## TODO
@@ -883,13 +912,15 @@ def check_due(ctx, limit, lookahead):
         if dtstart.strftime("%F%H%M") > end_.strftime("%F%H%M"):
             continue
         click.echo(f"pri={pri} {dtstart:%F %H:%M:%S} - {due:%F %H:%M:%S}: {summary}")
-        input = click.prompt("postpone <n>d / ignore / complete / split / cancel / pdb?", default='ignore')
+        input = click.prompt("postpone <n>d / ignore / part(ially-complete) / complete / split / cancel / pdb?", default='ignore')
         if input == 'ignore':
             continue
+        elif input == 'part':
+            interactive_split_task(ctx, obj, partially_complete=True, too_big=False)
         elif input == 'split':
-            interactive_split_task(ctx, obj)
+            interactive_split_task(ctx, obj, too_big=False)
         elif input.startswith('postpone'):
-            obj.set_due(parse_add_dur(max(due, datetime.datetime.now()), input.split(' ')[1]), move_dtstart=True)
+            _procrastinate([obj], input.split(' ')[1])
         elif input == 'complete':
             obj.complete(handle_rrule=True)
         elif input == 'cancel':
@@ -955,19 +986,23 @@ def _dismiss_panic(ctx, hours_per_day):
     else:
         procrastination_time = f"{procrastination_time.seconds//3600+1}h"
     procrastination_time = click.prompt(f"Push the due-date with ...", default=procrastination_time)
-    ptime = parse_add_dur(None, procrastination_time)
-    for x in first_low_pri_tasks:
-        x.set_due(x.get_due() + ptime, move_dtstart=True)
-        x.save()
+    _procrastinate(first_low_pri_tasks, procrastination_time)
 
     if other_low_pri_tasks:
         click.echo(f"There are {len(other_low_pri_tasks)} later pri>={lowest_pri} tasks which probably should be postponed")
         procrastination_time = click.prompt(f"Push the due-date for those with ...", default=procrastination_time)
-        ptime = parse_add_dur(None, procrastination_time)
-        for x in other_low_pri_tasks:
-            x.set_due(x.get_due() + ptime, move_dtstart=True)
-            x.save()
+        _procrastinate(other_low_pri_tasks, procrastination_time)
     return _dismiss_panic(ctx, hours_per_day)
+
+def _procrastinate(objs, delay):
+    for x in objs:
+        try:
+            x.set_due(parse_add_dur(max(x.get_due().astimezone(datetime.timezone.utc), datetime.datetime.now().astimezone(datetime.timezone.utc)), delay), move_dtstart=True, check_parent=True)
+            x.save()
+        except caldav.error.ConsistencyError:
+            i = x.icalendar_component
+            summary = i.get('summary') or i.get('description') or i.get('uid')
+            click.echo("{summary} could not be postponed (due to a parent task with earlier due)")
 
 @interactive.command()
 @click.pass_context
@@ -999,28 +1034,42 @@ def relationships(obj):
     else:
         return []
 
-def interactive_split_task(ctx, obj):
+def interactive_split_task(ctx, obj, partially_complete=False, too_big=True):
     comp = obj.icalendar_component
     summary = comp.get('summary') or comp.get('description') or comp.get('uid')
     estimate = obj.get_duration()
-    click.echo(f"{summary}: estimate is {estimate}, which is too big.")
+    tbm = ""
+    if too_big:
+        tbm = ", which is too big."
+    click.echo(f"{summary}: estimate is {estimate}{tbm}")
     click.echo("Relationships:\n" + "\n".join(relationships(obj)))
-    if click.confirm("Do you want to fork out some subtasks?"):
+    if partially_complete:
+        splitout_msg = "So you've been working on this?"
+    else:
+        splitout_msg = "Do you want to fork out some subtasks?"
+    if click.confirm(splitout_msg):
         cnt = 1
-        default = f"Plan how to do {summary}"
+        if partially_complete:
+            default = f"Work on {summary}"
+        else:
+            default = f"Plan how to do {summary}"
         while True:
             summary = click.prompt("Name for the subtask", default=default)
             default=""
-            if not summary:
+            if not summary or (cnt>1 and partially_complete):
                 break
             cnt += 1
-            _add_todo(ctx, summary=[summary], set_parent=[comp['uid']])
+            todo = _add_todo(ctx, summary=[summary], set_parent=[comp['uid']])
+            if partially_complete:
+                todo.complete()
         new_estimate_suggestion = f"{estimate.total_seconds()//3600//cnt+1}h"
         new_estimate = click.prompt("what is the remaining estimate for the parent task?", default=new_estimate_suggestion)
         obj.set_duration(parse_add_dur(None, new_estimate), movable_attr='dtstart')
+        new_summary = click.prompt("Summary of the parent task?", default=obj.icalendar_component['SUMMARY'])
+        obj.icalendar_component['SUMMARY'] = new_summary
         postpone = click.prompt("Should we postpone the parent task?", default='0h')
-        obj.set_due(parse_add_dur(max(comp['DUE'].dt, datetime.datetime.now()), postpone), move_dtstart=True)
-        obj.save()
+        if postpone != '0h':
+            _procrastinate([obj], postpone)
 
 @interactive.command()
 @click.pass_context
@@ -1037,7 +1086,7 @@ def set_task_attribs(ctx):
     ## Tasks missing a category
     LIMIT = 16
 
-    def _set_something(something, help_text, default=None):
+    def _set_something(something, help_text, default=None, objs=None):
         cond = {f"no_{something}": True}
         something_ = 'categories' if something == 'category' else something
         if something == 'duration':
@@ -1046,7 +1095,8 @@ def set_task_attribs(ctx):
         _select(ctx=ctx, todo=True, limit=LIMIT, sort_key=['{DTSTART.dt:?{DUE.dt:?(0000)?}?%F %H:%M:%S}', '{PRIORITY:?0?}'], **cond)
         ## TODO: client-side filtering due to calendar servers that don't support the RFC properly
         ## "Incompatibility workarounds" should be moved to the caldav library
-        objs = [x for x in ctx.obj['objs'] if not x.icalendar_component.get(something_)]
+        if not objs:
+            objs = [x for x in ctx.obj['objs'] if not x.icalendar_component.get(something_)]
         if objs:
             num = len(objs)
             if num == LIMIT:
@@ -1071,19 +1121,20 @@ def set_task_attribs(ctx):
                 if something == 'category':
                     comp.add(something_, value.split(','))
                 elif something == 'due':
-                    obj.set_due(parse_dt(value, datetime.datetime), move_dtstart=True)
+                    obj.set_due(parse_dt(value, datetime.datetime), move_dtstart=True, check_parent=True)
                 elif something == 'duration':
                     obj.set_duration(parse_add_dur(None, value), movable_attr='DTSTART')
                 else:
                     comp.add(something_, value)
                 obj.save()
             click.echo()
+        return objs
 
     ## Tasks missing categories
     _set_something('category', "enter a comma-separated list of categories to be added")
 
-    ## Tasks missing a due date
-    _set_something('due', "enter the due date (default +2d)", default="+2d")
+    ## Tasks missing a due date.  Save those objects (workaround for https://gitlab.com/davical-project/davical/-/issues/281)
+    duration_missing = _set_something('due', "enter the due date (default +2d)", default="+2d")
 
     ## Tasks missing a priority date
     message="""Enter the priority - a number between 0 and 9.
@@ -1112,7 +1163,7 @@ needed to complete the task.
 (According to the RFC, DURATION cannot be combined with DUE, meaning that we
 actually will be setting DTSTART and not DURATION)"""
 
-    _set_something('duration', message)
+    _set_something('duration', message, objs=duration_missing)
 
 if __name__ == '__main__':
     cli()
