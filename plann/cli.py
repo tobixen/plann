@@ -36,6 +36,7 @@ import sys
 from icalendar import prop, Timezone
 from plann.template import Template
 from plann.config import interactive_config, config_section, read_config, expand_config_section
+from collections import defaultdict
 
 list_type = list
 
@@ -59,8 +60,8 @@ attr_int = ['priority']
 
 def _ensure_ts(dt):
     if isinstance(dt, datetime.datetime):
-        return dt
-    return datetime.datetime(dt.year, dt.month, dt.day)
+        return dt.astimezone(datetime.timezone.utc)
+    return datetime.datetime(dt.year, dt.month, dt.day).astimezone(datetime.timezone.utc)
 
 def parse_dt(input, return_type=None):
     """Parse a datetime or a date.
@@ -488,35 +489,83 @@ list_type = list
 @select.command()
 @click.option('--ics/--no-ics', default=False, help="Output in ics format")
 @click.option('--template', default="{DTSTART.dt:?{DUE.dt:?(date missing)?}?%F %H:%M:%S}: {SUMMARY:?{DESCRIPTION:?(no summary given)?}?}")
+@click.option('--top-down/--flat-list', help="Check relations and list the relations in a hierarchical way")
+@click.option('--bottom-up/--flat-list', help="List parents (dependencies) in a hierarchical way (cannot be combined with top-down)")
 @click.pass_context
-def list(ctx, ics, template):
+def list(ctx, ics, template, top_down=False, bottom_up=False):
     """
     Print out a list of tasks/events/journals
     """
-    return _list(ctx, ics, template)
+    return _list(ctx.obj['objs'], ics, template, top_down=top_down, bottom_up=bottom_up)
 
-def _list(ctx, ics=False, template="{DTSTART.dt:?{DUE.dt:?(date missing)?}?%F %H:%M:%S}: {SUMMARY:?{DESCRIPTION:?(no summary given)?}?}"):
+def _list(objs, ics=False, template="{DTSTART.dt:?{DUE.dt:?(date missing)?}?%F %H:%M:%S}: {SUMMARY:?{DESCRIPTION:?(no summary given)?}?}", top_down=False, bottom_up=False, indent=0, echo=True, uids=None):
     """
     Actual implementation of list
+
+    TODO: will crash if there are loops in the relationships
+    TODO: if there are parent/child-relationships that aren't bidrectionally linked, we may get problems
     """
+    if indent>4:
+        import pdb; pdb.set_trace()
     if ics:
-        if not ctx.obj['objs']:
+        if not objs:
             return
-        icalendar = ctx.obj['objs'].pop(0).icalendar_instance
-        for obj in ctx.obj['objs']:
+        icalendar = objs.pop(0).icalendar_instance
+        for obj in objs:
             icalendar.subcomponents.extend(obj.icalendar_instance.subcomponents)
         click.echo(icalendar.to_ical())
         return
-    template=Template(template)
+    if isinstance(template, str):
+        template=Template(template)
     output = []
-    for obj in ctx.obj['objs']:
+    if uids is None:
+        uids = set()
+
+    for obj in objs:
         if isinstance(obj, str):
             output.append(obj)
             continue
-        for sub in obj.icalendar_instance.subcomponents:
-            if not isinstance(sub, Timezone):
-                output.append(template.format(**sub))
-    click.echo_via_pager("\n".join(output))
+
+        uid = obj.icalendar_component['UID']
+        if uid in uids:
+            continue
+        else:
+            uids.add(uid)
+
+        above = []
+        below = []
+        if top_down or bottom_up:
+            relations = _relships_by_type(obj)
+            parents = relations['PARENT']
+            children = relations['CHILD']
+            ## in a top-down view, the (grand)*parent should be shown as a top-level item rather than the object.
+            ## in a bottom-up view, the (grand)*child should be shown as a top-level item rather than the object.
+            if top_down:
+                above = parents
+                below = children
+            if bottom_up:
+                above = children
+                below = parents
+            if indent:
+                above = []
+        if not above:
+            ## This should be a top-level thing
+            output.append(" "*indent + template.format(**obj.icalendar_component))
+            ## Recursively add children in an indented way
+            output.extend(_list(below, template=template, top_down=top_down, bottom_up=bottom_up, indent=indent+2, echo=False))
+            if indent and top_down:
+                ## Include all siblings as same-level nodes
+                ## Use the top-level uids to avoid infinite recursion
+                ## TODO: siblings are probably not being handled correctly here.  Should write test code and investigate.
+                output.extend(_list(relations['SIBLING'], template=template, top_down=top_down, bottom_up=bottom_up, indent=indent, echo=False, uids=uids))
+        for p in above:
+            ## The item should be part of a sublist.  Find and add the top-level item, and the full indented list under there - recursively.
+            puid = p.icalendar_component['UID']
+            if not puid in uids:
+                output.extend(_list([p], template=template, top_down=top_down, bottom_up=bottom_up, indent=indent, echo=False, uids=uids))
+    if echo:
+        click.echo_via_pager("\n".join(output))
+    return output
 
 @select.command()
 @click.pass_context
@@ -677,11 +726,12 @@ def _check_for_panic(ctx, hours_per_day, limit, output=True):
             if due:
                 long_dur = duration*dur_multiplicator
                 good_start = due - long_dur
-                slack = _ensure_ts(good_start) - possible_start
+                slack = _ensure_ts(good_start) - _ensure_ts(possible_start)
                 if slack <= datetime.timedelta(0):
                     task = comp.get('summary') or comp.get('description') or comp.get('uid')
                     dtstart = comp.get('dtstart')
                     priority = comp.get('priority', 0)
+                    ## TODO: those should not be None or things will break
                     if output:
                         click.echo(f"PANIC: task {task} needs attention!")
                         click.echo(f"  possible start: {possible_start:%F %H:%M:%S}")
@@ -855,19 +905,19 @@ def agenda(ctx):
 
     This command is slightly redundant, same results may be obtained by running those two commands in series:
     
-      `select --event --start=now --end=in 32 days --limit=16 list`
+      `select --event --start=now --end=+7d --limit=16 list`
     
-      `select --todo --sort '{DTSTART.dt:?{DUE.dt:?(0000)?}?%F %H:%M:%S}' --sort '{PRIORITY:?0}' --limit=16 list`
+      `select --todo --sort '{DTSTART.dt:?{DUE.dt:?(0000)?}?%F %H:%M:%S}' --sort '{PRIORITY:?0}' --end=+7d --limit=16 list --bottom-up`
 
     agenda is for convenience only and takes no options or parameters.
     Use the select command for advanced usage.  See also USAGE.md.
     """
     start = datetime.datetime.now()
-    _select(ctx=ctx, start=start, event=True, end='+30d', limit=16, sort_key=['DTSTART', 'get_duration()'])
+    _select(ctx=ctx, start=start, event=True, end='+7d', limit=16, sort_key=['DTSTART', 'get_duration()'])
     objs = ctx.obj['objs']
-    _select(ctx=ctx, start=start, todo=True, end='+30d', limit=16, sort_key=['{DTSTART.dt:?{DUE.dt:?(0000)?}?%F %H:%M:%S}', '{PRIORITY:?0?}'])
+    _select(ctx=ctx, start=start, todo=True, end='+7d', limit=16, sort_key=['{DTSTART.dt:?{DUE.dt:?(0000)?}?%F %H:%M:%S}', '{PRIORITY:?0?}'])
     ctx.obj['objs'] = objs + ["======"] + ctx.obj['objs']
-    return _list(ctx)
+    return _list(ctx.obj['objs'], bottom_up=True)
 
 @cli.group()
 @click.pass_context
@@ -1002,7 +1052,7 @@ def _procrastinate(objs, delay):
         except caldav.error.ConsistencyError:
             i = x.icalendar_component
             summary = i.get('summary') or i.get('description') or i.get('uid')
-            click.echo("{summary} could not be postponed (due to a parent task with earlier due)")
+            click.echo(f"{summary} could not be postponed (due to a parent task with earlier due)")
 
 @interactive.command()
 @click.pass_context
@@ -1028,11 +1078,72 @@ def split_huge_tasks(ctx, threshold, max_lookahead, limit_lookahead):
         if obj.get_duration() > threshold:
             interactive_split_task(ctx, obj)
 
-def relationships(obj):
-    if obj.icalendar_component.get('RELATED-TO'):
-        import pdb; pdb.set_trace()
-    else:
-        return []
+def _relships_by_type(obj, reltype_wanted=None):
+    ret = defaultdict(list_type)
+    rts = obj.icalendar_component.get('RELATED-TO')
+    if not rts:
+        return ret
+    if not isinstance(rts, list_type):
+        rts = [ rts ]
+    for rel in rts:
+        reltype = rel.params.get('RELTYPE')
+        reltype = reltype or "undefined"
+        if reltype_wanted and reltype != reltype_wanted:
+            continue
+        other = obj.parent.object_by_uid(rel)
+        ret[reltype].append(other)
+            
+        ## Consistency check ... TODO ... look more into this
+        back_rels = ret[reltype][-1].icalendar_component.get('RELATED-TO')
+        if not back_rels:
+            ## TODO: we should ensure the relationship is bidirectional
+            import pdb; pdb.set_trace()
+            back_rels = []
+            
+        elif not isinstance(back_rels, list_type):
+            back_rels = [ back_rels ]
+            
+        my_back_rel = [x for x in back_rels if str(x)==str(obj.icalendar_component['UID'])]
+        if len(my_back_rel) > 1:
+            import pdb; pdb.set_trace()
+        if len(my_back_rel) == 0:
+            import pdb; pdb.set_trace()
+            backreltypes = {'CHILD': 'PARENT', 'PARENT': 'CHILD', 'undefined': 'CHILD', 'SIBLING': 'SIBLING'}
+            ## adding the missing back rel
+            other.icalendar_component.add('RELATED-TO', obj.icalendar_component['UID'], parameters={'RELTYPE': backreltypes[reltype]})
+            1
+        else:
+            if reltype == 'undefined' and my_back_rel[0].params.get('RELTYPE')=='CHILD':
+                click.echo("fixing a missing parent RELTYPE")
+                ## (this is the default)
+                rel.params['RELTYPE']='PARENT'
+                obj.save()
+            elif reltype == 'undefined':
+                import pdb; pdb.set_trace()
+                1
+            elif reltype == 'CHILD' and my_back_rel[0].params.get('RELTYPE') != 'PARENT':
+                import pdb; pdb.set_trace()
+                1
+            elif reltype == 'PARENT' and my_back_rel[0].params.get('RELTYPE') != 'CHILD':
+                import pdb; pdb.set_trace()
+                1
+    return ret
+
+def _get_summary(obj):
+    i = obj.icalendar_component
+    return i.get('summary') or i.get('description') or i.get('uid')
+
+def _relationship_text(obj, reltype_wanted=None):
+    rels = _relships_by_type(obj, reltype_wanted=None)
+    if not rels:
+        return "(None)"
+    ret = []
+    for rel in rels:
+        objs = []
+        for relobj in rels[rel]:
+            objs.append(_get_summary(relobj))
+        ret.append(rel + "\n" + "\n".join(objs) + "\n")
+    return "\n".join(ret)
 
 def interactive_split_task(ctx, obj, partially_complete=False, too_big=True):
     comp = obj.icalendar_component
@@ -1042,7 +1153,8 @@ def interactive_split_task(ctx, obj, partially_complete=False, too_big=True):
     if too_big:
         tbm = ", which is too big."
     click.echo(f"{summary}: estimate is {estimate}{tbm}")
-    click.echo("Relationships:\n" + "\n".join(relationships(obj)))
+    click.echo("Relationships:\n")
+    click.echo(_relationship_text(obj))
     if partially_complete:
         splitout_msg = "So you've been working on this?"
     else:
@@ -1056,15 +1168,16 @@ def interactive_split_task(ctx, obj, partially_complete=False, too_big=True):
         while True:
             summary = click.prompt("Name for the subtask", default=default)
             default=""
-            if not summary or (cnt>1 and partially_complete):
+            if not summary:
                 break
             cnt += 1
             todo = _add_todo(ctx, summary=[summary], set_parent=[comp['uid']])
             if partially_complete:
                 todo.complete()
+                break
         new_estimate_suggestion = f"{estimate.total_seconds()//3600//cnt+1}h"
         new_estimate = click.prompt("what is the remaining estimate for the parent task?", default=new_estimate_suggestion)
-        obj.set_duration(parse_add_dur(None, new_estimate), movable_attr='dtstart')
+        obj.set_duration(parse_add_dur(None, new_estimate), movable_attr='dtstart') ## TODO: verify
         new_summary = click.prompt("Summary of the parent task?", default=obj.icalendar_component['SUMMARY'])
         obj.icalendar_component['SUMMARY'] = new_summary
         postpone = click.prompt("Should we postpone the parent task?", default='0h')
