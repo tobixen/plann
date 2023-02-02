@@ -1,84 +1,163 @@
-Managing tasks through calendar-cli
-===================================
+# Managing tasks through plann
 
-While the RFC does draw some lines on what fields are admissable in the todo-entries in the calendar, it doesn't really give good guidelines on how to use the different fields.  One often gets into dilemmas ... when to use the category field vs when to use the location field vs when to branch out a completely distinct calendar, etc.  Here are my considerations.
+plann is a flexible cli tool for accessing, adding and editing events, tasks and journals - you should be able to do just anything with it (and if not, raise an issue).  However, it is also quite much optimized towards what the author consider to be good task management procedures - and there is also an "interactive mode" for supporting this.  In this document I will give recommendations for what I consider is "good practice" as well as guide you through those task management procedures.
 
-Calendar scope
---------------
+## What's in a "task" ...
 
-Different categories of tasks can be put into different calendars (and even on different caldav servers).
+By using standards, plann should interoperate well with other calendaring and task management tools.  The icalendar standard (RFC 5545) sets some limits on what data we can store in a task on a calendar - unfortunately the standard leaves quite much up to the users and implementations.  does not give very good guidelines on how to use those.  One often gets into dilemmas ... when to use the category field vs when to use the location field vs when to branch out a completely distinct calendar, etc.  Here are some information about what can and cannot go into a task, and how plann is dealing with it.
 
-I believe it's best to keep as few calendars as possible, and rather use i.e. the categories field for splitting different types of tasks.
+### List of properties and subcomponents
+
+While not a property in itself, every task belongs to one or more calendars.  I do have some considerations below on when it makes sense to split tasks onto different calendars.
+
+RFC5545 defines those properties and subcomponents for a task (aka a VTODO calendar component):
+
+* alarm X
+* uid
+* dtstamp X
+* dtstart X
+* duration X
+* due X
+* class X
+* completed X
+* created X
+* summary
+* description
+* geo X
+* last-mod
+* location X
+* organizer
+* percent
+* priority X
+* recurid 
+* seq
+* status
+* summary
+* url
+* rrule X
+* attach
+* attendee
+* categories
+* comment
+* contact
+* exdate
+* rstatus
+* related
+* resources
+* rdate
+
+RFC7986 adds those:
+
+* color
+* image
+* conference
+
+RFC9073 adds those:
+
+* vlocation X
+* participant
+* vresource
+* styled-description
+* structured-data
+
+RFC9253 adds those:
+
+* concept
+* link
+* refid
+
+... and in addition, a task may belong to one or more calendars.
+
+(It's also possible for a program like plann to add custom properties)
+
+### Calendar scope
+
+**TLDR**: split tasks out on different calendars if different people should have access to read/edit/add tasks.
+
+Calendars (aka "task lists" when used for tasks) aren't a part of RFC 5545, but most likely you will be using a calendar server that allows a user to have multiple calendars.  plann also allows the user to connect to several calendar servers.  Does it make sense to create several calendars?
+
+In some calendaring solutions every person is supposed to have a calendar, and in addition every shared resource (i.e. meeting room, car, etc) that may need to be booked should have a separate calendar.  This may be fine - but keep in mind that it may not always be trivial to move, copy or synchronize tasks forth and back between two calendars (it is on the roadmap to allow synchronizing of two calendars through plann), so if it makes sense to reassign a task to a different person, then perhaps it's not a good idea to have one task list per person.
+
+I believe it's best to keep as few calendars as possible, and rather use i.e. the categories field for splitting different types of tasks.  
 
 As you can give access rights to other people for a whole caldav calendar (or "task list"), it makes sense to use the calendar level to control access rights.  You would typically like to have one calendar where your family can view/add tasks, other for work, perhaps separate calendars for separate projects at work if different projects involves different people, etc.
 
-I have a boat, and it requires a lot of maintenance and attention.  Should I create a separate calendar for boat maintenance tasks?  Considering the thoughts above, what matters is whomelse should have the rights to view and add tasks.  If the boat is a family project, use the same calendar as for other family/home-related todo-tasks.
+I have a boat, and it requires a lot of maintenance and attention.  Should I create a separate calendar for boat maintenance tasks?  Considering the thoughts above, what matters is whomelse should have the rights to view and add tasks.  I consider the boat to be a family project, so I use the same calendar as for other family/home-related todo-tasks.
 
-Location
---------
+### Location
 
-A named location.  TLDR: I've ended up almost never using the location field for tasks.
+A named location.
+
+**TLDR**: plann is not optimzed towards using this property
 
 With events, the location field is frequently used for which meeting room the meeting should be at, or the address of an appointment.  It's often checked up just before the meeting, or copied to the navigator when one is heading for the appointment.  Tasks are different, if you are at some specific location you would typically like to check up all tasks at that location or in the neighbourhood and see if you can do some of them.
 
 I had an idea that some tasks are only possible to do at a specific location (i.e. as a boat owner, there are lots of tasks that can only be done "at the boat", some work can be done from home, some work has to be done from the office, some work should be done in the garden, etc), and when being at that location, one would like to list out the pending tasks that applies for that location.  However, practical experience shows that "boat", "office", "home", "garden", "grocery store", "hardware store", etc are better suited as a category than as a location.  Generally, if you have a lot of tasks connected to the same address, probably it's better to do it as a category rather than location.  If the location is a single-off thing used only for that specific task (or, perhaps, some very few tasks) then obviously it's better to use location than category.
 
-Geo
----
+Location is a free-text field; RFC9073 adds a VLOCATION subcomponent for a more structured way of adding location information.
+
+### Geo
+
+TLDR: plann is not optimized towards using this property
 
 A geo is a location given by coordinates.  It probably makes great sense to use geo ...
 
 * if you want to stick the tasks to a map.  Probably very useful if your tasks have to be done on lots of different locations (i.e. if you are a travelling salesman or a plumber).
 * if you want to set up the phone to automatically remind you about tasks i.e. when you are close to the supermarked, etc.  (however, most of us probably have several supermarkets we can go to, so geo doesn't make sense for that)
 
-I've never used the geo field.
+### Categories
 
-Categories
-----------
+**TLDR:** this is considered to be an important property
 
-I'd like to think of categories as tags that can be stuck to tasks, and then used to filter out relevant tasks.  Some tasks should be done while sitting by the keyboard.  Some tasks are related to a particular project.  Some tasks are best done when the weather is good.  Some tasks (i.e. visit some office) has to be done in the "business day time".  Add tags for this and other relevant stuff.  When the sun is shining and you want to do some outdoor tasks, filter out the tasks with categories "sunny" or "garden".
+I'd like to think of categories as tags that can be stuck to tasks, and then used to filter out relevant tasks.  This only works well if one is consistently using the same tags - so think carefully about this one; make a list of keywords to be used for filtering and grouping tasks, so that you can easily retrieve a list of tasks when you're in the appropriate location, when you're in the appropriate mood, when you have the right tools available, when the weather allows for the task to be performed, etc.
 
-When to use location or geo, and when to use category?  I think that for the super market example, geo is not really fitting because it can only be one geo coordinate related to a vtodo, but there are many super markeds that can be visited.  One could also think that "supermarked" is not a good location for the same reason.  In practice, I've never used location and geo, always been sticking such information into the categories instead.
+Some tasks should be done while sitting by the keyboard.  Some tasks are related to a particular project.  Some tasks are best done when the weather is good.  Some tasks (i.e. visit some office) has to be done in the "business day time".  Add tags for this and other relevant stuff.  When the sun is shining and you want to do some outdoor tasks, filter out the tasks with categories "sunny" or "garden".
 
-While the categories field is a freetext field, it's important that the same categories are used consistently.  I made it possible to do `calendar-cli todo list --list-categories` to just take out a list of used categories.
+When to use location or geo, and when to use a category?  I ended up with an easy answer to that: just use categories for everything!  I think that for the super market example, geo is not really fitting because it can only be one geo coordinate related to a vtodo, but there are many super markeds that can be visited.  One could also think that "supermarked" is not a good location for the same reason.  In practice, I've never used location and geo, always been sticking such information into the categories instead.
 
-Pending-Dependent
------------------
+While the categories field is a freetext field, it's important that the same categories are used consistently - and to keep consistent, it's important to know what categories are already in use, you may use `cli select --todo list-categories`.
+
+My usage of categories may be slightly superceded by "concept", "link" and "refid", as defined in RFC9253.
+
+### Relation
+
+There are multiple kinds of relationships that may be useful for task management.  RFC5545 only supports PARENT-CHILD and SIBLING.  RFC9253 expands a bit on this to make more complex task management supported.  RFC9253 is (as of writing) reasonably fresh, and I got aware of it only today (2023-02-02).  All my prior thinking has been around how to (ab)use the PARENT-CHILD relationships.  Anyway, let me introduce some of my thoughts on different kind of relationships that are relevant wrg of task management:
+
+#### Pending-Dependent
 
 If task A cannot be done without task B being done first, we say that A depends on B.  We may want to construct a bikeshed, then paint it red.  Obviously the painting depends on the construction.  It may make sense to hide the paint job from the todolists, or maybe fade it away - when checking the list of immediate tasks to be executed, "painting the bikeshed" is just noise.  It may also make sense to ensure the due date for the construction is before the due date for the painting.
 
-The VTODO-standard does not support this kind of relationship, but it's possible to use parent-child.  Think of the parent as the dependent and the child as the pending.  See below for practical experiences.
+Within RFC5545 one can try to use parent-child-relationships for this purpose - think of the parent as the dependent and the child as the pending.  "Paint the bikeshed" would then be a parent of "construct a bikeshed".  That makes perfect sense, doesn't it?
 
-Parent-child relationship
--------------------------
+#### Parent-child relationship
 
 With the parent-child relationship one can make a hierarchical task list.  It makes a lot of sense when having a big task that can be split up in subtasks.  Say, the task may be "build a bicycle shed".  That does take quite some planning, purchases and work, so one will definitively want to break it up in subtasks.
 
 A shopping list may also be considered to be a parent-child relationship.  "Buy cucumber" seems to be a subtask of "buy vegetables" which again may be a subtask of "go shopping at the supermarket".
 
-Every parent-child relationship can also be seen as a dependency as well, but it's a bit in reverse.  One cannot build the bike shed without first buying planks.  One cannot tick the checkbox for "go shopping" if the cucumber was not bought.  (or is it the other way?  One cannot "buy cucumber" before one has started the procedure of "go shopping"?)
+Every parent-child relationship can also be seen as a dependency relationship, but it's a bit in reverse.  One cannot build the bike shed without first buying planks.  One cannot tick the checkbox for "go shopping" if the cucumber was not bought.  (or is it the other way around?  One cannot "buy cucumber" before one has started the procedure of "go shopping"?)
 
-There is a bit of a difference between the typical pending-dependent and the typical parent-child relationship.  In a typical "parent-child"-relationship one may want to take out hierarchical lists with the parent first, or take out simple overviews where all the details (i.e. grandchildren) are hidden.  In a typical "pending-dependent"-relationship one may want to hide the dependent (parent) and emphasize on what's needed to be done first (child).
+There is a bit of a difference between the typical pending-dependent and the typical parent-child relationship.  In a typical "parent-child"-relationship one may want to take out hierarchical lists with the parent first, or take out simple overviews where all the details (i.e. grandchildren) are hidden.  In a typical "pending-dependent"-relationship one may want to hide the dependent (parent) and emphasize on what's needed to be done first (child).  plann supports three kind of lists, it's "top-down", "bottom-up" or simply flat (the default).
 
-There is another relationship also ... purpose and means.  The purpose of the shopping trip is to buy cucumber - but the purpose of building the biking shed is not to buy planks  (Unless the owner of the planks shop used some clever marketing for tricking you into building the bike shed, that is).
+#### Purpose-means
+
+Another kind of relationship that is neither supported by RFC5545 nor RFC9253.
+
+The purpose of the shopping trip is to buy cucumber - but the purpose of building the biking shed is not to buy planks  (Unless the owner of the planks shop used some clever marketing for tricking you into building the bike shed, that is).
 
 The purpose for buying sugar could be "bake a cake".  I would then start by adding "bake a cake" to the task list, then "buy sugar", and only then I would eventually add "go shopping" to the todo-list. (That's maybe just me.  My wife would go to the shop to buy a cucumber, and then come home with everything needed for baking a cake and more).
 
 From my practical experience, "supermarket" and "hardware shopping" can as well be categories.  So eventually when I really need that cucumber, I can check up the full list for the category "supermarket" and come home with all ingrediences needed for making a cake.  I've never felt a compelling need to group the shopping list inside the calendar.
 
-Although I haven't created any bike-sheds, I've had some "projects".  First I toss the project into the task-list, with the categories "keyboard" and "thinking".  Later I take up that task and I start creating sub-tasks.  The project then disappears from my regular overview because it has unresolved dependencies.  This has worked out reasonably well for me.
 
-Parent-child-relationships aren't very well supported yet in calendar-cli yet.
-
-Recurring tasks
----------------
+### RRULE
 
 The standard allows for recurring tasks, but doesn't really flesh out what it means that a task is recurring - except that it should show up on date searches if any of the recurrances are within the date search range.  Date searches for future recurrances of tasks is ... quite exotic, why would anyone want to do that?
 
 From a "user perspective", I think there are two kind of recurrences:
 
 * Specified intervals - say, the floor should be cleaned every week.  You usually do it every Monday, but one week everything is so hectic that you postpone it all until late Sunday evening.  It would be irrational to wash it again the next day.  And if you missed the due date with more than a week - then obviously the next recurrence is not "previous week".  (Except, one may argue that the status of previous week should be set to "CANCELLED")
-* Fixed-time.  If you actually get paid for washing the floor and you have a contract stating that you get paid a weekly sum for washing the floor weekly, then you'd probably want to wash the floor again on Monday, even if it has been done just recently.  Or perhaps one of the children is having swimming at school every Tuesday, so sometime during Monday (with a hard due set to Tuesday early morning) a gym bag with swimwear and a fresh towel should be prepared for the child.  Or the yearly income tax statement, should be delivered before a hard due date.
+* Fixed-time.  If you have some contract stating that you should washing the floor weekly, then maybe you would want to wash the floor again on Monday, even if it was just done Sunday.  Or perhaps one of the children is having swimming at school every Tuesday, so sometime during Monday (with a hard due set to Tuesday early morning) a gym bag with swimwear and a fresh towel should be prepared for the child.  Or the yearly income tax statement, should be delivered before a hard due date - every year.
 
 I choose to interpret a RRULE with BY*-attributes set (like BYDAY=MO) as a recurring task with "fixed" due times, while a RRULE without BY*-attributes should be considered as a "interval"-style of recurring task.
 
@@ -90,41 +169,93 @@ I tried implementing some logic like this in calendar-cli, and it was working on
 
 There is no support for rrules outside the task completion code, so as for now the rrule has to be put in through another caldav client tool, through the --pdb option or through manually editing ical code.  I believe recurring tasks is an important functionality, so I will implement better support for this at some point.
 
-dtstart vs due vs duration
---------------------------
+### Timestamps - dtstamp, created, last-mod, dtstart, due, duration, completion
 
-I don't know what they were thinking of when they created the icalendar standard.
+**TLDR:** Timestamps are important.  DUE should indicate when we need or want to be done with the task, DURATION should be the estimated time for doing the task.  Since DURATION and DUE cannot be combined, let rather DTSTART indicate the last possible time one can start working with the task and still have a hope to get done before the DUE timestamp.
 
-An event may have a DTSTART and a DUE ... or alternatively, a DURATION instead of DUE.  I assume the intention is that a task with DTSTART and DURATION set is equivalent with a task with the smae DTSTART set, and a DUE set equal to DTSTART plus DURATION.  This makes a lot of sense for events, but for tasks?  Not so much!
+For a task, I would like to record:
 
-Ok, DUE is pretty straight forward - it's the time when the task should be done.  But what is DTSTART?  Say, some bureaucracy work needs to be done "this year" - DUE should obviously be set to 1st of January at 00:00.
+* A rough (or refined) time estimate (how long do I think it will take to do the task?)
+* Timestamp for when I plan to start working on the task
+* Timestamp for when I actually started working
+* Timestamp for when I hope to be finished with the task
+* Hard deadline for the task (and also: should the task be cancelled or procrastinated if the hard deadline was not met?)
+* Timestamp for when I completed
+* Actual time efficiently spent (possibly, billable time)
 
-As of 2015 my opinion was that DTSTART is the earliest time you expect to start working with the task, or maybe the earliest time it's possible to start.  Say, we plan to sit down and do bureaucraziness the 15th of December.
+Now, RFC5545 offers those three parameters which may be important, but does not cover anything above:
 
-Passing DTSTART doesn't mean you need to drop everything else and start working on the task immediately.  My idea was to restrict the todo-list to tasks where the DTSTART was already passed ... and then one could postpone the dtstart just to unclutter the todo-list.  However, I think it is more desirable to use the DURATION field for estimations of how long time the task will take.  Now, this bureaucraziness may be estimated to three hours of work.  That means DTSTART should be set to 21:00 at New Years eve.  Now, that's just silly!  But yeah, the DTSTART has a meaning: that's the time you need to drop everything else if you didn't do the task yet.
+* DTSTAMP - mandatory and quite technical.  Should indicate the creation or last-modified timestamp, the RFC specifies the details.
+* CREATED - non-mandatory.  It doesn't say in the RFC, but I suppose that if you found some old stone tablets from 43BC containing some important but long-forgotten task ("create a tunnel under the English channel"?  No, that one was completed already), then 43BC should be used as the creation timestamp, while DTSTAMP should be the time it was rewritten into the icalendar format.  At the other hand, the RFC says that the timestamp should be when the "user agent" creates the task ... so ... then it should be the same as DTSTAMP?  Hm.
+* LAST-MODIFIED - non-mandatory.
 
-I have some more thoughts on project management in the other document, [NEXT_LEVEL](NEXT_LEVEL.md).
+And then there are those:
 
-Priority
---------
+* DTSTART
+* DUE
+* COMPLETED
+* DURATION
 
-The RFC defines priority as a number between 0 and 10.
+Now, COMPLETED is very easy to understand.  DUE also, though it's not so trivial to understand if it's a hard or a soft due date, and weather the task should be cancelled or procrastinated if the due-date is not met.  DURATION is mutually exclusive with DUE.  I assume DTSTART+DURATION should be equivalent with DUE.  I think it's a bad idea, it's unclear from the RFC if there is any difference in the meaning weather DURATION or DUE is set, and it makes compatibility and interoperability harder (and/or software more complex) if some software uses the DURATION field while other software uses the DUE property.
 
-0 means the priority is undefined, 1-4 means the priority is "high", 5 that it's "medium high" and 6-10 means the priority is "low".
+DTSTART is fuzzy.  Is it meant to be the time one actually started working on the task or the time one expects/plans/hopes to start working on the task?  DURATION is also fuzzy.  Is it the time one actually spent on the task, the time estimate, or what?
+
+I have choosen not to use DURATION, but to define DURATION as the time estimate for a task.  With DUE possibly being the hard deadline for doing the task, and assuming that DTSTART + DURATION = DUE, that means DTSTART is the time when you need to drop everything else you may have in your hands and start working with the task (at least if the deadline is a hard one and the estimate is correct).
+
+Earlier (around 2015) my rule was that DTSTART should be the earliest time one would expect to start working on the task.  Say, some bureaucracy work (expected to take three hours) needs to be done "this year" - DUE should obviously be set to 1st of January at 00:00, and then DTSTART could be set to the 15th of December - and one would have a good chance to get it done before the deadline.  With this new definition of DTSTART, it should be set to 21:00 at .  However, I think it is more desirable to use the DURATION field for estimations of how long time the task will take.  Now, this bureaucraziness may be estimated to three hours of work.  That means DTSTART should be set to 21:00 at New Years eve.  It seems utterly silly - one would not want to spend the three last hours of the year doing stupid paperwork - but then again, storing the time estimate is probably more important than storing a "realistic DTSTART" with the task.
+
+I have made a rule for myself now.  The task "send the documents" or perhaps "verify that the documents have been sent" is made with New Year as the deadline and priority set to 1.  Then there is the dependency (or a child) "produce the documents" with deadline 16th of December and priority 4.  Since it's in my nature to procrastinate such tasks, it will probably not be done fore or at the 16th of December, but at least it will show up in good time before the new years eve.  When the child task is done, of course I will also proceed to complete the parent/dependent task while I'm at it.
+
+Another rule of mine, no task should have too high estimation - if a task has more than some 3-4 hour estimate, it should be split into subtasks.
+
+I have some more thoughts on project management and time tracking in the other document, [NEXT_LEVEL](NEXT_LEVEL.md).
+
+### Priority
+
+**TLDR:** this is considered to be an important property.  Use 1 or 2 if the deadline is very hard, and 3-9 if the task may be procrastinated.
+
+The RFC defines priority as a number between 0 and 9.
+
+0 means the priority is undefined, 1-4 means the priority is "high", 5 that it's "medium high" and 6-9 means the priority is "low".
 
 Should tasks be done in the order of their priority?  Probably not, as there is also the DUE-date to consider.  I do have some ideas on how to sort and organize tasks in the [NEXT_LEVEL](NEXT_LEVEL.md) document.  To follow the thoughts there, let priority be defined as such:
 
 1: The DUE timestamp MUST be met, come hell or high water.
-2: The DUE timestamp SHOULD be met, if we lose it the task becomes irrelevant.
+2: The DUE timestamp SHOULD be met, if we lose it the task becomes irrelevant and should be cancelled.
 3: The DUE timestamp SHOULD be met, but worst case we can probably procrastinate it, perhaps we can apply for an extended deadline.
 4: The deadline SHOULD NOT be pushed too much
 5: If the deadline approaches and we have higher-priority tasks that needs to be done, then this task can be procrastinated.
 6: The DUE is advisory only and expected to be pushed - but it would be nice if the task gets done within reasonable time.
 7-9: Low-priority task, it would be nice if the task gets done at all ... but the DUE is overly optimistic and expected to be pushed several times.
 
-Recommendation: split ut tasks
-------------------------------
+### Alarm
 
-Tasks that takes more than some few hours ought to be split up into several subtasks.
+**TLDR:** I do not use alarms, but I'm considering to implement some sort of support for it
 
-To increase the probability that a high-priority task is done before the DUE, it may also be smart to split it up into subtasks/dependencies with lower priority but due dates set according to when one is expecting to get done with them.
+The point with alarms is to give some sort of push-alerts to the user, reminding him about an event or a task.  Like, those documents that should be delivered before the new year, one could make an alarm go off 14 days before new year.  But, no ... I don't think that is a good idea.  My idea of splitting it into two tasks is probably better.
+
+I can see the usefulness of having alarms for events.  When working hard on some issue from the task list, it can be very useful to get a nudge in the side at 12:55, reminding one about the work meeting at 13:00 sharp.  Or perhaps already at 12:00 if the meeting is in another building ... but for tasks, not so much.  Well, I have had deadlines slip because I've been working for a full day on some less-imporant task without checking the task list - but I believe the solution to that is to split up tasks and to check the task list relatively frequently.
+
+RFC9074 expands a bit on the alarms, for one thing it adds proximy-alarms that may be useful for tasks - theoretically, it could be used for things like getting push-notifications on all the shopping errainds when being nearby the shop - though the details seems rather complicated.  Alarm components are usually found inside a task or event, but from the RFC it seems like such alarms are to be stored directly on the calendar as first-class component citizens.  I'm also a bit surprised on the CONNECT and DISCONNECT proximy values - they are exclusively meant to be used when using the bluetooth protocol towards automobiles, hence limiting the usefulness quite a lot.
+
+Another problem - how to implement push-alarms from a command line tool?  Well, I do have some ideas on that - but the very nature of plann is to deliver information on demand - pull, not push.
+
+Except for the pull/push paradigm - from my perspective, alarms may in some cases be replaced by more events and tasks.  Like that new year paperwork - rather than having an alarm go off 14 days before the due, better to have a subtask with a due date in the middle of December.  Having a meeting at the other side of town?  Should probably add "travel across the town" in the calendar rather than putting an alarm one hour before the meeting.  Need time to prepare for the meeting?  That should be added as a task, not as an alarm.  Etc.  Same goes with proximity alarms, it's possible to add both geo and location to a task (and now even vlocation ref RFC9073).  If following this line of thought, "alarm" could have been a simple binary property rather than a (sub)component, "do you need a push-alert at DTSTART/proximity or not?".
+
+### Class
+
+**TLDR:** Don't trust it to be honored in any way.
+
+A task or event may be classified as PUBLIC, PRIVATE or CONFIDENTIAL.  This may be used for access control on the component level, though most calendar server only have access control levels for the whole calendar - and not always even that.  
+
+plann can filter/select/set this property, but it does not care about the value.  Plann does not implement any access control, that is considered to be up to the server.
+
+### Summary, description, comment, url, attach, styled-description, uid
+
+**TLDR:** Summary is considered important in plann
+
+The only attribute that is mandatory is the uid.  As plann is a command line tool optimized for printing lists, it relies on the summary to be present - but with fallback to description and uid.
+
+Summary is supposed to be a one-liner representing the task, and then the description is supposed to give further details.  Comment seems to be meant to add comments from other people than the organizer, I don't believe this property is much in use in the wild.  attach can be used to add documents (or URLs to documents), styled-description is for giving a more aesthetic description (not much relevant for plann, probably).  URLs can also be attached, and with RFC9253, a link property is defined - which is basically an URL with some extra metadata.
+
+All those should be supported by plann, like, possible to show it or filter by it if one knows how to use plann, but it's only optimized towards the summary field.
