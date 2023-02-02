@@ -32,7 +32,7 @@ I installed a version a decade ago, didn't upgrade it ever, and it worked out we
 
 https://radicale.org/
 
-A relatively new server, written in Python, though apparently less actively maintained than Xandikos.  It's included in the test suite of the python caldav library, so it's well-tested.  It's also very easy to set up.
+A relatively new server, written in Python.  It's included in the test suite of the python caldav library, so it's well-tested.  It's also very easy to set up.
 
 It does not support the scheduling RFC, but it does support multiple users and some kind of permission settings.
 
@@ -44,7 +44,7 @@ Radicale also supports address books (VCARD).
 
 https://www.xandikos.org/
 
-Relatively new server, written in Python, stores all data in a local git-repository.  Super-easy to set up and get started with.  Quite standard-complient.  Compability is ensured, as it's included in the python caldav library test suite, and hence tested almost on every commit.  All features in plann as of 2023-01 was working flawlessly against Xandikos.  I would definitely recommend Xandikos if/when it will support recurrances - the missing support for recurring events and task is a big show-stopper for me.
+Relatively new server, written in Python, stores all data in a local git-repository.  Super-easy to set up and get started with.  Quite standard-compliant.  Compability is ensured, as it's included in the python caldav library test suite, and hence tested almost on every commit.  All features in plann as of 2023-01 has been tested and works flawlessly against Xandikos.  I would definitely recommend Xandikos if/when it will support recurrances - the missing support for recurring events and task is a big show-stopper for me.
 
 Xandikos does not support multiple users and access controls (I would still use it for my family - one calendar for each person, and no personal secrets stored in the calendars).  The lack of multi-user support also means support for scheduling is missing.
 
@@ -127,7 +127,7 @@ I haven't revisited this one, but when testing it long long time ago it didn't s
 
 ## Things I should consider testing for
 
-The current test suite is sort of a by-product of the Python CalDAV library.  Originally the idea was to just verify that the library would interoperate with different clients.  Eventually it has grown into a test-suite that verifies how complient the different CalDAV servers are.  I would eventually like to fork it out into a separate product - a CalDAV complience checker.  The current code does not go far enough:
+The current test suite is sort of a by-product of the Python CalDAV library.  Originally the idea was to just verify that the library would interoperate with different clients.  Eventually it has grown into a test-suite that verifies how compliant the different CalDAV servers are.  I would eventually like to fork it out into a separate product - a CalDAV compliance checker.  The current code does not go far enough:
 
 * It does not check if it's possible to add tasks and events (VTODO and VEVENT) to the same calendar.  I know most servers supports it and that Zimbra does not support it, but should explicitly test this on all the servers.
 * The possibility to ask for events and tasks in the same report query.  This is important for plann, as this is the default search mode.  For xandikos, sometimes the search requests come out empty unless one explicitly adds --todo or --event.  I should check if this is the same for other implementations.
