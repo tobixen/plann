@@ -1,6 +1,6 @@
 # What CalDAV-server to choose?
 
-TLDR-summary: To use plann heavily both to manage calendars and do heavy task management, none of the calendar servers out there are good enough.  I ended up with DAViCal, but had to fix some bugs and make a workaround in plann.
+TLDR-summary: To use plann heavily both to manage calendars and do heavy task management, none of the calendar servers out there seems to be good enough (though I should do more testing, particularly towards SOGo).  I ended up with DAViCal, but had to fix some bugs and make a workaround in plann.
 
 ## Requirements
 
