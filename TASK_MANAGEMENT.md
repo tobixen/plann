@@ -159,6 +159,8 @@ From my practical experience, "supermarket" and "hardware shopping" can as well 
 
 ### RRULE, recurid, exdate, rdate
 
+**TLDR:** plann takes care to handle recurrent tasks in the "best possible way" when a task is completed, but plann v1.0 does not allow easy addition of recurrent task.  One either have to write up the RRULE "by hand" or use some other calendaring tool to edit the RRULE parameter.
+
 The standard allows for recurring tasks, but doesn't really flesh out what it means that a task is recurring - except that it should show up on date searches if any of the recurrances are within the date search range.  Date searches for future recurrances of tasks is ... quite exotic, why would anyone want to do that?
 
 From a "user perspective", I think there are two kind of recurrences:
@@ -172,12 +174,11 @@ There can be only one status and one complete-date for a vtodo, no matter if it'
 
 Based on my interpretation of the standards, possibly the correct way to mark once recurrence of a recurring task as complete, is to use the RECURRENCE-ID parameter and make several instances of the same UID.  However, based on my understanding of the RFC, the timestamps in a "recurrence set" is strictly defined by the RRULE and the original DTSTART.  This does probably fit well with the fixed-time recurrences (at least if one markes a missed recurrence with CANCELLED), but it does not fit particularly well with interval-based recurrences.
 
-I tried implementing some logic like this in calendar-cli, and it was working on DAViCal.  However, it was missing tests, and I realize that it's kind of broken.  I'm now moving this logic to the caldav layer.  I'm also creating a "safe" logic which will split the completed task into a completely separate task and editing/moving DTSTART/DUE on the recurring event.  This may be the more practical solution (perhaps combined with having a common parent for all the recurring tasks).
+The current default logic is to duplicate/split the completed task into a completely separate task, and editing the new task with a moved DTSTART/DUE on the recurring event.  This should be a safe and compatible way of doing it.  The caldav library also supports combining the completed recurrences and the recurring uncomplete in a recurrence-set, which is probably more like the way the RFC intends things to be, but probably less compatible/safe when accessed by other software.
 
-There is no support for rrules outside the task completion code, so as for now the rrule has to be put in through another caldav client tool, through the --pdb option or through manually editing ical code.  I believe recurring tasks is an important functionality, so I will implement better support for this at some point.
+There is not so much support for recurrences outside the task completion code, as for now the rrule has to be manually added when creating or editing the task, or the recurrence has to be set through some another caldav client tool.  I believe recurring tasks is an important functionality, so I will implement better support for this at some point.
 
-### Timestamps - dtstamp, created, last-mod, dtstart, due, duration, completion
-
+### Timestamps
 **TLDR:** Timestamps are important.  DUE should indicate when we need or want to be done with the task, DURATION should be the estimated time for doing the task.  Since DURATION and DUE cannot be combined, let rather DTSTART indicate the last possible time one can start working with the task and still have a hope to get done before the DUE timestamp.
 
 For a task, I would like to record:
@@ -190,32 +191,40 @@ For a task, I would like to record:
 * Timestamp for when I completed
 * Actual time efficiently spent (possibly, billable time)
 
-Now, RFC5545 offers those three parameters which may be important, but does not cover anything above:
+#### dtstamp, created, last-mod
+
+RFC5545 offers those three parameters which may be important, but does not cover anything from my wishlist:
 
 * DTSTAMP - mandatory and quite technical.  Should indicate the creation or last-modified timestamp, the RFC specifies the details.
 * CREATED - non-mandatory.  It doesn't say in the RFC, but I suppose that if you found some old stone tablets from 43BC containing some important but long-forgotten task ("create a tunnel under the English channel"?  No, that one was completed already), then 43BC should be used as the creation timestamp, while DTSTAMP should be the time it was rewritten into the icalendar format.  At the other hand, the RFC says that the timestamp should be when the "user agent" creates the task ... so ... then it should be the same as DTSTAMP?  Hm.
 * LAST-MODIFIED - non-mandatory.
 
-And then there are those:
+#### dtstart, due, duration, completion
+
+Four attributes:
 
 * DTSTART
 * DUE
 * COMPLETED
 * DURATION
 
-Now, COMPLETED is very easy to understand.  DUE also - though DUE may be either a hard or a soft due date, RFC5545 does not allow for such information to be recorded.
+... but only three of them can be set (DURATION and DUE is mutually exclusive - I think that's a bad idea, for compatibility and simple coding it would be better to leave out one of them from the standard).  So only three out of the seven things on my wishlist can be recorded.  Which three?
 
-DURATION is mutually exclusive with DUE.  I assume DTSTART+DURATION should be equivalent with DUE.  I think it's a bad idea, it's unclear from the RFC if there is any difference in the meaning weather DURATION or DUE is set, and it makes compatibility and interoperability harder (and/or software more complex) if some software uses the DURATION field while other software uses the DUE property.
+"Timestamp for when I completed" is obviously covered in the COMPLETED attribute.
 
-I think it's not clearly defined what DTSTART means in the VTODO-context.  Is it meant to be the time one actually started working on the task or the time one expects/plans/hopes to start working on the task?  DURATION is also fuzzy.  Is it the time one actually spent on the task, the time estimate, or what?
+DUE could be either "timestamp for when I hope to be finished with the task" or "hard deadline for the task".  RFC5545 does not allow for the extra bit of information to be stored: "is the DUE timestamp a hard or a soft deadline"?  I've decided that the priority field is to be used for this purpose.
 
-I have choosen to define DURATION as the time estimate for a task - but since I deem the DUE-field to be important, DURATION will not be explicitly set - rather, DTSTART will be set and plann will calculate DURATION from that.  This efficiently means DTSTART is the time when you need to drop everything else you may have in your hands and start working with the task.
+Then it's DTSTART remaining.  It's not very well defined what information the DTSTART should convey.  It's quite obvious for events, but for tasks - not so much.  It's reasonable to assume DTSTART should be either the time I expect to be able to start working on the task (that's how I used to set DTSTART some years ago) or the time I actually started working with the task.  And yet, plann is optimized for a different usage ...
 
-Earlier (around 2015) my rule was that DTSTART should be the earliest time one would expect to start working on the task.  Say, some bureaucracy work (expected to take three hours) needs to be done "this year" - DUE should obviously be set to 1st of January at 00:00, and then DTSTART could be set to the 15th of December - and one would have a good chance to get it done before the deadline.  The gymbag for the child has a hard deadline in the morning, but one would usually want to prepare it already in the evening, hence setting DTSTART to the late evening the day before.  With this new definition of DTSTART, the admin task should have DTSTART set to 21:00 at the new years eve, and the gymbag packing and packing the schoolbag should both have DTSTART set to exactly the same time in the morning.  It seems utterly silly - one would not want to spend the three last hours of the year doing stupid paperwork - but then again, storing the time estimate is probably more important than storing a "realistic DTSTART".
+If the duration field was in use - what should it be used for?  The two most obvious things would be either the actual time spent on the task or the estimated time the task would require.  I think the latter is most obvious (after all, the purpose behind the VTODO and VEVENT components are first of all to plan the future, not to track the past) and also most useful, so I choose to define the DURATION as the time estimate for the task.  This information is probably more useful to store than the time one expects to be able to start with it.  I assume DTSTART+DURATION should be equivalent with DUE, meaning that I advice setting DTSTART such that the duration of the task equals to the time one would estimate that is needed doing the task.  The new meaning of DTSTART is then ... "the time when you need to drop everything else you may have in your hands and start working with the task".
 
-I have made a rule for myself now.  The task "send the documents" or perhaps "verify that the documents have been sent" is made with the "silly" DTSTART and priority set to 1.  Then there is the dependency (or a child) "produce the documents" with deadline 16th of December and priority 4.  Since it's in my nature to procrastinate such tasks, it will probably not be done before or at the 16th of December, but at least it will show up in good time before the new years eve.  When the child task is done, of course I will also proceed to complete the parent/dependent task while I'm at it, eliminating the need for doing this at the new years eve, but still keeping the relevant information (the hard deadline and the time estimate) in the calendaring system.
+Two examples: Some bureaucracy work (expected to take three hours) needs to be done "this year", and you consider it would be a good idea to start looking into it around the 15th of December.  And your daughter has swimming lessons at school every Tuesday, and need a gymbag containing towel, swimwear etc in the early morning.  It takes 5 minutes to pack usually - except every now and then things are not in their proper place, then it may take 15 minutes searching.  Since mornings are quite stressful at your house (YMMV) you consider it to be a good idea to prepare it Monday evening.
 
-Another rule of mine, no task should have too high estimation - if a task has more than some 3-4 hour estimate, it should be split into subtasks.
+DUE should obviously be set to 1st of January at 00:00 for the admin task, and 08:10 Tuesday for the gym bag (that's when your daughter is running out the door).  It may seem to be a good idea to set DTSTART to the 15th of December and to Monday evening - to be sure the deadline is met - but then the information about the time estimates aren't recorded.  Instead we set DTSTART to new years eve, 21:00, and Tuesday 08:05.  Now that may seem silly, you really don't want to stress with paperworks at the new years eve, and at 08:05 there is the parallell task of helping her to pack the rucksack and help her to get out of the door, you may not have time fixing the gym bag.
+
+I have made a rule for myself now.  Those tasks should be added to the calendar with priority set to 1 and the real DUE time, so that we have those recorded - but with slightly different wording, like "verify that the documents have been sent" and "check that she takes the gymbag to school".  Then there is the dependency (child tasks) "produce the documents" with deadline 16th of December and priority 4, as well as "pack the gym bag" with priority 3 and due-time in the evening.  Since it's in my nature to procrastinate the admin task, it will probably not be done before or at the 16th of December, but at least it will show up in good time before the new years eve, and I will have ample time to prepare mentally for doing it.  When the documents are produced, of course I will also proceed to complete the parent/dependent task while I'm at it, eliminating the need for doing this at the new years eve, but still keeping the relevant information (the hard deadline and the time estimate) in the calendaring system.
+
+Another rule of mine, no task should have too high estimation - if a task has more than some 3-4 hour estimate, it should also be split into subtasks.  For one thing, otherwise I may end up working constantly for several days on one task without checking the calendar and hence missing important deadlines.
 
 I have some more thoughts on project management and time tracking in the other document, [NEXT_LEVEL](NEXT_LEVEL.md).
 
@@ -294,5 +303,7 @@ RSTATUS is used for scheduling.  plann 1.0 does not support scheduling.
 Those are not much relevant wrg of task handling in plann
 
 ## Usage instructions
+
+This is specifically directed towards using plann for daily task management.  See also the [USER_GUIDE](USER_GUIDE.md) for more generic user guide.
 
 (... work in progress ... my plan is to ditch detailed instructions in the tool itself and rather throw URLs pointing towards this document on the user)
