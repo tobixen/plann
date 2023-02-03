@@ -12,29 +12,31 @@ While not a property in itself, every task belongs to one or more calendars.  I 
 
 RFC5545 defines those properties and subcomponents for a task (aka a VTODO calendar component):
 
-* alarm X
+(Almost all of those are described below - but I should also fix hyperlinks)
+
+* alarm
 * uid
-* dtstamp X
-* dtstart X
-* duration X
-* due X
-* class X
-* completed X
-* created X
+* dtstamp
+* dtstart
+* duration
+* due
+* class
+* completed
+* created
 * summary
 * description
-* geo X
+* geo
 * last-mod
-* location X
+* location
 * organizer
 * percent
-* priority X
-* recurid 
+* priority
+* recurid
 * seq
 * status
 * summary
 * url
-* rrule X
+* rrule
 * attach
 * attendee
 * categories
@@ -54,7 +56,7 @@ RFC7986 adds those:
 
 RFC9073 adds those:
 
-* vlocation X
+* vlocation
 * participant
 * vresource
 * styled-description
@@ -105,7 +107,7 @@ A geo is a location given by coordinates.  It probably makes great sense to use 
 * if you want to stick the tasks to a map.  Probably very useful if your tasks have to be done on lots of different locations (i.e. if you are a travelling salesman or a plumber).
 * if you want to set up the phone to automatically remind you about tasks i.e. when you are close to the supermarked, etc.  (however, most of us probably have several supermarkets we can go to, so geo doesn't make sense for that)
 
-### Categories
+### Categories, resources, concept, refid
 
 **TLDR:** this is considered to be an important property
 
@@ -117,17 +119,23 @@ When to use location or geo, and when to use a category?  I ended up with an eas
 
 While the categories field is a freetext field, it's important that the same categories are used consistently - and to keep consistent, it's important to know what categories are already in use, you may use `cli select --todo list-categories`.
 
-My usage of categories may be slightly superceded by "concept", "link" and "refid", as defined in RFC9253.
+My usage of categories may be slightly superceded by "concept", "link" and "refid", as defined in RFC9253.  I should look into that and consider if it's useful for plann.
 
-### Relation
+Also, one may consider to use "resources" rather than "categories" for some of my usage.  "Good weather" may be considered as a resource rather than a category, "keyboard" may be considered a resource, "supermarked" may be considered to be a resource, and when having a certain set of resources available, it makes sense to do as many tasks as possible with the given set of resources.  Plann has no specific support for resources, but I should consider it.
 
-There are multiple kinds of relationships that may be useful for task management.  RFC5545 only supports PARENT-CHILD and SIBLING.  RFC9253 expands a bit on this to make more complex task management supported.  RFC9253 is (as of writing) reasonably fresh, and I got aware of it only today (2023-02-02).  All my prior thinking has been around how to (ab)use the PARENT-CHILD relationships.  Anyway, let me introduce some of my thoughts on different kind of relationships that are relevant wrg of task management:
+RFC9073 also defines vresource, which is a more structured way of specifying resources.
+
+### Related
+
+There are multiple kinds of relationships that may be useful for task management.  RFC5545 only supports PARENT-CHILD and SIBLING.  RFC9253 expands a bit on this to make more complex task management supported.  RFC9253 is (as of writing) reasonably fresh, and I got aware of it only today (2023-02-02).  All my prior thinking has been around how to (ab)use the PARENT-CHILD relationships.  Here are three different ways to think of relationships:
 
 #### Pending-Dependent
 
 If task A cannot be done without task B being done first, we say that A depends on B.  We may want to construct a bikeshed, then paint it red.  Obviously the painting depends on the construction.  It may make sense to hide the paint job from the todolists, or maybe fade it away - when checking the list of immediate tasks to be executed, "painting the bikeshed" is just noise.  It may also make sense to ensure the due date for the construction is before the due date for the painting.
 
 Within RFC5545 one can try to use parent-child-relationships for this purpose - think of the parent as the dependent and the child as the pending.  "Paint the bikeshed" would then be a parent of "construct a bikeshed".  That makes perfect sense, doesn't it?
+
+RFC9253 has explicit support for dependencies, but it also supports "temporal relationships" - i.e. task A needs to be finished 3 hours before it's possible to start working with task B, task C needs to be finished before task D can be finished, etc.  I should definitively make this supported by plann.
 
 #### Parent-child relationship
 
@@ -143,21 +151,20 @@ There is a bit of a difference between the typical pending-dependent and the typ
 
 Another kind of relationship that is neither supported by RFC5545 nor RFC9253.
 
-The purpose of the shopping trip is to buy cucumber - but the purpose of building the biking shed is not to buy planks  (Unless the owner of the planks shop used some clever marketing for tricking you into building the bike shed, that is).
+The purpose of the shopping trip is to buy cucumber - but the purpose of building the biking shed is not to buy planks (unless the owner of the planks shop used some clever marketing for tricking you into building the bike shed).
 
 The purpose for buying sugar could be "bake a cake".  I would then start by adding "bake a cake" to the task list, then "buy sugar", and only then I would eventually add "go shopping" to the todo-list. (That's maybe just me.  My wife would go to the shop to buy a cucumber, and then come home with everything needed for baking a cake and more).
 
 From my practical experience, "supermarket" and "hardware shopping" can as well be categories.  So eventually when I really need that cucumber, I can check up the full list for the category "supermarket" and come home with all ingrediences needed for making a cake.  I've never felt a compelling need to group the shopping list inside the calendar.
 
-
-### RRULE
+### RRULE, recurid, exdate, rdate
 
 The standard allows for recurring tasks, but doesn't really flesh out what it means that a task is recurring - except that it should show up on date searches if any of the recurrances are within the date search range.  Date searches for future recurrances of tasks is ... quite exotic, why would anyone want to do that?
 
 From a "user perspective", I think there are two kind of recurrences:
 
 * Specified intervals - say, the floor should be cleaned every week.  You usually do it every Monday, but one week everything is so hectic that you postpone it all until late Sunday evening.  It would be irrational to wash it again the next day.  And if you missed the due date with more than a week - then obviously the next recurrence is not "previous week".  (Except, one may argue that the status of previous week should be set to "CANCELLED")
-* Fixed-time.  If you have some contract stating that you should washing the floor weekly, then maybe you would want to wash the floor again on Monday, even if it was just done Sunday.  Or perhaps one of the children is having swimming at school every Tuesday, so sometime during Monday (with a hard due set to Tuesday early morning) a gym bag with swimwear and a fresh towel should be prepared for the child.  Or the yearly income tax statement, should be delivered before a hard due date - every year.
+* Fixed-time.  If you have some contract stating that you should be washing the floor weekly, then maybe you would want to wash the floor again on Monday, even if it was just done Sunday.  Or perhaps one of the children is having swimming at school every Tuesday, so sometime during Monday (with a hard due set to Tuesday early morning) a gym bag with swimwear and a fresh towel should be prepared for the child.  Or the yearly income tax statement, should be delivered before a hard due date - every year.
 
 I choose to interpret a RRULE with BY*-attributes set (like BYDAY=MO) as a recurring task with "fixed" due times, while a RRULE without BY*-attributes should be considered as a "interval"-style of recurring task.
 
@@ -196,15 +203,17 @@ And then there are those:
 * COMPLETED
 * DURATION
 
-Now, COMPLETED is very easy to understand.  DUE also, though it's not so trivial to understand if it's a hard or a soft due date, and weather the task should be cancelled or procrastinated if the due-date is not met.  DURATION is mutually exclusive with DUE.  I assume DTSTART+DURATION should be equivalent with DUE.  I think it's a bad idea, it's unclear from the RFC if there is any difference in the meaning weather DURATION or DUE is set, and it makes compatibility and interoperability harder (and/or software more complex) if some software uses the DURATION field while other software uses the DUE property.
+Now, COMPLETED is very easy to understand.  DUE also - though DUE may be either a hard or a soft due date, RFC5545 does not allow for such information to be recorded.
 
-DTSTART is fuzzy.  Is it meant to be the time one actually started working on the task or the time one expects/plans/hopes to start working on the task?  DURATION is also fuzzy.  Is it the time one actually spent on the task, the time estimate, or what?
+DURATION is mutually exclusive with DUE.  I assume DTSTART+DURATION should be equivalent with DUE.  I think it's a bad idea, it's unclear from the RFC if there is any difference in the meaning weather DURATION or DUE is set, and it makes compatibility and interoperability harder (and/or software more complex) if some software uses the DURATION field while other software uses the DUE property.
 
-I have choosen not to use DURATION, but to define DURATION as the time estimate for a task.  With DUE possibly being the hard deadline for doing the task, and assuming that DTSTART + DURATION = DUE, that means DTSTART is the time when you need to drop everything else you may have in your hands and start working with the task (at least if the deadline is a hard one and the estimate is correct).
+I think it's not clearly defined what DTSTART means in the VTODO-context.  Is it meant to be the time one actually started working on the task or the time one expects/plans/hopes to start working on the task?  DURATION is also fuzzy.  Is it the time one actually spent on the task, the time estimate, or what?
 
-Earlier (around 2015) my rule was that DTSTART should be the earliest time one would expect to start working on the task.  Say, some bureaucracy work (expected to take three hours) needs to be done "this year" - DUE should obviously be set to 1st of January at 00:00, and then DTSTART could be set to the 15th of December - and one would have a good chance to get it done before the deadline.  With this new definition of DTSTART, it should be set to 21:00 at .  However, I think it is more desirable to use the DURATION field for estimations of how long time the task will take.  Now, this bureaucraziness may be estimated to three hours of work.  That means DTSTART should be set to 21:00 at New Years eve.  It seems utterly silly - one would not want to spend the three last hours of the year doing stupid paperwork - but then again, storing the time estimate is probably more important than storing a "realistic DTSTART" with the task.
+I have choosen to define DURATION as the time estimate for a task - but since I deem the DUE-field to be important, DURATION will not be explicitly set - rather, DTSTART will be set and plann will calculate DURATION from that.  This efficiently means DTSTART is the time when you need to drop everything else you may have in your hands and start working with the task.
 
-I have made a rule for myself now.  The task "send the documents" or perhaps "verify that the documents have been sent" is made with New Year as the deadline and priority set to 1.  Then there is the dependency (or a child) "produce the documents" with deadline 16th of December and priority 4.  Since it's in my nature to procrastinate such tasks, it will probably not be done fore or at the 16th of December, but at least it will show up in good time before the new years eve.  When the child task is done, of course I will also proceed to complete the parent/dependent task while I'm at it.
+Earlier (around 2015) my rule was that DTSTART should be the earliest time one would expect to start working on the task.  Say, some bureaucracy work (expected to take three hours) needs to be done "this year" - DUE should obviously be set to 1st of January at 00:00, and then DTSTART could be set to the 15th of December - and one would have a good chance to get it done before the deadline.  The gymbag for the child has a hard deadline in the morning, but one would usually want to prepare it already in the evening, hence setting DTSTART to the late evening the day before.  With this new definition of DTSTART, the admin task should have DTSTART set to 21:00 at the new years eve, and the gymbag packing and packing the schoolbag should both have DTSTART set to exactly the same time in the morning.  It seems utterly silly - one would not want to spend the three last hours of the year doing stupid paperwork - but then again, storing the time estimate is probably more important than storing a "realistic DTSTART".
+
+I have made a rule for myself now.  The task "send the documents" or perhaps "verify that the documents have been sent" is made with the "silly" DTSTART and priority set to 1.  Then there is the dependency (or a child) "produce the documents" with deadline 16th of December and priority 4.  Since it's in my nature to procrastinate such tasks, it will probably not be done before or at the 16th of December, but at least it will show up in good time before the new years eve.  When the child task is done, of course I will also proceed to complete the parent/dependent task while I'm at it, eliminating the need for doing this at the new years eve, but still keeping the relevant information (the hard deadline and the time estimate) in the calendaring system.
 
 Another rule of mine, no task should have too high estimation - if a task has more than some 3-4 hour estimate, it should be split into subtasks.
 
@@ -244,13 +253,13 @@ Except for the pull/push paradigm - from my perspective, alarms may in some case
 
 ### Class
 
-**TLDR:** Don't trust it to be honored in any way.
+**TLDR:** Don't use it.
 
-A task or event may be classified as PUBLIC, PRIVATE or CONFIDENTIAL.  This may be used for access control on the component level, though most calendar server only have access control levels for the whole calendar - and not always even that.  
+A task or event may be classified as PUBLIC, PRIVATE or CONFIDENTIAL.  This may be used for access control on the component level, though most calendar server only have access control levels for the whole calendar - and not always even that - hence, you cannot trust the classification to be respected.
 
 plann can filter/select/set this property, but it does not care about the value.  Plann does not implement any access control, that is considered to be up to the server.
 
-### Summary, description, comment, url, attach, styled-description, uid
+### Summary, description, comment, and various other metadata - url, attach, styled-description, uid, contact
 
 **TLDR:** Summary is considered important in plann
 
@@ -259,3 +268,31 @@ The only attribute that is mandatory is the uid.  As plann is a command line too
 Summary is supposed to be a one-liner representing the task, and then the description is supposed to give further details.  Comment seems to be meant to add comments from other people than the organizer, I don't believe this property is much in use in the wild.  attach can be used to add documents (or URLs to documents), styled-description is for giving a more aesthetic description (not much relevant for plann, probably).  URLs can also be attached, and with RFC9253, a link property is defined - which is basically an URL with some extra metadata.
 
 All those should be supported by plann, like, possible to show it or filter by it if one knows how to use plann, but it's only optimized towards the summary field.
+
+### People (organizer, attendee, participant)
+
+**TLDR:** May be considered important in a future version of plann
+
+Like, the attendee field can be used for assigning a task to someone.  plann version 1.0 will be optimized for single-user-usage.
+
+### Status, percent
+
+**TLDR:** Status field is considered important, but plann v1.0 is not optimized for utilizing the "IN-PROCESS" status.
+
+Vaid values for the status field is NEEDS-ACTION (considred by plann to be the default, if no status is given, and COMPLETED is not set), IN-PROCESS, COMPLETED and CANCELLED.  By default, plann will only show tasks that is in the NEEDS-ACTION state - hence, IN-PROCESS may easily fall out of the radar.  This will be changed at some point in the future (v1.1 perhaps?)
+
+The PERCENT-COMPLETE (quote RFC) is used by an assignee or delegatee of a to-do to convey the percent completion of a to-do to the "Organizer".  Hence, it's only relevant for the "IN-PROCESS"-tasks.
+
+My recommendation ... never work with a single task for several days, split it up into tasks that are completed and tasks that are remaining.  That also makes it possible to track the progress in a more accurate, reliable and accountable way than relying on a "percentage complete"-estimate.
+
+### rstatus
+
+RSTATUS is used for scheduling.  plann 1.0 does not support scheduling.
+
+### color, image, conference
+
+Those are not much relevant wrg of task handling in plann
+
+## Usage instructions
+
+(... work in progress ... my plan is to ditch detailed instructions in the tool itself and rather throw URLs pointing towards this document on the user)

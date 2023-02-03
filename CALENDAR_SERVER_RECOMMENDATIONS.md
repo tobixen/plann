@@ -1,6 +1,6 @@
 # What CalDAV-server to choose?
 
-TLDR-summary: To use plann heavily both to manage calendars and do heavy task management, none of the calendar servers out there seems to be good enough (though I should do more testing, particularly towards SOGo).  I ended up with DAViCal, but had to fix some bugs and make a workaround in plann.
+TLDR-summary: To use plann heavily both to manage calendars and do heavy task management, none of the calendar servers out there seems to be good enough (though I should do more testing, particularly towards SOGo).  Xandikos seems to be the best - it works out of the box, the developer is quick to fix things when filing bug reports, everything works well except for recurrances - which I consider to be important.  I ended up with DAViCal, but had to fix some bugs in DAViCal, make a workaround in plann, and every now and then I have to do manual SQL operations.  I keep pushing to get things fixed upstream, hopefully I can come with a better recommendation in some few months.
 
 ## Requirements
 
