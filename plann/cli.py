@@ -936,6 +936,20 @@ def interactive(ctx):
 
 
 @interactive.command()
+@click.pass_context
+def manage_tasks(ctx):
+    """
+    This goes through the daily task management procedures:
+    * set-task-attribs
+    * agenda
+    * check-due
+    * split-huge-tasks
+    * split-high-pri-tasks
+    * dismiss-panic
+    """
+    raise NotImplementedError()
+
+@interactive.command()
 @click.option('--limit', help='If more than limit overdue tasks are found, probably we should do a mass procrastination rather than going through one and one task')
 @click.option('--lookahead', help='Look-ahead time - check tasks that needs to be completed in the near future', default='+12h')
 @click.pass_context
@@ -1078,6 +1092,34 @@ def split_huge_tasks(ctx, threshold, max_lookahead, limit_lookahead):
         if obj.get_duration() > threshold:
             interactive_split_task(ctx, obj)
 
+@interactive.command()
+@click.option('--max-lookahead', help='ignore tasks further in the future than this', default='30d')
+@click.option('--threshold', help='tasks with this or lower priority should always have children', default=2)
+@click.option('--limit-lookahead', help='only consider the first x tasks', default=32)
+@click.pass_context
+def split_high_pri_tasks(ctx, threshold, max_lookahead, limit_lookahead):
+    """Tasks with very high priority (1,2) indicates a hard DUE that
+    cannot be moved - the actual work should probably be done long
+    time before the deadline.  To preserve the deadline, avoid getting
+    surprised at the new years eve that there are still high-priority
+    tasks that needs to be done this year, and make it possible to
+    procrastinate the work itself it's strongly recommended to split
+    the high priority tasks - make one or more child tasks for
+    actually doing the work, and leave the parent task as a
+    placeholder for just storing the hard deadline (rename it to
+    something like "verify that the work has been done and/or
+    delivered", set the time estimate to some few minutes).
+    """
+    _select(ctx=ctx, todo=True, end=f"+{max_lookahead}", limit=limit_lookahead, sort_key=['{DTSTART.dt:?{DUE.dt:?(0000)?}?%F %H:%M:%S}', '{PRIORITY:?0?}'])
+    objs = ctx.obj['objs']
+    for obj in objs:
+        if obj.icalendar_component.get('PRIORITY') and obj.icalendar_component.get('PRIORITY') <= threshold:
+            relations = obj.icalendar_component.get('RELATED-TO') or []
+            if relations and not isinstance(relations, list_type):
+                relations = [ relations ]
+            if not any(x.params['REL-TYPE'] == 'CHILD' for x in relations):
+                interactive_split_task(ctx, obj, too_big=False)
+
 def _relships_by_type(obj, reltype_wanted=None):
     ret = defaultdict(list_type)
     rts = obj.icalendar_component.get('RELATED-TO')
@@ -1196,10 +1238,16 @@ def set_task_attribs(ctx):
 
     See also USER_GUIDE.md, TASK_MANAGEMENT.md and NEXT_LEVEL.md
     """
+    _set_task_attribs(ctx)
+
+def _set_task_attribs(ctx):
+    """
+    actual implementation of set_task_attribs
+    """
     ## Tasks missing a category
     LIMIT = 16
 
-    def _set_something(something, help_text, default=None, objs=None):
+    def _set_something(something, help_text, help_url=None, default=None, objs=None):
         cond = {f"no_{something}": True}
         something_ = 'categories' if something == 'category' else something
         if something == 'duration':
@@ -1215,6 +1263,7 @@ def set_task_attribs(ctx):
             if num == LIMIT:
                 num = f"{LIMIT} or more"
             click.echo(f"There are {num} tasks with no {something} set.")
+            click.echo(help_url)
             if something == 'category':
                 _select(ctx=ctx, todo=True)
                 cats = list_type(_cats(ctx))
@@ -1244,10 +1293,10 @@ def set_task_attribs(ctx):
         return objs
 
     ## Tasks missing categories
-    _set_something('category', "enter a comma-separated list of categories to be added")
+    _set_something('category', "enter a comma-separated list of CATEGORIES to be added", "https://github.com/tobixen/plann/blob/master/TASK_MANAGEMENT.md#categories-resources-concept-refid")
 
     ## Tasks missing a due date.  Save those objects (workaround for https://gitlab.com/davical-project/davical/-/issues/281)
-    duration_missing = _set_something('due', "enter the due date (default +2d)", default="+2d")
+    duration_missing = _set_something('due', "enter the DUE DATE (default +2d)", default="+2d", help_url="https://github.com/tobixen/plann/blob/master/TASK_MANAGEMENT.md#dtstart-due-duration-completion")
 
     ## Tasks missing a priority date
     message="""Enter the priority - a number between 0 and 9.
