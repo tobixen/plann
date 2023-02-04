@@ -33,6 +33,7 @@ setup(
         'pytz', ## pytz is supposed to be obsoleted, but see https://github.com/collective/icalendar/issues/333 
         'tzlocal',
         'Click',
+        'PyYAML',
         'six'
     ],
     entry_points={

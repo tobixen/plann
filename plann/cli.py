@@ -233,7 +233,7 @@ def find_calendars(args, raise_errors):
 @click.group()
 ## TODO: interactive config building
 ## TODO: language and timezone
-@click.option('-c', '--config-file', default=f"{os.environ['HOME']}/.config/calendar.conf")
+@click.option('-c', '--config-file', default=f"{os.environ.get('HOME')}/.config/calendar.conf")
 @click.option('--skip-config/--read-config', help="Skip reading the config file")
 @click.option('--config-section', default=["default"], multiple=True)
 @click.option('--caldav-url', help="Full URL to the caldav server", metavar='URL')
