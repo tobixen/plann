@@ -4,15 +4,13 @@ plann is a flexible cli tool for accessing, adding and editing events, tasks and
 
 ## What's in a "task" ...
 
-By using standards, plann should interoperate well with other calendaring and task management tools.  The icalendar standard (RFC 5545) sets some limits on what data we can store in a task on a calendar - unfortunately the standard leaves quite much up to the users and implementations.  does not give very good guidelines on how to use those.  One often gets into dilemmas ... when to use the category field vs when to use the location field vs when to branch out a completely distinct calendar, etc.  Here are some information about what can and cannot go into a task, and how plann is dealing with it.
+By using standards, plann should interoperate well with other calendaring and task management tools.  The icalendar standard (RFC 5545) sets some limits on what data we can store in a task on a calendar - unfortunately the standard leaves quite much up to the users and implementations - it misses guidelines on how to use the standard, and there are frequently multiple ways of achieving the same means.  One often gets into dilemmas ... when to use the category field vs when to use the location field vs when to branch out a completely distinct calendar, etc.  Here are some information about what can and cannot go into a task, and how plann is dealing with it.
 
 ### List of properties and subcomponents
 
 While not a property in itself, every task belongs to one or more calendars.  I do have some considerations below on when it makes sense to split tasks onto different calendars.
 
-RFC5545 defines those properties and subcomponents for a task (aka a VTODO calendar component):
-
-(Almost all of those are described below - but I should also fix hyperlinks)
+RFC5545 defines the following properties and subcomponents for a task (aka a VTODO calendar component):
 
 * alarm
 * uid
@@ -71,6 +69,9 @@ RFC9253 adds those:
 ... and in addition, a task may belong to one or more calendars.
 
 (It's also possible for a program like plann to add custom properties)
+
+Almost all of the properties above are mentioned below.
+
 
 ### Calendar scope
 
