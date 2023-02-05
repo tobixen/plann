@@ -2,7 +2,7 @@
 
 Simple command-line CalDAV client, making it possible to add calendar events, browse an agenda and do task management.
 
-This is the experimental new version of my old [calendar-cli project](https://github.com/tobixen/calendar-cli/).  The old repository was forked, hence there are a lot of references to calendar-cli everywhere, and this repository includes all the old code.  This will be cleaned up eventually.
+This is the experimental new version of my old [calendar-cli project](https://github.com/tobixen/calendar-cli/).  The old repository was forked, so there is a lot of references to calendar-cli here, and quite some of the documentation describes calendar-cli rather than plann.  This will be cleaned up properly before the 1.0-release.
 
 ## Other tools
 
@@ -14,7 +14,7 @@ Based on user feedback I decided to fork `calendar-cli` into `plann`.
 
 DO YOU HAVE OPINIONS ON WHAT COLOR TO PAINT THE BIKE SHED WITH?  VISIT https://github.com/tobixen/calendar-cli/issues/88 NOW!
 
-calendar-cli.py is the old interface, it will hang around and be supported for some time to come.  cal.py is the new interface, but until version 1.0 is ready, there will still be functionality in calendar-cli that isn't mirrored to cal.py.
+calendar-cli is the old, mature, production-ready, stable API interface, it will hang around and be supported for some time to come.  plann is the new interface, but until version 1.0 is ready, there will still be functionality in calendar-cli that isn't mirrored to cal.py.
 
 ## Usage examples
 
