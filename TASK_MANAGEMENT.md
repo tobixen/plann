@@ -81,7 +81,7 @@ Calendars (aka "task lists" when used for tasks) aren't a part of RFC 5545, but 
 
 In some calendaring solutions every person is supposed to have a calendar, and in addition every shared resource (i.e. meeting room, car, etc) that may need to be booked should have a separate calendar.  This may be fine - but keep in mind that it may not always be trivial to move, copy or synchronize tasks forth and back between two calendars (it is on the roadmap to allow synchronizing of two calendars through plann), so if it makes sense to reassign a task to a different person, then perhaps it's not a good idea to have one task list per person.
 
-I believe it's best to keep as few calendars as possible, and rather use i.e. the categories field for splitting different types of tasks.  
+I believe it's best to keep as few calendars as possible, and rather use i.e. the categories/resources/refid/concept fields for splitting different types of tasks.  
 
 As you can give access rights to other people for a whole caldav calendar (or "task list"), it makes sense to use the calendar level to control access rights.  You would typically like to have one calendar where your family can view/add tasks, other for work, perhaps separate calendars for separate projects at work if different projects involves different people, etc.
 
@@ -122,7 +122,7 @@ While the categories field is a freetext field, it's important that the same cat
 
 My usage of categories may be slightly superceded by "concept", "link" and "refid", as defined in RFC9253.  I should look into that and consider if it's useful for plann.
 
-Also, one may consider to use "resources" rather than "categories" for some of my usage.  "Good weather" may be considered as a resource rather than a category, "keyboard" may be considered a resource, "supermarked" may be considered to be a resource, and when having a certain set of resources available, it makes sense to do as many tasks as possible with the given set of resources.  Plann has no specific support for resources, but I should consider it.
+After some thinking, I've considered that quite much of what I use "categories" for would possibly be more appropriate to put in the "resources"-field.  "Good weather" may be considered as a resource rather than a category, "keyboard" may be considered a resource, "supermarked" may be considered to be a resource.  When having a certain set of resources available it makes sense to do as many tasks as possible with the given set of resources.  Resources may be missing, then the alternatives are to find the missing resources (or travel to them ... or try to make without them) or to postpone the task until the resources are available.  Plann has no specific support for resources, but I should consider it.
 
 RFC9073 also defines vresource, which is a more structured way of specifying resources.
 
