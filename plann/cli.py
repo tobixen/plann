@@ -118,7 +118,7 @@ def parse_add_dur(dt, dur):
     }
     while dur:
         rx = re.match(r'([+-]?\d+(?:\.\d+)?)([smhdw])(.*)', dur)
-        assert rx
+        assert rx ## TODO: create some nicer error message (timedelta expected but not found)
         i = float(rx.group(1))
         u = rx.group(2)
         dur = rx.group(3)
@@ -728,7 +728,7 @@ def _check_for_panic(ctx, hours_per_day, limit, output=True):
                 good_start = due - long_dur
                 slack = _ensure_ts(good_start) - _ensure_ts(possible_start)
                 if slack <= datetime.timedelta(0):
-                    task = comp.get('summary') or comp.get('description') or comp.get('uid')
+                    task = _summary(comp)
                     dtstart = comp.get('dtstart')
                     priority = comp.get('priority', 0)
                     ## TODO: those should not be None or things will break
@@ -776,15 +776,18 @@ def add(ctx, **kwargs):
     if (kwargs['first_calendar'] or
         (len(ctx.obj['calendars'])>1 and
          not kwargs['multi_add'] and
-         not click.confirm(f"Multiple calendars given.  Do you want to duplicate to {len(ctx.obj['calendars'])} calendars? (tip: use option --multi-add to avoid this prompt in the future)"))):
+         not click.confirm(f"Multiple calendars given.  Do you want to duplicate to {len(ctx.obj['calendars'])} calendars? (tip: use option --multi-add or --first-calendar to avoid this prompt in the future)"))):
         calendar = ctx.obj['calendars'][0]
         ## TODO: we need to make sure f"{calendar.name}" will always work or something
-        if (kwargs['first_calendar'] is not None and
+        if (kwargs['first_calendar'] is not False and
             (kwargs['first_calendar'] or
             click.confirm(f"First calendar on the list has url {calendar.url} - should we add there? (tip: use --calendar-url={calendar.url} or --first_calendar to avoid this prompt in the future)"))):
             ctx.obj['calendars'] = [ calendar ]
         else:
             _abort("Giving up: Multiple calendars found/given, please specify which calendar you want to use")
+
+    if not ctx.obj['calendars']:
+        _abort("Giving up: No calendars given")
 
     ctx.obj['ical_fragment'] = "\n".join(kwargs['add_ical_line'])
 
@@ -915,9 +918,9 @@ def agenda(ctx):
     start = datetime.datetime.now()
     _select(ctx=ctx, start=start, event=True, end='+7d', limit=16, sort_key=['DTSTART', 'get_duration()'])
     objs = ctx.obj['objs']
-    _select(ctx=ctx, start=start, todo=True, end='+7d', limit=16, sort_key=['{DTSTART.dt:?{DUE.dt:?(0000)?}?%F %H:%M:%S}', '{PRIORITY:?0?}'])
+    _select(ctx=ctx, todo=True, end='+7d', limit=16, sort_key=['{DTSTART.dt:?{DUE.dt:?(0000)?}?%F %H:%M:%S}', '{PRIORITY:?0?}', ''], skip_parents=True)
     ctx.obj['objs'] = objs + ["======"] + ctx.obj['objs']
-    return _list(ctx.obj['objs'], bottom_up=True)
+    return _list(ctx.obj['objs'])
 
 @cli.group()
 @click.pass_context
@@ -930,7 +933,7 @@ def interactive(ctx):
     experimenting with his own task list and testing out daily
     procedures, hence it's also quite optimized towards whatever
     work-flows that seems to work out for the maintainer of the
-    calendar-cli.  Things are changed rapidly without warnings and the
+    plann.  Things are changed rapidly without warnings and the
     interactive stuff is not covered by any test code whatsoever.
     """
 
@@ -947,7 +950,8 @@ def manage_tasks(ctx):
     * split-high-pri-tasks
     * dismiss-panic
     """
-    raise NotImplementedError()
+    _set_task_attribs(ctx)
+    _agenda()
 
 @interactive.command()
 @click.option('--limit', help='If more than limit overdue tasks are found, probably we should do a mass procrastination rather than going through one and one task')
@@ -962,7 +966,7 @@ def check_due(ctx, limit, lookahead):
     objs = ctx.obj['objs']
     for obj in objs:
         comp = obj.icalendar_component
-        summary = comp.get('SUMMARY') or comp.get('DESCRIPTION') or comp.get('UID')
+        summary = _summary(comp)
         dtstart = comp.get('DTSTART')
         pri = comp.get('PRIORITY', 0)
         due = obj.get_due()
@@ -984,7 +988,15 @@ def check_due(ctx, limit, lookahead):
         elif input == 'split':
             interactive_split_task(ctx, obj, too_big=False)
         elif input.startswith('postpone'):
-            _procrastinate([obj], input.split(' ')[1])
+            ## TODO: make this into an interactive recursive function
+            parent = _procrastinate([obj], input.split(' ')[1], check_parent="return")
+            if parent:
+                p = parent.icalendar_component
+                if p.get('PRIORITY',0) <= 2:
+                    click.echo(f"Panic time!  Can't postpone due to parent {_summary(p)} with DUE {p['DUE'].dt} and pri {p.get('PRIORITY', 0)}")
+                elif click.confirm(f"Do you want to postpone the parent task {_summary(p)} with DUE {p['DUE'].dt} and pri {p.get('PRIORITY', 0)}?"):
+                    _procrastinate([parent], input.split(' ')[1], check_parent="error")
+                    _procrastinate([obj], input.split(' ')[1], check_parent="error")
         elif input == 'complete':
             obj.complete(handle_rrule=True)
         elif input == 'cancel':
@@ -1032,7 +1044,7 @@ def _dismiss_panic(ctx, hours_per_day):
     click.echo(f"Lowest-priority conflicting tasks (priority={lowest_pri}):")
     for obj in first_low_pri_tasks:
         component = obj.icalendar_component
-        summary = component.get('summary') or component.get('description') or component.get('uid')
+        summary = _summary(component)
         due = obj.get_due()
         dtstart = component.get('dtstart') or component.get('due')
         dtstart = dtstart.dt
@@ -1058,15 +1070,20 @@ def _dismiss_panic(ctx, hours_per_day):
         _procrastinate(other_low_pri_tasks, procrastination_time)
     return _dismiss_panic(ctx, hours_per_day)
 
-def _procrastinate(objs, delay):
+def _procrastinate(objs, delay, check_parent="error"):
     for x in objs:
-        try:
-            x.set_due(parse_add_dur(max(x.get_due().astimezone(datetime.timezone.utc), datetime.datetime.now().astimezone(datetime.timezone.utc)), delay), move_dtstart=True, check_parent=True)
+        chk_parent = 'return' if check_parent else False
+        parent = x.set_due(parse_add_dur(max(x.get_due().astimezone(datetime.timezone.utc), datetime.datetime.now().astimezone(datetime.timezone.utc)), delay), move_dtstart=True, check_parent=chk_parent)
+        if parent:
+            if check_parent == "error":
+                i = x.icalendar_component
+                summary = _summary(i)
+                p = parent.icalendar_component
+                click.echo(f"{summary} could not be postponed due to parent {_summary(p)} with due {p['DUE'].dt})")
+            elif check_parent == "return":
+                return parent
+        else:
             x.save()
-        except caldav.error.ConsistencyError:
-            i = x.icalendar_component
-            summary = i.get('summary') or i.get('description') or i.get('uid')
-            click.echo(f"{summary} could not be postponed (due to a parent task with earlier due)")
 
 @interactive.command()
 @click.pass_context
@@ -1238,6 +1255,7 @@ def set_task_attribs(ctx):
 
     See also USER_GUIDE.md, TASK_MANAGEMENT.md and NEXT_LEVEL.md
     """
+    click.echo("All tasks ought to have categories, due-time, time-estimate and a priority ... checking if anything is missing")
     _set_task_attribs(ctx)
 
 def _set_task_attribs(ctx):
@@ -1274,7 +1292,7 @@ def _set_task_attribs(ctx):
             click.echo(f'(or enter "completed!" with bang but without quotes if the task is already done)')
             for obj in objs:
                 comp = obj.icalendar_component
-                summary = comp.get('summary') or comp.get('description') or comp.get('uid')
+                summary = _summary(comp)
                 value = click.prompt(summary, default=default)
                 if value == 'completed!':
                     obj.complete()
@@ -1298,34 +1316,13 @@ def _set_task_attribs(ctx):
     ## Tasks missing a due date.  Save those objects (workaround for https://gitlab.com/davical-project/davical/-/issues/281)
     duration_missing = _set_something('due', "enter the DUE DATE (default +2d)", default="+2d", help_url="https://github.com/tobixen/plann/blob/master/TASK_MANAGEMENT.md#dtstart-due-duration-completion")
 
-    ## Tasks missing a priority date
-    message="""Enter the priority - a number between 0 and 9.
-
-The RFC says that 0 is undefined, 1 is highest and 9 is lowest.
-
-TASK_MANAGEMENT.md suggests the following:
-
-1: The DUE timestamp MUST be met, come hell or high water.
-2: The DUE timestamp SHOULD be met, if we lose it the task becomes irrelevant.
-3: The DUE timestamp SHOULD be met, but worst case we can probably procrastinate it, perhaps we can apply for an extended deadline.
-4: The deadline SHOULD NOT be pushed too much
-5: If the deadline approaches and we have higher-priority tasks that needs to be done, then this task can be procrastinated.
-6: The DUE is advisory only and expected to be pushed - but it would be nice if the task gets done within reasonable time.
-7-9: Low-priority task, it would be nice if the task gets done at all ... but the DUE is overly optimistic and expected to be pushed several times.
-"""
-    
-    _set_something('priority', message, default="5")
+    _set_something('priority', 'Enter the PRIORITY', help_url='https://github.com/tobixen/plann/blob/master/TASK_MANAGEMENT.md#priority', default="5")
 
     ## Tasks missing a duration
-    message="""Enter the DURATION (i.e. 5h or 2d)
+    _set_something('duration', """Enter the DURATION (i.e. 5h or 2d)""", help_url="https://github.com/tobixen/plann/blob/master/TASK_MANAGEMENT.md#priority", objs=duration_missing)
 
-TASK_MANAGEMENT.md suggests this to be the estimated efficient work time
-needed to complete the task.
-
-(According to the RFC, DURATION cannot be combined with DUE, meaning that we
-actually will be setting DTSTART and not DURATION)"""
-
-    _set_something('duration', message, objs=duration_missing)
+def _summary(i):
+    return i.get('summary') or i.get('description') or i.get('uid')
 
 if __name__ == '__main__':
     cli()

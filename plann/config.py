@@ -35,7 +35,7 @@ def interactive_config(args, config, remaining_argv):
     if not section in config:
         config[section] = {}
 
-    for config_key in ('caldav_url', 'calendar_url', 'caldav_user', 'caldav_pass', 'caldav_proxy', 'ssl_verify_cert', 'language', 'timezone', 'inherits'):
+    for config_key in ('caldav_url', 'calendar_url', 'caldav_user', 'caldav_pass', 'caldav_proxy', 'ssl_verify_cert', 'language', 'timezone', 'inherits', 'main'):
 
         if config_key == 'caldav_pass':
             print("Config option caldav_pass - old value: **HIDDEN**")
@@ -113,14 +113,15 @@ def expand_config_section(config, section='default', blacklist=None):
     if set(section).isdisjoint(set('[*?')):
         ## If it's referring to a "meta section" with the "contains" keyword
         if 'contains' in config[section]:
-            results = set()
+            results = []
             if not blacklist:
                 blacklist = set()
             blacklist.add(section)
             for subsection in config[section]['contains']:
                 if not subsection in results and not subsection in blacklist:
                     for recursivesubsection in expand_config_section(config, subsection, blacklist):
-                        results.add(recursivesubsection)
+                        if not recursivesubsection in results:
+                            results.append(recursivesubsection)
             return results
         else:
             ## Disabled sections should be ignored
