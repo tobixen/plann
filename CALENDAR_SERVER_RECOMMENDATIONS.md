@@ -2,7 +2,7 @@
 
 **TLDR-summary**:
 
-To use plann heavily both to manage calendars and do heavy task management, none of the calendar servers out there seems to be good enough (though I should do more testing, particularly towards SOGo).
+To use plann heavily both to manage calendars and do heavy task management, none of the calendar servers out there seems to be good enough.
 
 Xandikos seems to be the best - it works out of the box, the developer is quick to fix things when filing bug reports, everything works well ... except for one tiny thing, recurrances.  Well, I do consider recurrances to be important!
 
@@ -66,9 +66,11 @@ This is "Groupware" supporting mail and featuring a rich web interface.
 
 SOGo has been around for as long as the python caldav library.
 
-I was earlier dismissing it because of the lack of expand support - though, now the python caldav library can do client-side expand, so it's not important anymore.  I should revisit and test it more thoroughly again.
+SOGo does not support searches on text fields and other advanced searches (and this is needed for advanced task management in plann).
 
 SOGo did not support journals last time I checked.
+
+SOGo is probably very good if you want a web based email and calendaring tool which supports syncing towards a large amount of devices and software, but it's not good enough when a "thin" client such as plann wants search for some particular events or tasks in a calendar.
 
 ### Robur
 
