@@ -35,7 +35,7 @@ def interactive_config(args, config, remaining_argv):
     if not section in config:
         config[section] = {}
 
-    for config_key in ('caldav_url', 'calendar_url', 'caldav_user', 'caldav_pass', 'caldav_proxy', 'ssl_verify_cert', 'language', 'timezone', 'inherits', 'main'):
+    for config_key in ('caldav_url', 'calendar_url', 'caldav_user', 'caldav_pass', 'caldav_proxy', 'ssl_verify_cert', 'language', 'timezone', 'inherits'):
 
         if config_key == 'caldav_pass':
             print("Config option caldav_pass - old value: **HIDDEN**")
