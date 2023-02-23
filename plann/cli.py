@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 
-"""https://github.com/tobixen/calendar-cli/ - high-level cli against caldav servers.
+"""https://github.com/tobixen/plann/ - high-level cli against caldav servers.
 
 Copyright (C) 2013-2022 Tobias Brox and other contributors.
 
@@ -116,7 +116,8 @@ def parse_add_dur(dt, dur):
         dt = parse_dt(dt)
     time_units = {
         's': 1, 'm': 60, 'h': 3600,
-        'd': 86400, 'w': 604800
+        'd': 86400, 'w': 604800,
+        'y': 1314000
     }
     while dur:
         rx = re.match(r'([+-]?\d+(?:\.\d+)?)([smhdw])(.*)', dur)
@@ -124,14 +125,16 @@ def parse_add_dur(dt, dur):
         i = float(rx.group(1))
         u = rx.group(2)
         dur = rx.group(3)
-        if u=='y':
-            return datetime.datetime.combine(datetime.date(dt.year+i, dt.month, dt.day), dt.time())
+        if u=='y' and dt:
+            dt = datetime.datetime.combine(datetime.date(dt.year+i, dt.month, dt.day), dt.time())
         else:
-            dur = datetime.timedelta(0, i*time_units[u])
+            diff = datetime.timedelta(0, i*time_units[u])
             if dt:
-                return dt + dur
-            else:
-                return dur
+                dt = dt + diff
+    if dt:
+        return dt
+    else:
+        return diff
    
 
 ## TODO ... (and should be moved somewhere else?)
@@ -909,8 +912,8 @@ def _add_todo(ctx, **kwargs):
 
     Examples: 
 
-    kal add todo "fix all known bugs in calendar-cli"
-    kal add todo --set-due=2050-12-10 "release calendar-cli version 42.0.0"
+    kal add todo "fix all known bugs in plann"
+    kal add todo --set-due=2050-12-10 "release plann version 42.0.0"
     """
     if not 'status' in kwargs:
         kwargs['status'] = 'NEEDS-ACTION'
@@ -1030,7 +1033,7 @@ def check_due(ctx, limit, lookahead):
     Go through overdue or near-future-due tasks, one by one, and deal with them
     """
     return _check_due(ctx, limit, lookahead)
-    
+
 def _check_due(ctx, limit=16, lookahead='16h'):
     end_ = parse_add_dur(datetime.datetime.now(), lookahead)
     _select(ctx=ctx, todo=True, end=end_, limit=limit, sort_key=['{PRIORITY:?0?} {DTSTART.dt:?{DUE.dt:?(0000)?}?%F %H:%M:%S}'])

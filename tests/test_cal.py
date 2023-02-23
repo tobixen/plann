@@ -3,8 +3,8 @@ import sys
 sys.path.insert(0,'.')
 sys.path.insert(1,'..')
 from datetime import datetime, date
-from calendar_cli.cal import parse_timespec
-from calendar_cli.template import Template
+from plann.cli import parse_timespec
+from plann.template import Template
 
 """calendar-cli is a command line utility, and it's an explicit design
 goal that it should contain minimal logic except for parsing and
