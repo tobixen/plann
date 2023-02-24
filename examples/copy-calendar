@@ -1,0 +1,7 @@
+## To copy a full calendar (i.e. for migration, backup or whatever):
+
+plann select print-ical | plann --config-section new-calendar add ical
+
+## * "plann select" without any options will select everything on the default calendar.
+## * "print-ical" will print all this to STDOUT in ical format
+## * "plann --config-

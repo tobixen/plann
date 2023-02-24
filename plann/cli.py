@@ -27,18 +27,17 @@ import click
 import os
 import caldav
 #import isodate
-import dateutil
-import dateutil.parser
 import datetime
 import logging
 import re
 import sys
-from icalendar import prop, Timezone
 from plann.template import Template
 from plann.config import interactive_config, config_section, read_config, expand_config_section
 from collections import defaultdict
 import tempfile
 import subprocess
+from plann.panic_planning import timeline_suggestion
+from plann.lib import _now, _ensure_ts, parse_dt, parse_add_dur, parse_timespec, find_calendars, _summary, _procrastinate
 
 list_type = list
 
@@ -59,181 +58,6 @@ attr_txt_one = ['location', 'description', 'geo', 'organizer', 'summary', 'class
 attr_txt_many = ['category', 'comment', 'contact', 'resources', 'parent', 'child']
 attr_time = ['dtstamp', 'dtstart', 'due', 'dtend', 'duration']
 attr_int = ['priority']
-
-def _ensure_ts(dt):
-    if isinstance(dt, datetime.datetime):
-        return dt.astimezone(datetime.timezone.utc)
-    return datetime.datetime(dt.year, dt.month, dt.day).astimezone(datetime.timezone.utc)
-
-def parse_dt(input, return_type=None):
-    """Parse a datetime or a date.
-
-    If return_type is date, return a date - if return_type is
-    datetime, return a datetime.  If no return_type is given, try to
-    guess if we should return a date or a datetime.
-
-    """
-    if isinstance(input, datetime.datetime):
-        if return_type is datetime.date:
-            return input.date()
-        return input
-    if isinstance(input, datetime.date):
-        if return_type is datetime.datetime:
-            return datetime.datetime.combine(input, datetime.time(0,0))
-        return input
-    ## dateutil.parser.parse does not recognize '+2 hours', like date does.
-    if input.startswith('+'):
-        return parse_add_dur(datetime.datetime.now(), input[1:])
-    ret = dateutil.parser.parse(input)
-    if return_type is datetime.datetime:
-        return ret
-    elif return_type is datetime.date:
-        return ret.date()
-    elif ret.time() == datetime.time(0,0) and len(input)<12 and not '00:00' in input and not '0000' in input:
-        return ret.date()
-    else:
-        return ret
-
-def parse_add_dur(dt, dur):
-    """
-    duration may be something like this:
-      * 1s (one second)
-      * 3m (three minutes, not months
-      * 3.5h
-      * 1y1w
-    
-    It may also be a ISO8601 duration
-
-    Returns the dt plus duration.
-
-    If no dt is given, return the duration.
-
-    TODO: months not supported yet
-    TODO: return of delta in years not supported yet
-    TODO: ISO8601 duration not supported yet
-    """
-    if dt and not (isinstance(dt, datetime.date)):
-        dt = parse_dt(dt)
-    time_units = {
-        's': 1, 'm': 60, 'h': 3600,
-        'd': 86400, 'w': 604800,
-        'y': 1314000
-    }
-    while dur:
-        rx = re.match(r'([+-]?\d+(?:\.\d+)?)([smhdw])(.*)', dur)
-        assert rx ## TODO: create some nicer error message (timedelta expected but not found)
-        i = float(rx.group(1))
-        u = rx.group(2)
-        dur = rx.group(3)
-        if u=='y' and dt:
-            dt = datetime.datetime.combine(datetime.date(dt.year+i, dt.month, dt.day), dt.time())
-        else:
-            diff = datetime.timedelta(0, i*time_units[u])
-            if dt:
-                dt = dt + diff
-    if dt:
-        return dt
-    else:
-        return diff
-   
-
-## TODO ... (and should be moved somewhere else?)
-def parse_timespec(timespec):
-    """parses a timespec and return two timestamps
-
-    The ISO8601 interval format, format 1, 2 or 3 as described at
-    https://en.wikipedia.org/wiki/ISO_8601#Time_intervals should be
-    accepted, though it may be dependent on
-    https://github.com/gweis/isodate/issues/77 or perhaps
-    https://github.com/dateutil/dateutil/issues/1184 
-    
-    The calendar-cli format (i.e. 2021-01-08 15:00:00+1h) should be accepted
-
-    Two timestamps should be accepted.
-
-    One timestamp should be accepted, and the second return value will be None.
-    """
-    ## calendar-cli format, 1998-10-03 15:00+2h
-    if '+' in timespec:
-        rx = re.match(r'(.*)\+((?:\d+(?:\.\d+)?[smhdwy])+)$', timespec)
-        if rx:
-            start = parse_dt(rx.group(1))
-            end = parse_add_dur(start, rx.group(2))
-            return (start, end)
-    try:
-        ## parse("2015-05-05 2015-05-05") does not throw the ParserError
-        if timespec.count('-')>3:
-            raise dateutil.parser.ParserError("Seems to be two dates here")
-        ret = parse_dt(timespec)
-        return (ret,None)
-    except dateutil.parser.ParserError:
-        split_by_space = timespec.split(' ')
-        if len(split_by_space) == 2:
-            return (parse_dt(split_by_space[0]), parse_dt(split_by_space[1]))
-        elif len(split_by_space) == 4:
-            return (parse_dt(f"{split_by_space[0]} {split_by_space[1]}"), parse_dt(f"{split_by_space[2]} {split_by_space[3]}"))
-        else:
-            raise ValueError(f"couldn't parse time interval {timespec}")
-
-    raise NotImplementedError("possibly a ISO time interval")
-
-def find_calendars(args, raise_errors):
-    def list_(obj):
-        """
-        For backward compatibility, a string rather than a list can be given as
-        calendar_url, calendar_name.  Make it into a list.
-        """
-        if not obj:
-            obj = []
-        if isinstance(obj, str) or isinstance(obj, bytes):
-            obj = [ obj ]
-        return obj
-
-    def _try(meth, kwargs, errmsg):
-        try:
-            ret = meth(**kwargs)
-            assert(ret)
-            return ret
-        except:
-            logging.error("Problems fetching calendar information: %s - skipping" % errmsg)
-            if raise_errors:
-                raise
-            else:
-                return None
-
-    conn_params = {}
-    for k in args:
-        if k.startswith('caldav_') and args[k]:
-            key = k[7:]
-            if key == 'pass':
-                key = 'password'
-            if key == 'user':
-                key = 'username'
-            conn_params[key] = args[k]
-    calendars = []
-    if conn_params:
-        client = caldav.DAVClient(**conn_params)
-        principal = _try(client.principal, {}, conn_params['url'])
-        if not principal:
-            return []
-        calendars = []
-        tries = 0
-        for calendar_url in list_(args.get('calendar_url')):
-            if '/' in calendar_url:
-                calendar = principal.calendar(cal_url=calendar_url)
-            else:
-                calendar = principal.calendar(cal_id=calendar_url)
-            tries += 1
-            if _try(calendar.get_display_name, {}, calendar.url):
-                calendars.append(calendar)
-        for calendar_name in list_(args.get('calendar_name')):
-            tries += 1
-            calendar = _try(principal.calendar, {'name': calendar_name}, '%s : calendar "%s"' % (conn_params['url'], calendar_name))
-            calendars.append(calendar)
-        if not calendars and tries == 0:
-            calendars = _try(principal.calendars, {}, "conn_params['url'] - all calendars")
-    return calendars or []
-
 
 @click.group()
 ## TODO: interactive config building
@@ -369,11 +193,14 @@ def _select(ctx, interactive_select=False, **kwargs):
             if click.confirm(f"select {_summary(obj)}?"):
                 ctx.obj['objs'].append(obj)
 
-def __select(ctx, all=None, uid=[], abort_on_missing_uid=None, sort_key=[], skip_parents=None, skip_children=None, limit=None, offset=None, **kwargs_):
+def __select(ctx, extend_objects=False, all=None, uid=[], abort_on_missing_uid=None, sort_key=[], skip_parents=None, skip_children=None, limit=None, offset=None, **kwargs_):
     """
     select/search/filter tasks/events, for listing/editing/deleting, etc
     """
-    objs = []
+    if extend_objects:
+        objs = ctx.obj.get('objs', [])
+    else:
+        objs = []
     ctx.obj['objs'] = objs
 
     ## TODO: move all search/filter/select logic to caldav library?
@@ -730,9 +557,10 @@ def complete(ctx, **kwargs):
 
 @select.command()
 @click.option('--hours-per-day', help='how many hours per day you expect to be able to dedicate to those tasks/events', default=4)
-@click.option('--limit', help='break after finding this many "panic"-items', default=4096)
+#@click.option('--limit', help='break after finding this many "panic"-items', default=4096)
+@click.option('--print-timeline/--no-print-timeline', help='Print a possible timeline')
 @click.pass_context
-def check_for_panic(ctx, hours_per_day, limit):
+def check_for_panic(ctx, hours_per_day, print_timeline):
     """Check if we need to panic
 
     Assuming we can spend a limited time per day on those tasks
@@ -751,61 +579,31 @@ def check_for_panic(ctx, hours_per_day, limit):
     TODO: Only tasks supported so far.  It should also warn on
     overlapping events and substract time spent on events.
     """
-    return _check_for_panic(ctx, hours_per_day, limit, output=True)
+    return _check_for_panic(ctx, hours_per_day, output=True, print_timeline=True)
 
-## TODO: this should probably be moved somewhere else, as it's "extra
-## functionality".  The scope for this package (and particularly for
-## this file) is merely to provide a command-line interface, logic
-## ought to go somewhere else.
-def _check_for_panic(ctx, hours_per_day, limit, output=True):
-    tot_slack = None
-    min_slack = None
-    dur_multiplicator = 24/hours_per_day
-    possible_start = datetime.datetime.now()
-    panic_objs_found = []
-    for obj in ctx.obj['objs']:
-        if len(panic_objs_found) >= limit:
-            break
-        if not isinstance(obj, caldav.Todo):
-            raise NotImplementedError("Only tasks supported as for now.  In the future, we ought to do calculations on time spent on events and ignore journals ... TODO")
-        else:
-            ## TODO: tasks with recurrence sets should be considered ...
-            ## ... at the other hand, default completion mode in the caldav
-            ## library is "safe", meaning that there shouldn't be recurrence sets
-            comp = obj.icalendar_component
-            duration = obj.get_duration()
-            due = obj.get_due()
-            if due:
-                long_dur = duration*dur_multiplicator
-                good_start = due - long_dur
-                slack = _ensure_ts(good_start) - _ensure_ts(possible_start)
-                if slack <= datetime.timedelta(0):
-                    task = _summary(comp)
-                    dtstart = comp.get('dtstart')
-                    priority = comp.get('priority', 0)
-                    ## TODO: those should not be None or things will break
-                    if output:
-                        click.echo(f"PANIC: task {task} needs attention!")
-                        click.echo(f"  possible start: {possible_start:%F %H:%M:%S}")
-                        click.echo(f"  safe start:     {good_start:%F %H:%M:%S}")
-                        click.echo(f"  dtstart:        {dtstart.dt:%F %H:%M:%S}")
-                        click.echo(f"  due:            {due:%F %H:%M:%S}")
-                        click.echo(f"  priority:       {priority}")
-                    panic_objs_found.append(obj)
-                if tot_slack is None:
-                    tot_slack = slack
-                    min_slack = slack
-                else:
-                    tot_slack = slack
-                    min_slack = min(min_slack, tot_slack)
-                    possible_start += long_dur
-    panic_time = datetime.datetime.now() + min_slack
+def _check_for_panic(ctx, hours_per_day, output=True, print_timeline=True):
+    possible_timeline = timeline_suggestion(ctx, hours_per_day=hours_per_day)
+    def summary(obj):
+        if obj is None:
+            return "-- unallocated time --"
+        if isinstance(obj, str):
+            return obj
+        return _summary(obj)
+        
+    if (print_timeline):
+        click.echo("Calculated timeline suggestion:")
+        for foo in possible_timeline:
+            if 'begin' in foo:
+                click.echo(f"{foo['begin']:%FT%H:%M} {summary(foo.get('obj'))}")
+
     if output:
-        click.echo(f"Total slack found: {tot_slack}")
-        click.echo(f"Minimum slack found: {min_slack}")
-        click.echo(f"Panic time: {panic_time:%F %H:%M:%S}")
-    else:
-        return (panic_objs_found, min_slack, tot_slack, panic_time)
+        click.echo()
+        click.echo("THESE TASKS WILL NEED TO BE PROCRASTINATED:")
+        for foo in possible_timeline:
+            if 'begin' in foo and 'obj' in foo and not isinstance(foo['obj'], str):
+                if _ensure_ts(foo['begin'])<_now():
+                    click.echo(f"{foo['obj'].get_due():%FT%H%M} {foo['obj'].icalendar_component.get('PRIORITY', 0)} {_summary(foo['obj'])}")
+    return possible_timeline
 
 @select.command()
 @click.pass_context
@@ -1063,7 +861,7 @@ def _check_due(ctx, limit=16, lookahead='16h'):
             interactive_split_task(ctx, obj, too_big=False)
         elif input.startswith('postpone'):
             ## TODO: make this into an interactive recursive function
-            parent = _procrastinate([obj], input.split(' ')[1], check_dependent="interactive")
+            parent = _procrastinate([obj], input.split(' ')[1], check_dependent="interactive", err_callback=click.echo, confirm_callback=click.confirm)
         elif input == 'complete':
             obj.complete(handle_rrule=True)
         elif input == 'cancel':
@@ -1081,89 +879,72 @@ def _check_due(ctx, limit=16, lookahead='16h'):
 
 @interactive.command()
 @click.option('--hours-per-day', help='how many hours per day you expect to be able to dedicate to those tasks/events', default=4)
+@click.option('--lookahead', help='timespan to investigate', default='60d')
 @click.pass_context
-def dismiss_panic(ctx, hours_per_day):
+def dismiss_panic(ctx, hours_per_day, lookahead='60d'):
     """Checks workload, procrastinates tasks
 
     Search for panic points, checks if they can be solved by
     procrastinating tasks, comes up with suggestions
     """
-    return _dismiss_panic(ctx, hours_per_day)
+    return _dismiss_panic(ctx, hours_per_day, f"+{lookahead}")
     
-def _dismiss_panic(ctx, hours_per_day):
+def _dismiss_panic(ctx, hours_per_day, lookahead='60d'):
     ## TODO: fetch both events and tasks
-    _select(ctx=ctx, todo=True, sort_key=['{DTSTART.dt:?{DUE.dt:?(0000)?}?%F %H:%M:%S}{PRIORITY:?0?}'])
-    objs = ctx.obj['objs']
-    get_dtstart = lambda x: _ensure_ts((x.icalendar_component.get('dtstart') or x.icalendar_component.get('due')).dt)
-    (panic_objs, min_slack, tot_slack, panic_time) = _check_for_panic(ctx=ctx, output=False, hours_per_day=hours_per_day, limit=1)
+    _select(ctx=ctx, event=True, start=_now(), end=lookahead)
+    _select(ctx=ctx, todo=True, end=lookahead, extend_objects=True)
+    timeline = _check_for_panic(ctx=ctx, output=False, hours_per_day=hours_per_day)
 
-    if not panic_objs:
+    if not timeline or _ensure_ts(timeline[0]['begin'])>_now():
         click.echo("No need to panic :-)")
         return
-    
-    first_objs = [ x for x in objs if get_dtstart(x) <= get_dtstart(panic_objs[0]) ]
-    lowest_pri = max( [ x.icalendar_component.get('priority', 0) for x in first_objs ] )
-    if lowest_pri == 0:
-        _abort("Please assign priority to all your tasks")
-    first_low_pri_tasks = [ x for x in first_objs if x.icalendar_component.get('priority', 0) == lowest_pri ]
-    other_low_pri_tasks = [ x for x in objs if x.icalendar_component.get('priority', 0) >= lowest_pri and get_dtstart(x) > get_dtstart(panic_objs[0]) ]
 
-    click.echo(f"Lowest-priority conflicting tasks (priority={lowest_pri}):")
-    for obj in first_low_pri_tasks:
-        component = obj.icalendar_component
-        summary = _summary(component)
-        due = obj.get_due()
-        dtstart = component.get('dtstart') or component.get('due')
-        dtstart = dtstart.dt
-        click.echo(f"Last possible start: {dtstart:%F %H:%M:%S} - Due: {due:%F %H:%M:%S}: {summary}")
+    for priority in range(9,0,-1):
+        first_low_pri_tasks = []
+        other_low_pri_tasks = []
+        lpt = first_low_pri_tasks
+        for item in timeline:
+            if isinstance(item.get('obj', ''), str):
+                continue
+            if _ensure_ts(item['begin'])>_now():
+                if not lpt:
+                    break
+                lpt = other_low_pri_tasks
+            if item['obj'].icalendar_component.get('priority', 0) != priority:
+                continue
+            lpt.append(item)
+        if not first_low_pri_tasks:
+            continue
 
-    if lowest_pri == 1:
-        _abort("PANIC!  Those are all high-priority tasks and cannot be postponed!")
+        click.echo(f"Tasks that needs to be postponed (priority={priority}):")
+        for item in first_low_pri_tasks:
+            obj = item['obj']
+            component = obj.icalendar_component
+            summary = _summary(component)
+            due = obj.get_due()
+            dtstart = component.get('dtstart') or component.get('due')
+            dtstart = dtstart.dt
+            click.echo(f"Should have started: {item['begin']:%F %H:%M:%S} - Due: {due:%F %H:%M:%S}: {summary}")
 
-    if lowest_pri == 2:
-        _abort("PANIC!  Those tasks cannot be postponed.  Maybe you want to cancel some of them?  (interactive cancelling not supported yet)")
+        if priority == 1:
+            _abort("PANIC!  Those are all high-priority tasks and cannot be postponed!")
 
-    procrastination_time = -min_slack/len(first_low_pri_tasks)
-    if procrastination_time.days:
-        procrastination_time = f"{procrastination_time.days+1}d"
-    else:
-        procrastination_time = f"{procrastination_time.seconds//3600+1}h"
-    procrastination_time = click.prompt(f"Push the due-date with ...", default=procrastination_time)
-    _procrastinate(first_low_pri_tasks, procrastination_time, check_dependent='interactive')
+        if priority == 2:
+            _abort("PANIC!  Those tasks cannot be postponed.  Maybe you want to cancel some of them?  (interactive cancelling not supported yet)")
 
-    if other_low_pri_tasks:
-        click.echo(f"There are {len(other_low_pri_tasks)} later pri>={lowest_pri} tasks which probably should be postponed")
-        procrastination_time = click.prompt(f"Push the due-date for those with ...", default=procrastination_time)
-        if procrastination_time not in ('0', '0h', '0m', '0d'):
-            _procrastinate(other_low_pri_tasks, procrastination_time, check_dependent='interactive')
-    return _dismiss_panic(ctx, hours_per_day)
-
-def _procrastinate(objs, delay, check_dependent="error"):
-    for x in objs:
-        chk_parent = 'return' if check_dependent else False
-        if isinstance(delay, datetime.date):
-            new_due = delay
+        procrastination_time = (_now()-_ensure_ts(first_low_pri_tasks[0]['begin']))/len(first_low_pri_tasks)/4
+        if procrastination_time.days:
+            procrastination_time = f"{procrastination_time.days+1}d"
         else:
-            old_due = x.get_due().astimezone(datetime.timezone.utc)
-            new_due = datetime.datetime.now().astimezone(datetime.timezone.utc)
-            if old_due:
-                new_due = max(new_due, old_due)
-            new_due = parse_add_dur(new_due, delay)
-            new_due = new_due.astimezone(datetime.timezone.utc)
-        parent = x.set_due(new_due, move_dtstart=True, check_dependent=chk_parent)
-        if parent:
-            if check_dependent in ("error", "interactive"):
-                i = x.icalendar_component
-                summary = _summary(i)
-                p = parent.icalendar_component
-                click.echo(f"{summary} could not be postponed due to parent {_summary(p)} with due {p['DUE'].dt} and priority {p.get('priority', 0)}")
-                if check_dependent == "interactive" and p.get('priority', 9)>2 and click.confirm("procrastinate parent?"):
-                    _procrastinate([parent], new_due+max(parent.get_duration(), datetime.timedelta(1)), check_dependent)
-                    _procrastinate([x], new_due, check_dependent)
-            elif check_dependent == "return":
-                return parent
-        else:
-            x.save()
+            procrastination_time = f"{procrastination_time.seconds//3600+1}h"
+        procrastination_time = click.prompt(f"Push the due-date with ...", default=procrastination_time)
+        _procrastinate([x['obj'] for x in first_low_pri_tasks], procrastination_time, check_dependent='interactive', err_callback=click.echo, confirm_callback=click.confirm)
+
+        if other_low_pri_tasks:
+            click.echo(f"There are {len(other_low_pri_tasks)} later pri>={lowest_pri} tasks selected which should maybe probably be considered to be postponed a bit as well")
+            procrastination_time = click.prompt(f"Push the due-date for those with ...", default=procrastination_time/2)
+            if procrastination_time not in ('0', '0h', '0m', '0d'):
+                _procrastinate(other_low_pri_tasks, procrastination_time, check_dependent='interactive', err_callback=click.echo, confirm_callback=click.confirm)
 
 @interactive.command()
 @click.pass_context
@@ -1184,7 +965,7 @@ def split_huge_tasks(ctx, threshold, max_lookahead, limit_lookahead):
     """
     return _split_huge_tasks(ctx, threshold, max_lookahead, limit_lookahead)
 
-def _split_huge_tasks(ctx, threshold='4h', max_lookahead='30d', limit_lookahead=32):
+def _split_huge_tasks(ctx, threshold='4h', max_lookahead='60d', limit_lookahead=640):
     _select(ctx=ctx, todo=True, end=f"+{max_lookahead}", limit=limit_lookahead, sort_key=['{DTSTART.dt:?{DUE.dt:?(0000)?}?%F %H:%M:%S}', '{PRIORITY:?0?}'])
     objs = ctx.obj['objs']
     threshold = parse_add_dur(None, threshold)
@@ -1212,7 +993,7 @@ def split_high_pri_tasks(ctx, threshold, max_lookahead, limit_lookahead):
     """
     return _split_high_pri_tasks(ctx, threshold, max_lookahead, limit_lookahead)
 
-def _split_high_pri_tasks(ctx, threshold=2, max_lookahead='30d', limit_lookahead=32):
+def _split_high_pri_tasks(ctx, threshold=2, max_lookahead='60d', limit_lookahead=640):
     _select(ctx=ctx, todo=True, end=f"+{max_lookahead}", limit=limit_lookahead, sort_key=['{DTSTART.dt:?{DUE.dt:?(0000)?}?%F %H:%M:%S}', '{PRIORITY:?0?}'])
     objs = ctx.obj['objs']
     for obj in objs:
@@ -1337,7 +1118,7 @@ def interactive_split_task(ctx, obj, partially_complete=False, too_big=True):
         obj.icalendar_component['SUMMARY'] = new_summary
         postpone = click.prompt("Should we postpone the parent task?", default='0h')
         if postpone != '0h':
-            _procrastinate([obj], postpone, check_dependent='interactive')
+            _procrastinate([obj], postpone, check_dependent='interactive', err_callback=click.echo, confirm_callback=click.confirm)
 
 @interactive.command()
 @click.pass_context
@@ -1399,7 +1180,7 @@ def _set_task_attribs(ctx):
                 if something == 'category':
                     comp.add(something_, value.split(','))
                 elif something == 'due':
-                    _procrastinate([obj], parse_dt(value, datetime.datetime).astimezone(datetime.timezone.utc), check_dependent='interactive')
+                    _procrastinate([obj], parse_dt(value, datetime.datetime).astimezone(datetime.timezone.utc), check_dependent='interactive', err_callback=click.echo, confirm_callback=click.confirm)
                 elif something == 'duration':
                     obj.set_duration(parse_add_dur(None, value), movable_attr='DTSTART')
                 else:
@@ -1418,11 +1199,6 @@ def _set_task_attribs(ctx):
 
     ## Tasks missing a duration
     _set_something('duration', """Enter the DURATION (i.e. 5h or 2d)""", help_url="https://github.com/tobixen/plann/blob/master/TASK_MANAGEMENT.md#priority", objs=duration_missing)
-
-def _summary(i):
-    if hasattr(i, 'icalendar_component'):
-        i = i.icalendar_component
-    return i.get('summary') or i.get('description') or i.get('uid')
 
 if __name__ == '__main__':
     cli()

@@ -34,7 +34,7 @@ setup(
         'tzlocal',
         'Click',
         'PyYAML',
-        'six'
+        'sortedcontainers'
     ],
     entry_points={
         'console_scripts': [
