@@ -891,6 +891,7 @@ def dismiss_panic(ctx, hours_per_day, lookahead='60d'):
     
 def _dismiss_panic(ctx, hours_per_day, lookahead='60d'):
     ## TODO: fetch both events and tasks
+    lookahead=f"+{lookahead}"
     _select(ctx=ctx, event=True, start=_now(), end=lookahead)
     _select(ctx=ctx, todo=True, end=lookahead, extend_objects=True)
     timeline = _check_for_panic(ctx=ctx, output=False, hours_per_day=hours_per_day)
@@ -932,7 +933,7 @@ def _dismiss_panic(ctx, hours_per_day, lookahead='60d'):
         if priority == 2:
             _abort("PANIC!  Those tasks cannot be postponed.  Maybe you want to cancel some of them?  (interactive cancelling not supported yet)")
 
-        procrastination_time = (_now()-_ensure_ts(first_low_pri_tasks[0]['begin']))/len(first_low_pri_tasks)/4
+        procrastination_time = (_now()-_ensure_ts(first_low_pri_tasks[0]['begin']))/2
         if procrastination_time.days:
             procrastination_time = f"{procrastination_time.days+1}d"
         else:
@@ -1119,6 +1120,7 @@ def interactive_split_task(ctx, obj, partially_complete=False, too_big=True):
         postpone = click.prompt("Should we postpone the parent task?", default='0h')
         if postpone != '0h':
             _procrastinate([obj], postpone, check_dependent='interactive', err_callback=click.echo, confirm_callback=click.confirm)
+        obj.save()
 
 @interactive.command()
 @click.pass_context

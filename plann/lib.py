@@ -217,8 +217,8 @@ def _procrastinate(objs, delay, check_dependent="error", err_callback=print, con
                 p = parent.icalendar_component
                 err_callback(f"{summary} could not be postponed due to parent {_summary(p)} with due {p['DUE'].dt} and priority {p.get('priority', 0)}")
                 if check_dependent == "interactive" and p.get('priority', 9)>2 and confirm_callback("procrastinate parent?"):
-                    _procrastinate([parent], new_due+max(parent.get_duration(), datetime.timedelta(1)), check_dependent)
-                    _procrastinate([x], new_due, check_dependent)
+                    _procrastinate([parent], new_due+max(parent.get_duration(), datetime.timedelta(1)), check_dependent, err_callback, confirm_callback)
+                    _procrastinate([x], new_due, check_dependent, err_callback, confirm_callback)
             elif check_dependent == "return":
                 return parent
         else:
