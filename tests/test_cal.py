@@ -67,7 +67,10 @@ class TestTemplate:
         assert text == "Date is maybe bar"
 
 class TestParseTimestamp:
-    def _testTimeSpec(self, expected, expected_tz=zoneinfo.ZoneInfo('UTC')):
+    def _testTimeSpec(self, expected):
+        expected_tz=tz.implicit_timezone
+        if not expected_tz:
+            expected_tz = datetime.now().astimezone().tzinfo
         for input in expected:
             def stz(dt):
                 if dt and isinstance(dt, datetime):
@@ -89,15 +92,17 @@ class TestParseTimestamp:
         }
         self._testTimeSpec(expected)
 
-    def testOneTimestamp(self):
+    @pytest.mark.parametrize("tz_",['UTC', 'Pacific/Apia', None])
+    def testOneTimestamp(self, tz_):
         expected = {
             "2007-03-01T13:00:00":
                 (datetime(2007,3,1,13), None),
             "2007-03-01 13:00:00":
                 (datetime(2007,3,1,13), None),
         }
+        tz.implicit_timezone = tz_
         self._testTimeSpec(expected)
-        
+
     def testOneDate(self):
         expected = {
             "2007-03-01":

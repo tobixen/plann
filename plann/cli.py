@@ -495,9 +495,9 @@ def _interactive_edit(obj):
     if input == 'ignore':
         return
     elif input == 'part':
-        interactive_split_task(ctx, obj, partially_complete=True, too_big=False)
+        interactive_split_task(obj, partially_complete=True, too_big=False)
     elif input == 'split':
-        interactive_split_task(ctx, obj, too_big=False)
+        interactive_split_task(obj, too_big=False)
     elif input.startswith('postpone'):
         ## TODO: make this into an interactive recursive function
         parent = _procrastinate([obj], input.split(' ')[1], check_dependent="interactive", err_callback=click.echo, confirm_callback=click.confirm)
@@ -960,7 +960,7 @@ def _dismiss_panic(ctx, hours_per_day, lookahead='60d'):
             summary = _summary(component)
             due = obj.get_due()
             dtstart = _ensure_ts(comp.get('dtstart') or component.get('due'))
-            click.echo(f"Should have started: {item['begin']:%F %H:%M:%S} - Due: {due:%F %H:%M:%S %Z}: {summary}")
+            click.echo(f"Should have started: {item['begin']:%F %H:%M:%S %Z} - Due: {due:%F %H:%M:%S %Z}: {summary}")
 
         if priority == 1:
             _abort("PANIC!  Those are all high-priority tasks and cannot be postponed!")
@@ -1011,7 +1011,7 @@ def _split_huge_tasks(ctx, threshold='4h', max_lookahead='60d', limit_lookahead=
     threshold = parse_add_dur(None, threshold)
     for obj in objs:
         if obj.get_duration() > threshold:
-            interactive_split_task(ctx, obj)
+            interactive_split_task(obj)
 
 @interactive.command()
 @click.option('--max-lookahead', help='ignore tasks further in the future than this', default='30d')
@@ -1042,7 +1042,7 @@ def _split_high_pri_tasks(ctx, threshold=2, max_lookahead='60d', limit_lookahead
             if relations and not isinstance(relations, list_type):
                 relations = [ relations ]
             if not any(x.params.get('RELTYPE') == 'CHILD' for x in relations):
-                interactive_split_task(ctx, obj, too_big=False)
+                interactive_split_task(obj, too_big=False)
 
 def _relships_by_type(obj, reltype_wanted=None):
     ret = defaultdict(list_type)
@@ -1120,7 +1120,7 @@ def _relationship_text(obj, reltype_wanted=None):
         ret.append(rel + "\n" + "\n".join(objs) + "\n")
     return "\n".join(ret)
 
-def interactive_split_task(ctx, obj, partially_complete=False, too_big=True):
+def interactive_split_task(obj, partially_complete=False, too_big=True):
     comp = obj.icalendar_component
     summary = comp.get('summary') or comp.get('description') or comp.get('uid')
     estimate = obj.get_duration()
