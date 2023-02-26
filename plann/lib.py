@@ -51,14 +51,14 @@ def _now():
     return datetime.datetime.now().astimezone(tz.implicit_timezone)
 
 def _ensure_ts(dt):
-    if dt is None:
-        return datetime.datetime(1970,1,1)
     if hasattr(dt, 'dt'):
         dt = dt.dt
+    if dt is None:
+        return datetime.datetime(1970,1,1)
     if isinstance(dt, datetime.datetime):
         if not dt.tzinfo:
-            return dt.replace(tzinfo=tz.implicit_timezone)
-    return datetime.datetime(dt.year, dt.month, dt.day, tzinfo=tz.implicit_timezone)
+            return dt.replace(tzinfo=tz.implicit_timezone).astimezone(tz.implicit_timezone)
+    return datetime.datetime(dt.year, dt.month, dt.day, tzinfo=tz.implicit_timezone).astimezone(tz.implicit_timezone)
 
 def parse_dt(input, return_type=None):
     """Parse a datetime or a date.
