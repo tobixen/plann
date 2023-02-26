@@ -92,7 +92,7 @@ class TestParseTimestamp:
         }
         self._testTimeSpec(expected)
 
-    @pytest.mark.parametrize("tz_",['UTC', 'Pacific/Apia', None])
+    @pytest.mark.parametrize("tz_",['UTC', 'Pacific/Tongatapu', None])
     def testOneTimestamp(self, tz_):
         expected = {
             "2007-03-01T13:00:00":
