@@ -37,7 +37,7 @@ from collections import defaultdict
 import tempfile
 import subprocess
 from plann.panic_planning import timeline_suggestion
-from plann.lib import _now, _ensure_ts, parse_dt, parse_add_dur, parse_timespec, find_calendars, _summary, _procrastinate
+from plann.lib import _now, _ensure_ts, parse_dt, parse_add_dur, parse_timespec, find_calendars, _summary, _procrastinate, tz
 
 list_type = list
 
@@ -61,7 +61,10 @@ attr_int = ['priority']
 
 @click.group()
 ## TODO: interactive config building
-## TODO: language and timezone
+## TODO: language
+@click.option('--show-native-timezone/--show-local-timezone', help="Show timestamps as they are in the calendar (default is to convert to local timezone)")
+@click.option('--implicit-timezone', help="Timestamps entered without timezone is assumed to be in this timezone (default: local/system tz)")
+@click.option('--store-timezone', help="Timestamps saved to the calendar should be converted to this timezone (default: same as --implicit-timezone)")
 @click.option('-c', '--config-file', default=f"{os.environ.get('HOME')}/.config/calendar.conf")
 @click.option('--skip-config/--read-config', help="Skip reading the config file")
 @click.option('--config-section', default=["default"], multiple=True)
@@ -89,6 +92,8 @@ def cli(ctx, **kwargs):
     ## TODO: catch errors, present nice error messages
     conns = []
     ctx.obj['calendars'] = find_calendars(kwargs, kwargs['raise_errors'])
+    for flag in ('show_native_timezone', 'store_timezone', 'implicit_timezone'):
+        setattr(tz, flag, kwargs[flag])
     if not kwargs['skip_config']:
         config = read_config(kwargs['config_file'])
         if config:
@@ -159,7 +164,7 @@ def _set_attr_options(verb="", desc=""):
 @click.option('--to', 'end', help='alias for end')
 @click.option('--until', 'end', help='alias for end')
 @click.option('--timespan', help='do a time search for this interval')
-@click.option('--sort-key', help='use this attributes for sorting.  Templating can be used.  Prepend with - for reverse sort.  Special: "get_duration()" yields the duration or the distance between dtend and dtstart, or an empty timedelta', default=['{DTSTART.dt:?{DUE.dt:?(0000)?}?%F %H:%M:%S}{PRIORITY:?0?}'],  multiple=True)
+@click.option('--sort-key', help='use this attributes for sorting.  Templating can be used.  Prepend with - for reverse sort.  Special: "get_duration()" yields the duration or the distance between dtend and dtstart, or an empty timedelta', default=['{DTSTART:?{DUE:?(0000)?}?%F %H:%M:%S}{PRIORITY:?0?}'],  multiple=True)
 @click.option('--skip-parents/--include-parents', help="Skip parents if it's children is selected.  Useful for finding tasks that can be started if parent depends on child", default=False)
 @click.option('--skip-children/--include-children', help="Skip children if it's parent is selected.  Useful for getting an overview of the big picture if children are subtasks", default=False)
 @click.option('--limit', help='Number of objects to show', type=int)
@@ -295,8 +300,6 @@ def __select(ctx, extend_objects=False, all=None, uid=[], abort_on_missing_uid=N
             fkey = lambda obj: Template(skey).format(**obj.icalendar_component)
         elif skey == 'get_duration()':
             fkey = lambda obj: obj.get_duration()
-        elif skey in ('DTSTART', 'DTEND', 'DUE', 'DTSTAMP'):
-            fkey = lambda obj: getattr(obj.icalendar_component.get(skey), 'dt', datetime.datetime(1970,1,2)).strftime("%F%H%M%S")
         else:
             fkey = lambda obj: obj.icalendar_component.get(skey)
         ctx.obj['objs'].sort(key=fkey, reverse=reverse)
@@ -337,7 +340,7 @@ list_type = list
 
 @select.command()
 @click.option('--ics/--no-ics', default=False, help="Output in ics format")
-@click.option('--template', default="{DTSTART.dt:?{DUE.dt:?(date missing)?}?%F %H:%M:%S}: {SUMMARY:?{DESCRIPTION:?(no summary given)?}?}")
+@click.option('--template', default="{DTSTART:?{DUE:?(date missing)?}?%F %H:%M:%S %Z}: {SUMMARY:?{DESCRIPTION:?(no summary given)?}?}")
 @click.option('--top-down/--flat-list', help="Check relations and list the relations in a hierarchical way")
 @click.option('--bottom-up/--flat-list', help="List parents (dependencies) in a hierarchical way (cannot be combined with top-down)")
 @click.pass_context
@@ -347,7 +350,7 @@ def list(ctx, ics, template, top_down=False, bottom_up=False):
     """
     return _list(ctx.obj['objs'], ics, template, top_down=top_down, bottom_up=bottom_up)
 
-def _list(objs, ics=False, template="{DTSTART.dt:?{DUE.dt:?(date missing)?}?%F %H:%M:%S}: {SUMMARY:?{DESCRIPTION:?(no summary given)?}?}", top_down=False, bottom_up=False, indent=0, echo=True, uids=None):
+def _list(objs, ics=False, template="{DTSTART:?{DUE:?(date missing)?}?%F %H:%M:%S %Z}: {SUMMARY:?{DESCRIPTION:?(no summary given)?}?}", top_down=False, bottom_up=False, indent=0, echo=True, uids=None):
     """
     Actual implementation of list
 
@@ -455,6 +458,7 @@ def delete(ctx, multi_delete, **kwargs):
 @click.option('--add-category', default=None, help="Delete multiple things without confirmation prompt", multiple=True)
 @click.option('--postpone', help="Add something to the DTSTART and DTEND/DUE")
 @click.option('--interactive-ical/--no-interactive-ical', help="Edit the ical interactively")
+@click.option('--interactive/no-interactive', help="Interactive edit")
 @click.option('--cancel/--uncancel', default=None, help="Mark task(s) as cancelled")
 @click.option('--complete/--uncomplete', default=None, help="Mark task(s) as completed")
 @click.option('--complete-recurrence-mode', default='safe', help="Completion of recurrent tasks, mode to use - can be 'safe', 'thisandfuture' or '' (see caldav library for details)")
@@ -466,6 +470,100 @@ def edit(*largs, **kwargs):
     """
     return _edit(*largs, **kwargs)
 
+def _interactive_edit(obj):
+    if 'BEGIN:VEVENT' in obj.data:
+        objtype = 'event'
+    elif 'BEGIN:VTODO' in obj.data:
+        objtype = 'todo'
+    elif 'BEGIN:VJOURNAL' in obj.data:
+        objtype = 'journal'
+    else:
+        assert False
+    if objtype != 'todo':
+        raise NotImplementedError("interactive editing only implemented for tasks")
+    comp = obj.icalendar_component
+    summary = _summary(comp)
+    dtstart = comp.get('DTSTART')
+    pri = comp.get('PRIORITY', 0)
+    due = obj.get_due()
+    if not dtstart or not due:
+        click.echo(f"task without dtstart or due found, please run set-task-attribs subcommand.  Ignoring {summary}")
+        return
+    dtstart = _ensure_ts(dtstart)
+    click.echo(f"pri={pri} {dtstart:%F %H:%M:%S %Z} - {due:%F %H:%M:%S %Z}: {summary}")
+    input = click.prompt("postpone <n>d / ignore / part(ially-complete) / complete / split / cancel / set foo=bar / edit / pdb?", default='ignore')
+    if input == 'ignore':
+        return
+    elif input == 'part':
+        interactive_split_task(ctx, obj, partially_complete=True, too_big=False)
+    elif input == 'split':
+        interactive_split_task(ctx, obj, too_big=False)
+    elif input.startswith('postpone'):
+        ## TODO: make this into an interactive recursive function
+        parent = _procrastinate([obj], input.split(' ')[1], check_dependent="interactive", err_callback=click.echo, confirm_callback=click.confirm)
+    elif input == 'complete':
+        obj.complete(handle_rrule=True)
+    elif input == 'cancel':
+        comp['STATUS'] = 'CANCELLED'
+    elif input.startswith('set '):
+        input = input[4:].split('=')
+        assert len(input) == 2
+        _set_something(obj, input[0], input[1])
+    elif input == 'edit':
+        _interactive_ical_edit([obj])
+    elif input == 'pdb':
+        click.echo("icalendar component available as comp")
+        click.echo("caldav object available as obj")
+        click.echo("do the necessary changes and press c to continue normal code execution")
+        click.echo("happy hacking")
+        import pdb; pdb.set_trace()
+    else:
+        click.echo(f"unknown instruction '{input}' - ignoring")
+        return
+    obj.save()
+
+
+def _set_something(obj, arg, value):
+    comp = obj.icalendar_component
+    if arg in ('child', 'parent'):
+        obj.set_relation(arg, value)
+    elif arg == 'duration':
+        duration = parse_add_dur(dt=None, dur=value)
+        obj.set_duration(duration)
+    else:
+        if arg in comp:
+            comp.pop(arg)
+            comp.add(arg, value)
+
+def _interactive_ical_edit(objs):
+    with tempfile.NamedTemporaryFile(mode='w', encoding='UTF-8', delete=False) as tmpfile:
+        for obj in objs:
+            tmpfile.write(obj.data)
+            tmpfile.write("\n")
+        fn = tmpfile.name
+    editor = os.environ.get("VISUAL") or os.environ.get("EDITOR") or ""
+    if not '/' in editor:
+        for path in os.environ.get("PATH", "").split(os.pathsep):
+            full_path = os.path.join(path, editor)
+            if os.path.exists(full_path) and os.access(full_path, os.X_OK):
+                editor = full_path
+                break
+    for ed in (editor, '/usr/bin/vim', '/usr/bin/vi', '/usr/bin/emacs', '/usr/bin/nano', '/usr/bin/pico', '/bin/vi'):
+        if os.path.isfile(ed) and os.access(ed, os.X_OK):
+            break
+    foo = subprocess.run([ed, fn])
+    with open(fn, "r") as tmpfile:
+        data = tmpfile.read()
+    os.unlink(fn)
+    data = data.strip()
+    icals = _split_vcal(data)
+    assert len(icals) == len(ctx.obj['objs'])
+    for new,obj in zip(icals, ctx.obj['objs']):
+        ## Should probably assert that the UID is the same ...
+        ## ... or, leave it to the calendar server to handle changed UIDs
+        obj.data = new
+        obj.save()
+    
 def _edit(ctx, add_category=None, cancel=None, interactive_ical=False, complete=None, complete_recurrence_mode='safe', postpone=None, **kwargs):
     """
     Edits a task/event/journal
@@ -474,35 +572,11 @@ def _edit(ctx, add_category=None, cancel=None, interactive_ical=False, complete=
         complete_recurrence_mode = kwargs.pop('recurrence_mode')
     _process_set_args(ctx, kwargs)
     if interactive_ical:
-        with tempfile.NamedTemporaryFile(mode='w', encoding='UTF-8', delete=False) as tmpfile:
-            for obj in ctx.obj['objs']:
-                tmpfile.write(obj.data)
-                tmpfile.write("\n")
-            fn = tmpfile.name
-        editor = os.environ.get("VISUAL") or os.environ.get("EDITOR") or ""
-        if not '/' in editor:
-            for path in os.environ.get("PATH", "").split(os.pathsep):
-                full_path = os.path.join(path, editor)
-                if os.path.exists(full_path) and os.access(full_path, os.X_OK):
-                    editor = full_path
-                    break
-        for ed in (editor, '/usr/bin/vim', '/usr/bin/vi', '/usr/bin/emacs', '/usr/bin/nano', '/usr/bin/pico', '/bin/vi'):
-            if os.path.isfile(ed) and os.access(ed, os.X_OK):
-                break
-        foo = subprocess.run([ed, fn])
-        with open(fn, "r") as tmpfile:
-            data = tmpfile.read()
-        os.unlink(fn)
-        data = data.strip()
-        icals = _split_vcal(data)
-        assert len(icals) == len(ctx.obj['objs'])
-        for new,obj in zip(icals, ctx.obj['objs']):
-            ## Should probably assert that the UID is the same ...
-            ## ... or, leave it to the calendar server to handle changed UIDs
-            obj.data = new
-            obj.save()
+        _interactive_ical_edit(ctx.obj['objs'])
 
     for obj in ctx.obj['objs']:
+        if interactive:
+            _interactive_edit(obj)
         comp = obj.icalendar_component
         if kwargs.get('pdb'):
             click.echo("icalendar component available as comp")
@@ -511,15 +585,7 @@ def _edit(ctx, add_category=None, cancel=None, interactive_ical=False, complete=
             click.echo("happy hacking")
             import pdb; pdb.set_trace()
         for arg in ctx.obj['set_args']:
-            if arg in ('child', 'parent'):
-                obj.set_relation(arg, ctx.obj['set_args'][arg])
-            elif arg == 'duration':
-                duration = parse_add_dur(dt=None, dur=ctx.obj['set_args'][arg])
-                obj.set_duration(duration)
-            else:
-                if arg in comp:
-                    comp.pop(arg)
-                comp.add(arg, ctx.obj['set_args'][arg])
+            _set_something(obj, arg, ctx.obj['set_args'][arg])
         if add_category:
             if 'categories' in comp:
                 cats = comp.pop('categories').cats
@@ -538,7 +604,7 @@ def _edit(ctx, add_category=None, cancel=None, interactive_ical=False, complete=
         if postpone:
             for attrib in ('DTSTART', 'DTEND', 'DUE'):
                 if comp.get(attrib):
-                    comp[attrib].dt = parse_add_dur(comp[attrib].dt, postpone)
+                    comp[attrib].dt = parse_add_dur(comp[attrib].dt, postpone).astimezone(tz.store_timezone)
         obj.save()
 
 
@@ -594,7 +660,7 @@ def _check_for_panic(ctx, hours_per_day, output=True, print_timeline=True):
         click.echo("Calculated timeline suggestion:")
         for foo in possible_timeline:
             if 'begin' in foo:
-                click.echo(f"{foo['begin']:%FT%H:%M} {summary(foo.get('obj'))}")
+                click.echo(f"{foo['begin']:%FT%H:%M %Z} {summary(foo.get('obj'))}")
 
     if output:
         click.echo()
@@ -602,7 +668,7 @@ def _check_for_panic(ctx, hours_per_day, output=True, print_timeline=True):
         for foo in possible_timeline:
             if 'begin' in foo and 'obj' in foo and not isinstance(foo['obj'], str):
                 if _ensure_ts(foo['begin'])<_now():
-                    click.echo(f"{foo['obj'].get_due():%FT%H%M} {foo['obj'].icalendar_component.get('PRIORITY', 0)} {_summary(foo['obj'])}")
+                    click.echo(f"{foo['obj'].get_due():%FT%H%M %Z} {foo['obj'].icalendar_component.get('PRIORITY', 0)} {_summary(foo['obj'])}")
     return possible_timeline
 
 @select.command()
@@ -764,7 +830,7 @@ def agenda(ctx):
     
       `select --event --start=now --end=+7d --limit=16 list`
     
-      `select --todo --sort '{DTSTART.dt:?{DUE.dt:?(0000)?}?%F %H:%M:%S}' --sort '{PRIORITY:?0}' --end=+7d --limit=16 list --bottom-up`
+      `select --todo --sort '{DTSTART:?{DUE:?(0000)?}?%F %H:%M:%S}' --sort '{PRIORITY:?0}' --end=+7d --limit=16 list --bottom-up`
 
     agenda is for convenience only and takes no options or parameters.
     Use the select command for advanced usage.  See also USAGE.md.
@@ -775,7 +841,7 @@ def _agenda(ctx):
     start = datetime.datetime.now()
     _select(ctx=ctx, start=start, event=True, end='+7d', limit=16, sort_key=['DTSTART', 'get_duration()'])
     objs = ctx.obj['objs']
-    _select(ctx=ctx, todo=True, end='+7d', limit=16, sort_key=['{DTSTART.dt:?{DUE.dt:?(0000)?}?%F %H:%M:%S}', '{PRIORITY:?0?}'], skip_parents=True)
+    _select(ctx=ctx, todo=True, end='+7d', limit=16, sort_key=['{DTSTART:?{DUE:?(0000)?}?%F %H:%M:%S}', '{PRIORITY:?0?}'], skip_parents=True)
     ctx.obj['objs'] = objs + ["======"] + ctx.obj['objs']
     return _list(ctx.obj['objs'])
 
@@ -834,48 +900,18 @@ def check_due(ctx, limit, lookahead):
 
 def _check_due(ctx, limit=16, lookahead='16h'):
     end_ = parse_add_dur(datetime.datetime.now(), lookahead)
-    _select(ctx=ctx, todo=True, end=end_, limit=limit, sort_key=['{PRIORITY:?0?} {DTSTART.dt:?{DUE.dt:?(0000)?}?%F %H:%M:%S}'])
+    _select(ctx=ctx, todo=True, end=end_, limit=limit, sort_key=['{PRIORITY:?0?} {DTSTART:?{DUE:?(0000)?}?%F %H:%M:%S}'])
     objs = ctx.obj['objs']
     for obj in objs:
-        comp = obj.icalendar_component
-        summary = _summary(comp)
-        dtstart = comp.get('DTSTART')
-        pri = comp.get('PRIORITY', 0)
-        due = obj.get_due()
-        if not dtstart or not due:
-            click.echo(f"task without dtstart or due found, please run set-task-attribs subcommand.  Ignoring {summary}")
-            continue
-        dtstart = dtstart.dt
         ## client side filtering in case the server returns too much
         ## TODO: should be moved to the caldav library
         ## TODO: consider the limit ... we may risk that nothing comes up due to the limit above
+        comp = obj.icalendar_component
+        dtstart = comp.get('dtstart') or comp.get('due')
+        dtstart = _ensure_ts(dtstart)
         if dtstart.strftime("%F%H%M") > end_.strftime("%F%H%M"):
             continue
-        click.echo(f"pri={pri} {dtstart:%F %H:%M:%S} - {due:%F %H:%M:%S}: {summary}")
-        input = click.prompt("postpone <n>d / ignore / part(ially-complete) / complete / split / cancel / pdb?", default='ignore')
-        if input == 'ignore':
-            continue
-        elif input == 'part':
-            interactive_split_task(ctx, obj, partially_complete=True, too_big=False)
-        elif input == 'split':
-            interactive_split_task(ctx, obj, too_big=False)
-        elif input.startswith('postpone'):
-            ## TODO: make this into an interactive recursive function
-            parent = _procrastinate([obj], input.split(' ')[1], check_dependent="interactive", err_callback=click.echo, confirm_callback=click.confirm)
-        elif input == 'complete':
-            obj.complete(handle_rrule=True)
-        elif input == 'cancel':
-            comp['STATUS'] = 'CANCELLED'
-        elif input == 'pdb':
-            click.echo("icalendar component available as comp")
-            click.echo("caldav object available as obj")
-            click.echo("do the necessary changes and press c to continue normal code execution")
-            click.echo("happy hacking")
-            import pdb; pdb.set_trace()
-        else:
-            click.echo(f"unknown instruction '{input}' - ignoring")
-            continue
-        obj.save()
+        _interactive_edit(obj)
 
 @interactive.command()
 @click.option('--hours-per-day', help='how many hours per day you expect to be able to dedicate to those tasks/events', default=4)
@@ -920,12 +956,11 @@ def _dismiss_panic(ctx, hours_per_day, lookahead='60d'):
         click.echo(f"Tasks that needs to be postponed (priority={priority}):")
         for item in first_low_pri_tasks:
             obj = item['obj']
-            component = obj.icalendar_component
+            comp = obj.icalendar_component
             summary = _summary(component)
             due = obj.get_due()
-            dtstart = component.get('dtstart') or component.get('due')
-            dtstart = dtstart.dt
-            click.echo(f"Should have started: {item['begin']:%F %H:%M:%S} - Due: {due:%F %H:%M:%S}: {summary}")
+            dtstart = _ensure_ts(comp.get('dtstart') or component.get('due'))
+            click.echo(f"Should have started: {item['begin']:%F %H:%M:%S} - Due: {due:%F %H:%M:%S %Z}: {summary}")
 
         if priority == 1:
             _abort("PANIC!  Those are all high-priority tasks and cannot be postponed!")
@@ -938,8 +973,12 @@ def _dismiss_panic(ctx, hours_per_day, lookahead='60d'):
             procrastination_time = f"{procrastination_time.days+1}d"
         else:
             procrastination_time = f"{procrastination_time.seconds//3600+1}h"
-        procrastination_time = click.prompt(f"Push the due-date with ...", default=procrastination_time)
-        _procrastinate([x['obj'] for x in first_low_pri_tasks], procrastination_time, check_dependent='interactive', err_callback=click.echo, confirm_callback=click.confirm)
+        procrastination_time = click.prompt(f"Push the due-date with ... (press O for one-by-one)", default=procrastination_time)
+        if procrastination_time == 'O':
+            for item in first_low_pri_tasks:
+                _interactive_edit(item['obj'])
+        else:
+            _procrastinate([x['obj'] for x in first_low_pri_tasks], procrastination_time, check_dependent='interactive', err_callback=click.echo, confirm_callback=click.confirm)
 
         if other_low_pri_tasks:
             click.echo(f"There are {len(other_low_pri_tasks)} later pri>={lowest_pri} tasks selected which should maybe probably be considered to be postponed a bit as well")
@@ -967,7 +1006,7 @@ def split_huge_tasks(ctx, threshold, max_lookahead, limit_lookahead):
     return _split_huge_tasks(ctx, threshold, max_lookahead, limit_lookahead)
 
 def _split_huge_tasks(ctx, threshold='4h', max_lookahead='60d', limit_lookahead=640):
-    _select(ctx=ctx, todo=True, end=f"+{max_lookahead}", limit=limit_lookahead, sort_key=['{DTSTART.dt:?{DUE.dt:?(0000)?}?%F %H:%M:%S}', '{PRIORITY:?0?}'])
+    _select(ctx=ctx, todo=True, end=f"+{max_lookahead}", limit=limit_lookahead, sort_key=['{DTSTART:?{DUE:?(0000)?}?%F %H:%M:%S}', '{PRIORITY:?0?}'])
     objs = ctx.obj['objs']
     threshold = parse_add_dur(None, threshold)
     for obj in objs:
@@ -995,7 +1034,7 @@ def split_high_pri_tasks(ctx, threshold, max_lookahead, limit_lookahead):
     return _split_high_pri_tasks(ctx, threshold, max_lookahead, limit_lookahead)
 
 def _split_high_pri_tasks(ctx, threshold=2, max_lookahead='60d', limit_lookahead=640):
-    _select(ctx=ctx, todo=True, end=f"+{max_lookahead}", limit=limit_lookahead, sort_key=['{DTSTART.dt:?{DUE.dt:?(0000)?}?%F %H:%M:%S}', '{PRIORITY:?0?}'])
+    _select(ctx=ctx, todo=True, end=f"+{max_lookahead}", limit=limit_lookahead, sort_key=['{DTSTART:?{DUE:?(0000)?}?%F %H:%M:%S}', '{PRIORITY:?0?}'])
     objs = ctx.obj['objs']
     for obj in objs:
         if obj.icalendar_component.get('PRIORITY') and obj.icalendar_component.get('PRIORITY') <= threshold:
@@ -1144,13 +1183,13 @@ def _set_task_attribs(ctx):
     ## Tasks missing a category
     LIMIT = 16
 
-    def _set_something(something, help_text, help_url=None, default=None, objs=None):
+    def _set_something_(something, help_text, help_url=None, default=None, objs=None):
         cond = {f"no_{something}": True}
         something_ = 'categories' if something == 'category' else something
         if something == 'duration':
             something_ = 'dtstart'
             cond['no_dtstart'] = True
-        _select(ctx=ctx, todo=True, limit=LIMIT, sort_key=['{DTSTART.dt:?{DUE.dt:?(0000)?}?%F %H:%M:%S}', '{PRIORITY:?0?}'], **cond)
+        _select(ctx=ctx, todo=True, limit=LIMIT, sort_key=['{DTSTART:?{DUE:?(0000)?}?%F %H:%M:%S}', '{PRIORITY:?0?}'], **cond)
         ## TODO: client-side filtering due to calendar servers that don't support the RFC properly
         ## "Incompatibility workarounds" should be moved to the caldav library
         if not objs:
@@ -1182,25 +1221,28 @@ def _set_task_attribs(ctx):
                 if something == 'category':
                     comp.add(something_, value.split(','))
                 elif something == 'due':
-                    _procrastinate([obj], parse_dt(value, datetime.datetime).astimezone(datetime.timezone.utc), check_dependent='interactive', err_callback=click.echo, confirm_callback=click.confirm)
+                    _procrastinate([obj], parse_dt(value, datetime.datetime), check_dependent='interactive', err_callback=click.echo, confirm_callback=click.confirm)
                 elif something == 'duration':
                     obj.set_duration(parse_add_dur(None, value), movable_attr='DTSTART')
                 else:
                     comp.add(something_, value)
+                    if hasattr(comp[something], 'dt'):
+                        if not comp[something].dt.tzinfo:
+                            comp[something].dt = com[something].dt.astimezone(tz.store_timezone)
                 obj.save()
             click.echo()
         return objs
 
     ## Tasks missing categories
-    _set_something('category', "enter a comma-separated list of CATEGORIES to be added", "https://github.com/tobixen/plann/blob/master/TASK_MANAGEMENT.md#categories-resources-concept-refid")
+    _set_something_('category', "enter a comma-separated list of CATEGORIES to be added", "https://github.com/tobixen/plann/blob/master/TASK_MANAGEMENT.md#categories-resources-concept-refid")
 
     ## Tasks missing a due date.  Save those objects (workaround for https://gitlab.com/davical-project/davical/-/issues/281)
-    duration_missing = _set_something('due', "enter the DUE DATE (default +2d)", default="+2d", help_url="https://github.com/tobixen/plann/blob/master/TASK_MANAGEMENT.md#dtstart-due-duration-completion")
+    duration_missing = _set_something_('due', "enter the DUE DATE (default +2d)", default="+2d", help_url="https://github.com/tobixen/plann/blob/master/TASK_MANAGEMENT.md#dtstart-due-duration-completion")
 
-    _set_something('priority', 'Enter the PRIORITY', help_url='https://github.com/tobixen/plann/blob/master/TASK_MANAGEMENT.md#priority', default="5")
+    _set_something_('priority', 'Enter the PRIORITY', help_url='https://github.com/tobixen/plann/blob/master/TASK_MANAGEMENT.md#priority', default="5")
 
     ## Tasks missing a duration
-    _set_something('duration', """Enter the DURATION (i.e. 5h or 2d)""", help_url="https://github.com/tobixen/plann/blob/master/TASK_MANAGEMENT.md#priority", objs=duration_missing)
+    _set_something_('duration', """Enter the DURATION (i.e. 5h or 2d)""", help_url="https://github.com/tobixen/plann/blob/master/TASK_MANAGEMENT.md#priority", objs=duration_missing)
 
 if __name__ == '__main__':
     cli()

@@ -8,6 +8,7 @@ I'm sure there must exist something like this?"""
 import datetime
 import string
 import re
+from plann.lib import tz
 
 class NoValue():
     def __getattr__(self, attr):
@@ -33,9 +34,14 @@ class Template(string.Formatter):
     
     def get_value(self, key, args, kwds):
         try:
-            return string.Formatter.get_value(self, key, args, kwds)
+            ret = string.Formatter.get_value(self, key, args, kwds)
         except:
             return no_value
+        if hasattr(ret, 'dt'):
+            ret = ret.dt
+            if not tz.show_native_timezone:
+                ret = ret.astimezone()
+        return ret
 
     def format_field(self, value, format_spec):
         rx = re.match(r'\?([^\?]*)\?(.*)', format_spec)

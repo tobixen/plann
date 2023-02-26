@@ -5,6 +5,8 @@ sys.path.insert(1,'..')
 from datetime import datetime, date
 from plann.cli import parse_timespec
 from plann.template import Template
+from plann.lib import tz
+import zoneinfo
 
 """calendar-cli is a command line utility, and it's an explicit design
 goal that it should contain minimal logic except for parsing and
@@ -19,6 +21,7 @@ the caldav library ought to be tested here.  """
 class TestTemplate:
     def setup_method(self):
         self.date = date(1990, 10, 10)
+        tz.implicit_timezone='UTC'
         
     def test_formatting_with_timespec(self):
         template=Template("This is an ISO date: {date:%F}")
@@ -64,9 +67,14 @@ class TestTemplate:
         assert text == "Date is maybe bar"
 
 class TestParseTimestamp:
-    def _testTimeSpec(self, expected):
+    def _testTimeSpec(self, expected, expected_tz=zoneinfo.ZoneInfo('UTC')):
         for input in expected:
-            assert parse_timespec(input) == expected[input]
+            def stz(dt):
+                if dt and isinstance(dt, datetime):
+                    return dt.replace(tzinfo=expected_tz)
+                return dt
+            expv = tuple([stz(x) for x in expected[input]])
+            assert parse_timespec(input)== expv
 
     @pytest.mark.skip(reason="Not implemented yet, waiting for feedback on https://github.com/gweis/isodate/issues/77")
     def testIsoIntervals(self):

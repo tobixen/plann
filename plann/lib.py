@@ -10,9 +10,45 @@ import dateutil
 import dateutil.parser
 import logging
 import re
+from dataclasses import dataclass
+import zoneinfo
+
+## Singleton (aka global variable)
+@dataclass
+class Tz():
+    """
+    Singleton class storing timezone preferences
+
+    (floating time not supported yet)
+    """
+    show_native_timezone: bool=False
+    _implicit_timezone: zoneinfo.ZoneInfo = None
+    _store_timezone: zoneinfo.ZoneInfo = None
+    
+    @property
+    def implicit_timezone(self):
+        return self._implicit_timezone
+    
+    @property
+    def store_timezone(self):
+        return self._store_timezone
+
+    @implicit_timezone.setter
+    def implicit_timezone(self, value):
+        if value:
+            self._implicit_timezone = zoneinfo.ZoneInfo(value)
+            if not self.store_timezone:
+                self._store_timezone = self._implicit_timezone
+
+    @store_timezone.setter
+    def store_timezone(self, value):
+        if value:
+            self._store_timezone = zoneinfo.ZoneInfo(value)
+
+tz=Tz()
 
 def _now():
-    return datetime.datetime.now().astimezone(datetime.timezone.utc)
+    return datetime.datetime.now().astimezone(tz.implicit_timezone)
 
 def _ensure_ts(dt):
     if dt is None:
@@ -20,8 +56,9 @@ def _ensure_ts(dt):
     if hasattr(dt, 'dt'):
         dt = dt.dt
     if isinstance(dt, datetime.datetime):
-        return dt.astimezone(datetime.timezone.utc)
-    return datetime.datetime(dt.year, dt.month, dt.day).astimezone(datetime.timezone.utc)
+        if not dt.tzinfo:
+            return dt.replace(tzinfo=tz.implicit_timezone)
+    return datetime.datetime(dt.year, dt.month, dt.day, tzinfo=tz.implicit_timezone)
 
 def parse_dt(input, return_type=None):
     """Parse a datetime or a date.
@@ -31,10 +68,10 @@ def parse_dt(input, return_type=None):
     guess if we should return a date or a datetime.
 
     """
-    if isinstance(input, datetime.datetime):
+    if isinstance(input, datetime.date):
         if return_type is datetime.date:
             return input.date()
-        return input
+        return _ensure_ts(input)
     if isinstance(input, datetime.date):
         if return_type is datetime.datetime:
             return datetime.datetime.combine(input, datetime.time(0,0))
@@ -44,13 +81,13 @@ def parse_dt(input, return_type=None):
         return parse_add_dur(datetime.datetime.now(), input[1:])
     ret = dateutil.parser.parse(input)
     if return_type is datetime.datetime:
-        return ret
+        return _ensure_ts(ret)
     elif return_type is datetime.date:
         return ret.date()
     elif ret.time() == datetime.time(0,0) and len(input)<12 and not '00:00' in input and not '0000' in input:
         return ret.date()
     else:
-        return ret
+        return _ensure_ts(ret)
 
 def parse_add_dur(dt, dur):
     """
@@ -203,19 +240,18 @@ def _procrastinate(objs, delay, check_dependent="error", err_callback=print, con
         if isinstance(delay, datetime.date):
             new_due = delay
         else:
-            old_due = x.get_due().astimezone(datetime.timezone.utc)
-            new_due = datetime.datetime.now().astimezone(datetime.timezone.utc)
+            old_due = _ensure_ts(x.get_due())
+            new_due = _now()
             if old_due:
                 new_due = max(new_due, old_due)
             new_due = parse_add_dur(new_due, delay)
-            new_due = new_due.astimezone(datetime.timezone.utc)
         parent = x.set_due(new_due, move_dtstart=True, check_dependent=chk_parent)
         if parent:
             if check_dependent in ("error", "interactive"):
                 i = x.icalendar_component
                 summary = _summary(i)
                 p = parent.icalendar_component
-                err_callback(f"{summary} could not be postponed due to parent {_summary(p)} with due {p['DUE'].dt} and priority {p.get('priority', 0)}")
+                err_callback(f"{summary} could not be postponed due to parent {_summary(p)} with due {_ensure_ts(p['DUE'])} and priority {p.get('priority', 0)}")
                 if check_dependent == "interactive" and p.get('priority', 9)>2 and confirm_callback("procrastinate parent?"):
                     _procrastinate([parent], new_due+max(parent.get_duration(), datetime.timedelta(1)), check_dependent, err_callback, confirm_callback)
                     _procrastinate([x], new_due, check_dependent, err_callback, confirm_callback)
