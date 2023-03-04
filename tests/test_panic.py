@@ -33,3 +33,34 @@ def test_timeline():
     assert not 'begin' in opening
     timeline.pad_slack(end=datetime(year=2025, month=2, day=26, hour=12, minute=45), duration=timedelta(seconds=3600))
     timeline.pad_slack(end=datetime(year=2025, month=2, day=26, hour=22, minute=45), duration=timedelta(days=2))
+
+def test_timeline_add():
+    t = lambda hour: datetime(year=2025, month=2, day=25, hour=hour)
+    timeline = panic_planning.TimeLine()
+    
+    assert len(timeline) == 0
+    
+    timeline.add(begin=t(14), end=t(15), obj='14')
+    assert len(timeline) == 2
+    assert timeline[0]['begin'] == t(14)
+    assert timeline[0]['obj'] == '14'
+    assert timeline[1]['begin'] == t(15)
+
+    timeline.add(begin=t(12), end=t(13), obj='12')
+    assert len(timeline) == 4
+    assert timeline[0]['begin'] == t(12)
+    assert timeline[0]['obj'] == '12'
+    assert timeline[1]['begin'] == t(13)
+    assert timeline[2]['begin'] == t(14)
+    assert timeline[2]['obj'] == '14'
+    assert timeline[3]['begin'] == t(15)
+    
+    timeline.add(begin=t(13), end=t(14), obj='13')
+    assert len(timeline) == 4
+    assert timeline[0]['begin'] == t(12)
+    assert timeline[0]['obj'] == '12'
+    assert timeline[1]['begin'] == t(13)
+    assert timeline[1]['obj'] == '13'
+    assert timeline[2]['begin'] == t(14)
+    assert timeline[2]['obj'] == '14'
+    assert timeline[3]['begin'] == t(15)

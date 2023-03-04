@@ -27,16 +27,21 @@ class TimeLine(SortedKeyList):
         self.add(start, end, event)
 
     def add(self, begin, end, obj=None):
-        obj = {'begin': begin, 'obj': obj}
+        #import pdb; pdb.set_trace()
+        obj_ = {'begin': begin, 'obj': obj}
         assert end > begin
-        i = self.bisect_right(obj)
+        i = self.bisect_right(obj_)
         if i<len(self):
             ## No overlapping accepted
             assert self[i]['begin'] >= end
         if i>0:
             assert not any(key != 'begin' for key in self[i-1])
-        SortedKeyList.add(self, obj)
-        if i+1==len(self) or self[i]['begin'] > end:
+        if i>0 and i<len(self):
+            if self[i-1]['begin'] == begin and self[i]['begin'] == end:
+                self[i-1]['obj'] = obj
+                return
+        SortedKeyList.add(self, obj_)
+        if i+1==len(self) or self[i+1]['begin'] > end:
             SortedKeyList.add(self, {'begin': end})
 
     def get(self, ts):
@@ -88,7 +93,7 @@ def timeline_suggestion(ctx, hours_per_day=4):
     events = [x for x in objs if 'BEGIN:VEVENT' in x.data]
     tasks = [x for x in objs if 'BEGIN:VTODO' in x.data]
     assert len(events) + len(tasks) == len(objs)
-    tasks = [x for x in tasks if '\nDUE:' in x.data and '\nDTSTART:' in x.data]
+    tasks = [x for x in tasks if '\nDUE' in x.data and '\nDTSTART' in x.data]
     for event in events:
         if not 'BEGIN:VEVENT' in event.data:
             continue
@@ -97,15 +102,15 @@ def timeline_suggestion(ctx, hours_per_day=4):
             timeline.add_event(event)
         except AssertionError:
             pass
-    tasks.sort(key=lambda x: (x.icalendar_component.get('PRIORITY',0), _now()-x.icalendar_component['DUE'].dt))
+    tasks.sort(key=lambda x: (x.icalendar_component.get('PRIORITY',0), _now()-_ensure_ts(x.get_due())))
     slackbalance = timedelta(0)
     for task in tasks:
-        due = task.get_due()
+        due = _ensure_ts(task.get_due())
         duration = task.get_duration()
-        slackbalance -= duration/hours_per_day*24
+        slackbalance -= duration*(24-hours_per_day)/hours_per_day
         slot, slackbalance = timeline.find_opening(due, duration, slackbalance)
         if 'end' in slot:
-            end = min(task.get_due(), slot['end'])
+            end = min(_ensure_ts(task.get_due()), slot['end'])
             begin = end-duration
         else:
             begin = task.icalendar_component['DTSTART'].dt

@@ -54,10 +54,9 @@ def _ensure_ts(dt):
     if hasattr(dt, 'dt'):
         dt = dt.dt
     if dt is None:
-        return datetime.datetime(1970,1,1)
+        return datetime.datetime(1970,1,1).astimezone(tz.implicit_timezone)
     if isinstance(dt, datetime.datetime):
-        if not dt.tzinfo:
-            return dt.replace(tzinfo=tz.implicit_timezone).astimezone(tz.implicit_timezone)
+        return dt.replace(tzinfo=tz.implicit_timezone).astimezone(tz.implicit_timezone)
     return datetime.datetime(dt.year, dt.month, dt.day, tzinfo=tz.implicit_timezone).astimezone(tz.implicit_timezone)
 
 def parse_dt(input, return_type=None):
@@ -234,8 +233,37 @@ def _summary(i):
         i = i.icalendar_component
     return i.get('summary') or i.get('description') or i.get('uid')
 
-def _procrastinate(objs, delay, check_dependent="error", err_callback=print, confirm_callback=lambda x: False):
+def _rels(obj):
+    rels = obj.icalendar_component.get('RELATED-TO', [])
+    if not isinstance(rels, list):
+        rels = [ rels ]
+    return rels
+
+def _hasreltype(obj, reltypes):
+    return any(r.params.get('RELTYPE', 'PARENT') in reltypes for r in _rels(obj))
+
+def _procrastinate(objs, delay, check_dependent="error", with_children=False, with_family=False, with_parent=False, err_callback=print, confirm_callback=lambda x: False, recursivity=0):
+    assert recursivity<16 ## TODO: better error message.  Probably we have some kind of relationship loop here.
     for x in objs:
+        if x.icalendar_component.get('RELATED-TO'):
+            if with_family == 'interactive':
+                with_family = confirm_callback("There are relations - postpone the whole family tree?")
+            if not with_family and with_parent == 'interactive' and _hasreltype(x, {'PARENT', 'FIRST', 'DEPENDS-ON', 'STARTTOFINISH'}):
+                with_parent = confirm_callback("There exists (a) parent(s) - postpone the parent?")
+            if not with_family and with_children == 'interactive' and _hasreltype(x, {'CHILD', 'NEXT', 'FINISHTOSTART'}):
+                with_children = confirm_callback("There exists children - postpone the children?")
+        if with_family:
+            parents = x.get_relatives(reltypes={'PARENT', 'FIRST', 'DEPENDS-ON', 'STARTTOFINISH'}) ## TODO: consider reverse FINISHTOSTART, STARTTOSTART, FINISHTOFINISH and SIBLING
+            if parents:
+                _procrastinate(parents, delay, check_dependent, with_children, with_family, with_parent, err_callback, confirm_callback, recursivity=recursivity+1)
+                continue
+            else:
+                _procrastinate([x], delay, check_dependent, with_children=True, with_family=False, with_parent=False, err_callback=err_callback, confirm_callback=confirm_callback, recursivity=recursivity+1)
+                continue
+        if with_parent:
+            parents = x.get_relatives(reltypes={'PARENT', 'FIRST', 'DEPENDS-ON', 'STARTTOFINISH'}) ## TODO: consider reverse FINISHTOSTART, STARTTOSTART, FINISHTOFINISH and SIBLING
+            _procrastinate(parents, delay, check_dependent, with_children=True, with_family=False, with_parent=False, err_callback=err_callback, confirm_callback=confirm_callback, recursivity=recursivity+1)
+        
         chk_parent = 'return' if check_dependent else False
         if isinstance(delay, datetime.date):
             new_due = delay
@@ -253,9 +281,14 @@ def _procrastinate(objs, delay, check_dependent="error", err_callback=print, con
                 p = parent.icalendar_component
                 err_callback(f"{summary} could not be postponed due to parent {_summary(p)} with due {_ensure_ts(p['DUE'])} and priority {p.get('priority', 0)}")
                 if check_dependent == "interactive" and p.get('priority', 9)>2 and confirm_callback("procrastinate parent?"):
-                    _procrastinate([parent], new_due+max(parent.get_duration(), datetime.timedelta(1)), check_dependent, err_callback, confirm_callback)
-                    _procrastinate([x], new_due, check_dependent, err_callback, confirm_callback)
+                    _procrastinate([parent], new_due+max(parent.get_duration(), datetime.timedelta(1)), check_dependent, err_callback, confirm_callback, recursivity=recursivity+1)
+                    _procrastinate([x], new_due, check_dependent, err_callback, confirm_callback, recursivity=recursivity+1)
             elif check_dependent == "return":
                 return parent
         else:
             x.save()
+        if with_children:
+            children = x.get_relatives(reltypes={'CHILD', 'NEXT', 'FINISHTOSTART'}) ## TODO: consider reverse relationships
+            _procrastinate(children, delay, check_dependent, with_children=True, with_family=False, with_parent=False, err_callback=err_callback, confirm_callback=confirm_callback, recursivity=recursivity+1)
+
+

@@ -458,7 +458,7 @@ def delete(ctx, multi_delete, **kwargs):
 @click.option('--add-category', default=None, help="Delete multiple things without confirmation prompt", multiple=True)
 @click.option('--postpone', help="Add something to the DTSTART and DTEND/DUE")
 @click.option('--interactive-ical/--no-interactive-ical', help="Edit the ical interactively")
-@click.option('--interactive/no-interactive', help="Interactive edit")
+@click.option('--interactive/--no-interactive', help="Interactive edit")
 @click.option('--cancel/--uncancel', default=None, help="Mark task(s) as cancelled")
 @click.option('--complete/--uncomplete', default=None, help="Mark task(s) as completed")
 @click.option('--complete-recurrence-mode', default='safe', help="Completion of recurrent tasks, mode to use - can be 'safe', 'thisandfuture' or '' (see caldav library for details)")
@@ -500,7 +500,7 @@ def _interactive_edit(obj):
         interactive_split_task(obj, too_big=False)
     elif input.startswith('postpone'):
         ## TODO: make this into an interactive recursive function
-        parent = _procrastinate([obj], input.split(' ')[1], check_dependent="interactive", err_callback=click.echo, confirm_callback=click.confirm)
+        parent = _procrastinate([obj], input.split(' ')[1], with_children='interactive', with_parent='interactive', with_family='interactive', check_dependent="interactive", err_callback=click.echo, confirm_callback=click.confirm)
     elif input == 'complete':
         obj.complete(handle_rrule=True)
     elif input == 'cancel':
@@ -557,14 +557,14 @@ def _interactive_ical_edit(objs):
     os.unlink(fn)
     data = data.strip()
     icals = _split_vcal(data)
-    assert len(icals) == len(ctx.obj['objs'])
-    for new,obj in zip(icals, ctx.obj['objs']):
+    assert len(icals) == len(objs)
+    for new,obj in zip(icals, objs):
         ## Should probably assert that the UID is the same ...
         ## ... or, leave it to the calendar server to handle changed UIDs
         obj.data = new
         obj.save()
     
-def _edit(ctx, add_category=None, cancel=None, interactive_ical=False, complete=None, complete_recurrence_mode='safe', postpone=None, **kwargs):
+def _edit(ctx, add_category=None, cancel=None, interactive_ical=False, interactive=False, complete=None, complete_recurrence_mode='safe', postpone=None, **kwargs):
     """
     Edits a task/event/journal
     """
@@ -839,7 +839,7 @@ def agenda(ctx):
 
 def _agenda(ctx):
     start = datetime.datetime.now()
-    _select(ctx=ctx, start=start, event=True, end='+7d', limit=16, sort_key=['DTSTART', 'get_duration()'])
+    _select(ctx=ctx, start=start, event=True, end='+7d', limit=16, sort_key=['{DTSTART:%F %H:%M:%S}', 'get_duration()'])
     objs = ctx.obj['objs']
     _select(ctx=ctx, todo=True, end='+7d', limit=16, sort_key=['{DTSTART:?{DUE:?(0000)?}?%F %H:%M:%S}', '{PRIORITY:?0?}'], skip_parents=True)
     ctx.obj['objs'] = objs + ["======"] + ctx.obj['objs']
@@ -957,9 +957,9 @@ def _dismiss_panic(ctx, hours_per_day, lookahead='60d'):
         for item in first_low_pri_tasks:
             obj = item['obj']
             comp = obj.icalendar_component
-            summary = _summary(component)
+            summary = _summary(comp)
             due = obj.get_due()
-            dtstart = _ensure_ts(comp.get('dtstart') or component.get('due'))
+            dtstart = _ensure_ts(comp.get('dtstart') or comp.get('due'))
             click.echo(f"Should have started: {item['begin']:%F %H:%M:%S %Z} - Due: {due:%F %H:%M:%S %Z}: {summary}")
 
         if priority == 1:
@@ -978,13 +978,13 @@ def _dismiss_panic(ctx, hours_per_day, lookahead='60d'):
             for item in first_low_pri_tasks:
                 _interactive_edit(item['obj'])
         else:
-            _procrastinate([x['obj'] for x in first_low_pri_tasks], procrastination_time, check_dependent='interactive', err_callback=click.echo, confirm_callback=click.confirm)
+            _procrastinate([x['obj'] for x in first_low_pri_tasks], procrastination_time, with_children='interactive', with_parent='interactive', with_family='interactive', check_dependent='interactive', err_callback=click.echo, confirm_callback=click.confirm)
 
         if other_low_pri_tasks:
-            click.echo(f"There are {len(other_low_pri_tasks)} later pri>={lowest_pri} tasks selected which should maybe probably be considered to be postponed a bit as well")
-            procrastination_time = click.prompt(f"Push the due-date for those with ...", default=procrastination_time/2)
-            if procrastination_time not in ('0', '0h', '0m', '0d'):
-                _procrastinate(other_low_pri_tasks, procrastination_time, check_dependent='interactive', err_callback=click.echo, confirm_callback=click.confirm)
+            click.echo(f"There are {len(other_low_pri_tasks)} later pri>={priority} tasks selected which should maybe probably be considered to be postponed a bit as well")
+            procrastination_time = click.prompt(f"Push the due-date for those with ...", default=0)
+            if procrastination_time not in ('0', '0h', '0m', '0d', 0):
+                _procrastinate([x['obj'] for x in other_low_pri_tasks], procrastination_time, check_dependent='interactive', err_callback=click.echo, confirm_callback=click.confirm)
 
 @interactive.command()
 @click.pass_context
