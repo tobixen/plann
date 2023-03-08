@@ -271,20 +271,16 @@ def __select(ctx, extend_objects=False, all=None, uid=[], abort_on_missing_uid=N
         objs.extend(c.search(**kwargs))
 
     if skip_children or skip_parents:
-        objs_by_uid = {}
-        for obj in objs:
-            objs_by_uid[obj.icalendar_component['uid']] = obj
-        for obj in objs:
-            rels = obj.icalendar_component.get('RELATED-TO', [])
-            rels = rels if isinstance(rels, list_type) else [ rels ]
-            for rel in rels:
-                rel_uid = rel
-                rel_type = rel.params.get('REL-TYPE', None)
-                if ((rel_type == 'CHILD' and skip_parents) or (rel_type == 'PARENT' and skip_children)) and rel_uid in objs_by_uid and uid in objs_by_uid:
-                    del objs_by_uid[uid]
-                if ((rel_type == 'PARENT' and skip_parents) or (rel_type == 'CHILD' and skip_children)) and rel_uid in objs_by_uid:
-                    del objs_by_uid[rel_uid]
-        objs = objs_by_uid.values()
+        i = 0
+        while i < len(objs):
+            obj = objs[i]
+            if skip_children and _relships_by_type(obj, 'parentlike'):
+                objs.pop(i)
+                continue
+            if skip_parents and _relships_by_type(obj, 'childlike'):
+                objs.pop(i)
+                continue
+            i += 1
 
     ## OPTIMIZE TODO: sorting the list multiple times rather than once is a bit of brute force, if there are several sort keys and long list of objects, we should sort once and consider all sort keys while sorting
     ## TODO: Consider that an object may be expanded and contain lots of event instances.  We will then need to expand the caldav.Event object into multiple objects, each containing one recurrance instance.  This should probably be done on the caldav side of things.
@@ -526,7 +522,8 @@ def _interactive_edit(obj):
 def _set_something(obj, arg, value):
     comp = obj.icalendar_component
     if arg in ('child', 'parent'):
-        obj.set_relation(arg, value)
+        for val in value:
+            obj.set_relation(reltype=arg, other=val)
     elif arg == 'duration':
         duration = parse_add_dur(dt=None, dur=value)
         obj.set_duration(duration)
@@ -1051,10 +1048,15 @@ def _relships_by_type(obj, reltype_wanted=None):
         return ret
     if not isinstance(rts, list_type):
         rts = [ rts ]
+    if reltype_wanted == 'childlike':
+        reltype_wanted = {'CHILD', 'NEXT', 'FINISHTOSTART'}
+    elif reltype_wanted == 'parentlike':
+        reltype_wanted = {'PARENT', 'FIRST', 'DEPENDS-ON', 'STARTTOFINISH'}
+    if isinstance(reltype_wanted, str):
+        reltype_wanted = {reltype_wanted}
     for rel in rts:
-        reltype = rel.params.get('RELTYPE')
-        reltype = reltype or "undefined"
-        if reltype_wanted and reltype != reltype_wanted:
+        reltype = rel.params.get('RELTYPE', 'PARENT')
+        if reltype_wanted and not reltype in reltype_wanted:
             continue
         other = obj.parent.object_by_uid(rel)
         ret[reltype].append(other)
@@ -1094,14 +1096,15 @@ def _relships_by_type(obj, reltype_wanted=None):
                 import pdb; pdb.set_trace()
                 1
             elif reltype == 'CHILD' and my_back_rel[0].params.get('RELTYPE') != 'PARENT':
-                import pdb; pdb.set_trace()
                 if not my_back_rel[0].params.get('RELTYPE'):
                     my_back_rel[0].params['RELTYPE']='PARENT'
-                other.save()
+                    other.save()
+                else:
+                    import pdb; pdb.set_trace()
             elif reltype == 'PARENT' and my_back_rel[0].params.get('RELTYPE') != 'CHILD':
                 if not my_back_rel[0].params.get('RELTYPE'):
                     my_back_rel[0].params['RELTYPE']='CHILD'
-                other.save()
+                    other.save()
     return ret
 
 def _get_summary(obj):
@@ -1190,10 +1193,18 @@ def _set_task_attribs(ctx):
             something_ = 'dtstart'
             cond['no_dtstart'] = True
         _select(ctx=ctx, todo=True, limit=LIMIT, sort_key=['{DTSTART:?{DUE:?(0000)?}?%F %H:%M:%S}', '{PRIORITY:?0?}'], **cond)
-        ## TODO: client-side filtering due to calendar servers that don't support the RFC properly
-        ## "Incompatibility workarounds" should be moved to the caldav library
-        if not objs:
-            objs = [x for x in ctx.obj['objs'] if not x.icalendar_component.get(something_)]
+        ## Doing some client-side filtering due to calendar servers that don't support the RFC properly
+        ## TODO: "Incompatibility workarounds" should be moved to the caldav library
+        objs_ = [x for x in ctx.obj['objs'] if not x.icalendar_component.get(something_)]
+
+        ## add all non-duplicated objects from objs to objs_
+        uids_ = {x.icalendar_component['UID'] for x in objs_}
+        for obj in objs or []:
+            if not obj.icalendar_component['UID'] in uids_:
+                obj.load()
+                objs_.append(obj)
+        objs = objs_
+
         if objs:
             if something == 'duration':
                 objs = [x for x in objs if x.icalendar_component.get('due')]
