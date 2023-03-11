@@ -39,7 +39,7 @@ class Template(string.Formatter):
             return no_value
         if hasattr(ret, 'dt'):
             ret = ret.dt
-            if not tz.show_native_timezone:
+            if not tz.show_native_timezone and isinstance(ret, datetime.datetime):
                 ret = ret.astimezone()
         return ret
 
