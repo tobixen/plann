@@ -148,7 +148,7 @@ def _set_attr_options(verb="", desc=""):
     return lambda func: _set_attr_options_(func, verb, desc)
 
 @cli.group()
-@click.option('--interactive-select/--no-interactive-select', help="interactive filtering")
+@click.option('--interactive/--no-interactive-select', help="interactive filtering")
 @click.option('--all/--none', default=None, help='Select all (or none) of the objects.  Overrides all other selection options.')
 @click.option('--uid', multiple=True, help='select an object with a given uid (or select more object with given uids).  Overrides all other selection options')
 @click.option('--abort-on-missing-uid/--ignore-missing-uid', default=False, help='Abort if (one or more) uids are not found (default: silently ignore missing uids).  Only effective when used with --uid')
@@ -186,12 +186,12 @@ def select(*largs, **kwargs):
     """
     return _select(*largs, **kwargs)
 
-def _select(ctx, interactive_select=False, **kwargs):
+def _select(ctx, interactive=False, **kwargs):
     """
-    wrapper function for __select.  Will honor the --interactive-select flag.
+    wrapper function for __select.  Will honor the --interactive flag.
     """
     __select(ctx, **kwargs)
-    if interactive_select:
+    if interactive:
         objs = ctx.obj['objs']
         ctx.obj['objs'] = []
         for obj in objs:
@@ -979,7 +979,7 @@ def _dismiss_panic(ctx, hours_per_day, lookahead='60d'):
 
         if other_low_pri_tasks:
             click.echo(f"There are {len(other_low_pri_tasks)} later pri>={priority} tasks selected which should maybe probably be considered to be postponed a bit as well")
-            procrastination_time = click.prompt(f"Push the due-date for those with ...", default=0)
+            procrastination_time = click.prompt(f"Push the due-date for those with ...", default='0h')
             if procrastination_time not in ('0', '0h', '0m', '0d', 0):
                 _procrastinate([x['obj'] for x in other_low_pri_tasks], procrastination_time, check_dependent='interactive', err_callback=click.echo, confirm_callback=click.confirm)
 
