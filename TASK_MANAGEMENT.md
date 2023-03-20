@@ -1,10 +1,14 @@
 # Managing tasks through plann
 
-plann is a flexible cli tool for accessing, adding and editing events, tasks and journals - you should be able to do just anything with it (and if not, raise an issue).  However, it is also quite much optimized towards what the author consider to be good task management procedures - and there is also an "interactive mode" for supporting this.  In this document I will give recommendations for what I consider is "good practice" as well as guide you through those task management procedures.
+plann is a flexible cli tool for accessing, adding and editing events, tasks and journals - you should be able to do just anything with it (and if not, raise an issue).  However, it is also quite much optimized towards what the author consider to be good task management procedures.  There now exists an "interactive mode" for supporting this.  In this document I will give recommendations for what I consider is "good practice" as well as guide you through those task management procedures.
+
+## What is a task?
+
+In my paradigm, a task is a planned activity that should be done, possibly within some specific time interval, but there is some flexibility as to exactly when it should be done.  When the task is done - or when it is deemed irrelevant to do it - it can be striken out from the list.
 
 ## What's in a "task" ...
 
-By using standards, plann should interoperate well with other calendaring and task management tools.  The icalendar standard (RFC 5545) sets some limits on what data we can store in a task on a calendar - unfortunately the standard leaves quite much up to the users and implementations - it misses guidelines on how to use the standard, and there are frequently multiple ways of achieving the same means.  One often gets into dilemmas ... when to use the category field vs when to use the location field vs when to branch out a completely distinct calendar, etc.  Here are some information about what can and cannot go into a task, and how plann is dealing with it.
+By using standards, plann should interoperate well with other calendaring and task management tools.  The icalendar standard (RFC 5545) sets some limits on what data we can store in a task on a calendar - unfortunately the standard leaves quite much up to the users and implementations - it lacks guidelines on how to use the standard, and there are frequently multiple ways of achieving the same means.  One often gets into dilemmas ... when to use the category field vs when to use the location field vs when to branch out a completely distinct calendar, etc.  Here are some information about what can and cannot go into a task, how plann is dealing with it today, and a bit information on the future plans.
 
 ### List of properties and subcomponents
 
@@ -87,15 +91,17 @@ As you can give access rights to other people for a whole caldav calendar (or "t
 
 I have a boat, and it requires a lot of maintenance and attention.  Should I create a separate calendar for boat maintenance tasks?  Considering the thoughts above, what matters is whomelse should have the rights to view and add tasks.  I consider the boat to be a family project, so I use the same calendar as for other family/home-related todo-tasks.
 
+Plann is able to collect data from multiple calendars and show it side by side.  Plann is (as of 2023-04) not optimized to display what calendar the task is coming from.  It's also not optimized for easily put different tasks to different calendars. 
+
 ### Location
 
 A named location.
 
-**TLDR**: plann is not optimzed towards using this property
+**TLDR**: plann is not optimzed towards using this property.
 
 With events, the location field is frequently used for which meeting room the meeting should be at, or the address of an appointment.  It's often checked up just before the meeting, or copied to the navigator when one is heading for the appointment.  Tasks are different, if you are at some specific location you would typically like to check up all tasks at that location or in the neighbourhood and see if you can do some of them.
 
-I had an idea that some tasks are only possible to do at a specific location (i.e. as a boat owner, there are lots of tasks that can only be done "at the boat", some work can be done from home, some work has to be done from the office, some work should be done in the garden, etc), and when being at that location, one would like to list out the pending tasks that applies for that location.  However, practical experience shows that "boat", "office", "home", "garden", "grocery store", "hardware store", etc are better suited as a category than as a location.  Generally, if you have a lot of tasks connected to the same address, probably it's better to do it as a category rather than location.  If the location is a single-off thing used only for that specific task (or, perhaps, some very few tasks) then obviously it's better to use location than category.
+I had an idea that some tasks are only possible to do at a specific location (i.e. as a boat owner, there are lots of tasks that can only be done "at the boat", some work can be done from home, some work has to be done from the office, some work should be done in the garden, etc), and when being at that location, one would like to list out the pending tasks that applies for that location.  However, practical experience shows that "boat", "office", "home", "garden", "grocery store", "hardware store", etc are possibly better suited as a category than as a location.  Generally, if you have a lot of tasks connected to the same address, probably it's better to do it as a category rather than location.  If the location is a single-off thing used only for that specific task (or, perhaps, some very few tasks) then obviously it's better to use location than category.
 
 Location is a free-text field; RFC9073 adds a VLOCATION subcomponent for a more structured way of adding location information.
 
@@ -128,7 +134,9 @@ RFC9073 also defines vresource, which is a more structured way of specifying res
 
 ### Related
 
-There are multiple kinds of relationships that may be useful for task management.  RFC5545 only supports PARENT-CHILD and SIBLING.  RFC9253 expands a bit on this to make more complex task management supported.  RFC9253 is (as of writing) reasonably fresh, and I got aware of it only today (2023-02-02).  All my prior thinking has been around how to (ab)use the PARENT-CHILD relationships.  Here are three different ways to think of relationships:
+There are multiple kinds of relationships that may be useful for task management.  RFC5545 only supports PARENT-CHILD and SIBLING.  RFC9253 expands a bit on this to make more complex task management supported.  RFC9253 is (as of writing) reasonably fresh, and I got aware of it only today (2023-02-02).  All my prior thinking has been around how to (ab)use the PARENT-CHILD relationships - but I will definitively look into better support for the different relationship types listed in RFC9253 soon.
+
+Here are three different ways to think of relationships:
 
 #### Pending-Dependent
 
@@ -164,12 +172,12 @@ From my practical experience, "supermarket" and "hardware shopping" can as well 
 
 The standard allows for recurring tasks, but doesn't really flesh out what it means that a task is recurring - except that it should show up on date searches if any of the recurrances are within the date search range.  Date searches for future recurrances of tasks is ... quite exotic, why would anyone want to do that?
 
-From a "user perspective", I think there are two kind of recurrences:
+From a "user perspective", I think there are two kind of task recurrences:
 
 * Specified intervals - say, the floor should be cleaned every week.  You usually do it every Monday, but one week everything is so hectic that you postpone it all until late Sunday evening.  It would be irrational to wash it again the next day.  And if you missed the due date with more than a week - then obviously the next recurrence is not "previous week".  (Except, one may argue that the status of previous week should be set to "CANCELLED")
 * Fixed-time.  If you have some contract stating that you should be washing the floor weekly, then maybe you would want to wash the floor again on Monday, even if it was just done Sunday.  Or perhaps one of the children is having swimming at school every Tuesday, so sometime during Monday (with a hard due set to Tuesday early morning) a gym bag with swimwear and a fresh towel should be prepared for the child.  Or the yearly income tax statement, should be delivered before a hard due date - every year.
 
-I choose to interpret a RRULE with BY*-attributes set (like BYDAY=MO) as a recurring task with "fixed" due times, while a RRULE without BY*-attributes should be considered as a "interval"-style of recurring task.
+I choose to interpret a `RRULE` with `BY*`-attributes set (like `BYDAY=MO`) as a recurring task with "fixed" due times, while a `RRULE` without `BY*`-attributes should be considered as a "interval"-style of recurring task.
 
 There can be only one status and one complete-date for a vtodo, no matter if it's recurring or not.
 
@@ -303,8 +311,38 @@ RSTATUS is used for scheduling.  plann 1.0 does not support scheduling.
 
 Those are not much relevant wrg of task handling in plann
 
-## Usage instructions
+## Daily task management and interactive mode
 
-This is specifically directed towards using plann for daily task management.  See also the [USER_GUIDE](USER_GUIDE.md) for more generic user guide.
+This is specifically directed towards using plann for daily task management.  See also the [USER GUIDE](USER_GUIDE.md) for more generic user guide.
 
-(... work in progress ... my plan is to ditch detailed instructions in the tool itself and rather throw URLs pointing towards this document on the user)
+### Adding tasks
+
+Currently there is no interactive mode for adding tasks, but it's pretty simple to quickly add a task, `plann add todo "water the flowers"`.
+
+If the configuration specifies multiple calendars or calendar servers, it may be needed to either explicitly use `--config-section` or use the `--first-calendar` option to specify what calendar to use.  I'm considering simpler ways to select what calendar to add the task to.  While `--config-section` is a global option,`--first-calendar` is an option to the `add` command.
+
+Properties can be set by using options like `--set-priority`.  Those options goes to the `todo` subcommand.  Mixing up what options goes where is a big annoyance, I'm considering to find some solution to this.
+
+### "Mandatory" attributes
+
+In my task management routines, this information is required for all tasks:
+
+* summary (gets set on task creation)
+* categories
+* due date
+* priority
+* time estimate
+
+To interactively find and set the missing properties, it's possible to do `plann interactive set-task-attribs`.
+
+### Editing tasks
+
+Tasks can be edited through the `select` command.  When adding the task an UID is printed, and it can be used for selecting: `plann select --uid 264185c0-c51b-11ed-a500-982cbcdd642c edit --interactive-ical`.  `--interactive-ical` will open up an editor (remember to set and export the `$EDITOR` environment variable), and the ical data can be edited by hand.
+
+Other selectors can be used, like category and summary.  The RFC says that subtext search should be done, but different calendar servers may do things in different ways.  Properties can also be set by using set-options, like `--set-priority`.  Say you want to start using the location property, and set location to `home` for all tasks that have the category `home` set, it may be done like this: `plann select --category home edit --set-location home`.
+
+There is another interactive edit function, `plann select --summary 'clean' edit --interactive` will give a small menu for each task selected.
+
+### 
+
+### Look through (overdue) tasks

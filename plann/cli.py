@@ -353,7 +353,7 @@ def _list(objs, ics=False, template="{DTSTART:?{DUE:?(date missing)?}?%F %H:%M:%
     TODO: will crash if there are loops in the relationships
     TODO: if there are parent/child-relationships that aren't bidrectionally linked, we may get problems
     """
-    if indent>6:
+    if indent>8:
         import pdb; pdb.set_trace()
     if ics:
         if not objs:

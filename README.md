@@ -2,35 +2,29 @@
 
 Simple command-line CalDAV client, making it possible to add calendar events, browse an agenda and do task management.
 
-This is the experimental new version of my old [calendar-cli project](https://github.com/tobixen/calendar-cli/).  The old repository was forked, so there is a lot of references to calendar-cli here, and quite some of the documentation describes calendar-cli rather than plann.  This will be cleaned up properly before the 1.0-release.
+This is the experimental new version of my old [calendar-cli project](https://github.com/tobixen/calendar-cli/).
 
 ## Other tools
 
-There is a "competing" project at https://github.com/geier/khal - you may want to check it out - it's more mature but probably more complex.  It's using a "vsyncdir" backend - if I've understood it correctly, that involves building a local copy of the calendar.  The philosophy behind calendar-cli is slightly different, calendar-cli is supposed to be a simple cli-based caldav+ical client.  No synchronization, no local storage, just client-side operations.
+There is a "competing" project at https://github.com/geier/khal - you may want to check it out - it's more mature but probably more complex.  It's using a "vsyncdir" backend - if I've understood it correctly, that involves building a local copy of the calendar.  The philosophy behind plann and calendar-cli is slightly different, it is supposed to be a simple cli-based caldav+ical client.  No synchronization, no local storage, just client-side operations.
 
 ## New vs old interface
 
-Based on user feedback I decided to fork `calendar-cli` into `plann`.
-
-DO YOU HAVE OPINIONS ON WHAT COLOR TO PAINT THE BIKE SHED WITH?  VISIT https://github.com/tobixen/calendar-cli/issues/88 NOW!
-
-calendar-cli is the old, mature, production-ready, stable API interface, it will hang around and be supported for some time to come.  plann is the new interface, but until version 1.0 is ready, there will still be functionality in calendar-cli that isn't mirrored to cal.py.
+Based on user feedback I decided to fork `calendar-cli` into `plann`.  calendar-cli is the old, mature, production-ready, stable API interface, it will hang around and be supported for some time to come.  plann is the new interface, but until version 1.0 is ready, there will still be functionality in calendar-cli that isn't mirrored to cal.py.
 
 ## Usage examples
 
-The commands and options will be described further down, however examples often beat documentation.
-
-First, check the tests folder - the file tests.sh shows some basic usage examples.  If you have radicale installed (`sudo pip install radicale`), you can try executing test_calendar-cli.sh in the test folder, it basically sets up a temporary radicale server and executes the tests.sh towards that server.  If test_calendar-cli.sh breaks then _please_ raise an issue on the github or try to reach out through other channels.
+The commands and options will be described further down, however examples often beat documentation.  There is one example directory with some usage examples, and eventually I will also try to write up some test code that can serve as examples.
 
 ## Installation
 
-`plann` depends on quite some python libraries, i.e. pytz, caldav, etc.  "sudo ./setup.py install" should take care of all those eventually.
+`plann` depends on quite some python libraries, i.e. icalendar, caldav, etc.  "sudo ./setup.py install" should take care of all those eventually.
 
 ## Support
 
-\#calendar-cli at irc.oftc.net, eventually t-calendar-cli@tobixen.no, eventually the issue tracker at https://github.com/tobixen/calendar-cli/issues
+\#calendar-cli at irc.oftc.net (I'm not available 24/7 there), eventually t-plann@tobixen.no, eventually the issue tracker at https://github.com/tobixen/plann/issues
 
-Before reaching out, please make sure all the dependencies are installed and that you've installed the latest version of the caldav python library.
+Before reaching out, please make sure all the dependencies are installed, and that you've installed the latest version of the caldav python library.  If you're using the master branch of plann, you should also be using the master branch of the caldav python library.
 
 ## Rationale
 
@@ -69,10 +63,13 @@ The caldav URL should be something like i.e. http://some.davical.server/caldav.p
 
 ### Commands
 
-Currently, `plann` takes three distinct commands:
+The list may not be complete.  `--help` should give a more complete overview.
+
+* list-calendars: lists the calendars that plann can see
+* agenda: Convenience command, lists upcoming events and tasks
 * add: adds new events/items to todo lists/calendars
 * select: select/search/filter tasks/events to list/modify/mark complete and so forth
-* test: simply verify that the server can be connected to with the credentials that are supplied
+* interactive: a collection of interactive convenience commands
 
 ### Event time specification
 
@@ -89,7 +86,7 @@ All of those would eventually be supported in future versions if it's not too di
 * weekday instead of an ISO date (this seems supported already by dateutil.parser.parse)
 * clock time without the date; event will be assumed to start within 24 hours.
 
-Alternatively, endtime or duration can be given through options (not supported as of 0.12)
+Alternatively, endtime or duration can be given through options
 
 ### Getting out customized information through --todo-template and --event-template
 
