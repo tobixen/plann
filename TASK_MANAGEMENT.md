@@ -313,7 +313,7 @@ Those are not much relevant wrg of task handling in plann
 
 ## Daily task management and interactive mode
 
-This is specifically directed towards using plann for daily task management.  See also the [USER GUIDE](USER_GUIDE.md) for more generic user guide.
+This is specifically directed towards using plann for daily task management.  See also the [USER GUIDE](USER_GUIDE.md) for more generic user guide.  I will assume that your calendar server needs to support advanced CalDAV queries (see [CALENDAR SERVER RECOMMENDATIONS](CALENDAR_SERVER_RECOMMENDATIONS.md)).
 
 ### Adding tasks
 
@@ -323,7 +323,7 @@ If the configuration specifies multiple calendars or calendar servers, it may be
 
 Properties can be set by using options like `--set-priority`.  Those options goes to the `todo` subcommand.  Mixing up what options goes where is a big annoyance, I'm considering to find some solution to this.
 
-### "Mandatory" attributes
+### Set "mandatory" attributes
 
 In my task management routines, this information is required for all tasks:
 
@@ -333,7 +333,25 @@ In my task management routines, this information is required for all tasks:
 * priority
 * time estimate
 
+It is possible to add those on the command line while adding tasks.  My idea is that one can do so if having time - but whenever some thoughts like "I need to remember ..." passes through the head, or whenever one notices something that needs to be repaired, etc, one should immediately spend the least possible time to just add it to the calendar - and then later when having better time and sitting by the keyboard one should flesh out the details.
+
 To interactively find and set the missing properties, it's possible to do `plann interactive set-task-attribs`.
+
+### Listing tasks
+
+The `select`-command can be used to list tasks.  The `--todo`-flag will ensure that only pending tasks are listed.  Say that it's a nice day for garden work, then `plann select --todo --category garden list` would probably be the right thing to do.
+
+There exists some other ways too.  `plann agenda` will list out events and tasks with `DTSTART` in the near-term future.  `plann interactive check-due` will go through overdue and near-due tasks and interactively ask the user what to do with them.  Then there is also the "panic planning mode" available, for instance `plann interactive dismiss-panic` - it will list overdue tasks and tasks that you probably won't have time to do within the planned `DUE`.  More on that below.
+
+### Splitting tasks
+
+It's a good idea to split tasks into subtasks ...
+
+* Whenever the task is too big.  Any task taking more than a day should be split up into subtasks (the default is that any task estimated to take more than four hours should be split)
+* If the task has a very strict deadline.  Split it up to actually doing the task (with an "artificial" due date in the near future, a due date that most likely will be pushed) and then "verify that the task was done" with the real due date and the highest (1 or 2) priority.  Otherwise you risk getting the notice at 22:00 on new years eve that you need to do some bureaucraziness "this year".
+* Whenever one doesn't really know how to start working on a task, or whenever a task is procrastinated over and over again simply because the other tasks looks "more interessting".
+
+There are two interactive commands for splitting, `plann interactive split-huge-tasks` and `plann interactive split-high-pri-tasks`. The interactive edit (more on that below) will also support splitting.
 
 ### Editing tasks
 
@@ -343,6 +361,29 @@ Other selectors can be used, like category and summary.  The RFC says that subte
 
 There is another interactive edit function, `plann select --summary 'clean' edit --interactive` will give a small menu for each task selected.
 
-### 
+### Manage-tasks
 
-### Look through (overdue) tasks
+`plann interactive manage-tasks` will do the following:
+
+* `plann interactive split-huge-tasks`
+* `plan interactive split-high-pri-tasks`
+* `plann interactive set-task-attribs`
+* `plann agenda`
+* `plann interactive dismiss-panic --hours-per-day=24`
+* `plann interactive check-due`
+* `plann interactive dismiss-panic --hours-per-day=8`
+
+### Completing tasks
+
+Tasks can be completed through interactive edits, but also through the select command.
+
+Interactive select may be useful - say, you've been working in the garden: `plann select --category garden --interactive complete`, and you should select the tasks to complete.
+
+### "Panic planning"
+
+The "panic planning mode" is available as an interactive command (`plann interactive dismiss-panic`) and through select (`plann --config-section=workcalendar select --to +30d check-for-panic`)
+
+The panic planning will try to figure out if it's still possible to perform all the tasks, and if not it will suggest to procrastinate the lowest-priority tasks.
+
+TODO: write more about the panic planning algorithm.
+
