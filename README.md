@@ -4,6 +4,8 @@ Simple command-line CalDAV client, making it possible to add calendar events, br
 
 This is the experimental new version of my old [calendar-cli project](https://github.com/tobixen/calendar-cli/).
 
+Perhaps this work is moot ... or perhaps just 20 years too late.  Considering the recent progress of chatbots, probably soon all calendar queries can be done in natural language.
+
 ## Other tools
 
 There is a "competing" project at https://github.com/geier/khal - you may want to check it out - it's more mature but probably more complex.  It's using a "vsyncdir" backend - if I've understood it correctly, that involves building a local copy of the calendar.  The philosophy behind plann and calendar-cli is slightly different, it is supposed to be a simple cli-based caldav+ical client.  No synchronization, no local storage, just client-side operations.

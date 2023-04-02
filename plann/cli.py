@@ -1253,7 +1253,7 @@ def _set_task_attribs(ctx):
     _set_something_('priority', 'Enter the PRIORITY', help_url='https://github.com/tobixen/plann/blob/master/TASK_MANAGEMENT.md#priority', default="5")
 
     ## Tasks missing a duration
-    _set_something_('duration', """Enter the DURATION (i.e. 5h or 2d)""", help_url="https://github.com/tobixen/plann/blob/master/TASK_MANAGEMENT.md#priority", objs=duration_missing)
+    _set_something_('duration', """Enter the DURATION (i.e. 5h or 2d)""", help_url="https://github.com/tobixen/plann/blob/master/TASK_MANAGEMENT.md#dtstart-due-duration-completion", objs=duration_missing)
 
 if __name__ == '__main__':
     cli()
