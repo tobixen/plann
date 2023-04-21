@@ -131,7 +131,6 @@ def parse_add_dur(dt, dur):
         return diff
    
 
-## TODO ... (and should be moved somewhere else?)
 def parse_timespec(timespec):
     """parses a timespec and return two timestamps
 
