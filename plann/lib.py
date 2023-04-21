@@ -51,6 +51,9 @@ def _now():
     return datetime.datetime.now().astimezone(tz.implicit_timezone)
 
 def _ensure_ts(dt):
+    """
+    TODO: do we need this?  it's a bit overlapping with parse_dt
+    """
     if hasattr(dt, 'dt'):
         dt = dt.dt
     if dt is None:
@@ -60,25 +63,34 @@ def _ensure_ts(dt):
     return datetime.datetime(dt.year, dt.month, dt.day, tzinfo=tz.implicit_timezone).astimezone(tz.implicit_timezone)
 
 def parse_dt(input, return_type=None):
-    """Parse a datetime or a date.
+    """
+    Convenience-method, it is very liberal in what it accepts as input:
+
+    * Date string or datetime string (uses dateutil.parser)
+    * datetime or date
+    * VDDDTypes from the icalendar library
+    * strings like "+2h" means "two hours in the future"
 
     If return_type is date, return a date - if return_type is
     datetime, return a datetime.  If no return_type is given, try to
-    guess if we should return a date or a datetime.
-
+    guess if we should return a date or a datetime.  Datetime should
+    always have a timezone.
     """
-    if isinstance(input, datetime.date):
+    if hasattr(input, 'dt'):
+        input = input.dt
+    if isinstance(input, datetime.datetime):
         if return_type is datetime.date:
             return input.date()
         return _ensure_ts(input)
     if isinstance(input, datetime.date):
         if return_type is datetime.datetime:
-            return datetime.datetime.combine(input, datetime.time(0,0))
+            return _ensure_ts(input)
         return input
     ## dateutil.parser.parse does not recognize '+2 hours', like date does.
     if input.startswith('+'):
-        return parse_add_dur(datetime.datetime.now(), input[1:])
-    ret = dateutil.parser.parse(input)
+        ret = parse_add_dur(datetime.datetime.now(), input[1:])
+    else:
+        ret = dateutil.parser.parse(input)
     if return_type is datetime.datetime:
         return _ensure_ts(ret)
     elif return_type is datetime.date:

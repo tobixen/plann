@@ -1,9 +1,33 @@
 import pytest
 from datetime import datetime, date
 from plann.lib import tz
-from plann.lib import parse_timespec
+from plann.lib import parse_timespec, parse_dt
 
 class TestParseTimestamp:
+    @pytest.mark.parametrize("input", ["2012-12-12", "2011-11-11 11:11:11", datetime(2011, 11, 11, 11, 11, 11), date(2012, 12, 12), "+14d"])
+    def testParseDt(self, input):
+        tz.implicit_timezone = 'Europe/Helsinki'
+        ts = parse_dt(input)
+        if input == '+14d':
+            assert ts > datetime.now().astimezone(tz.implicit_timezone)
+        else:
+            assert ts in (
+                datetime(2011, 11, 11, 11, 11, 11, tzinfo=tz.implicit_timezone),
+                date(2012, 12, 12))
+        ts = parse_dt(input, return_type=datetime)
+        if input == '+14d':
+            assert ts > datetime.now().astimezone(tz.implicit_timezone)
+        else:
+            assert ts in (
+                datetime(2011, 11, 11, 11, 11, 11, tzinfo=tz.implicit_timezone),
+                datetime(2012, 12, 12, 0, 0, tzinfo=tz.implicit_timezone))
+        ts = parse_dt(input, return_type=date)
+        if input == '+14d':
+            assert ts > date.today()
+        else:
+            assert ts in (
+                date(2011, 11, 11), date(2012, 12, 12))
+
     def _testTimeSpec(self, expected):
         expected_tz=tz.implicit_timezone
         if not expected_tz:
