@@ -1,7 +1,7 @@
 import pytest
-from datetime import datetime, date
+from datetime import datetime, date, timedelta
 from plann.lib import tz
-from plann.lib import parse_timespec, parse_dt
+from plann.lib import parse_timespec, parse_dt, parse_add_dur
 
 class TestParseTimestamp:
     @pytest.mark.parametrize("input", ["2012-12-12", "2011-11-11 11:11:11", datetime(2011, 11, 11, 11, 11, 11), date(2012, 12, 12), "+14d"])
@@ -27,6 +27,29 @@ class TestParseTimestamp:
         else:
             assert ts in (
                 date(2011, 11, 11), date(2012, 12, 12))
+
+    @pytest.mark.parametrize("dt,dur,expected", [
+        (date(2020,2,20),'1d',date(2020,2,21)),
+        (date(2020,2,20),'+1d',date(2020,2,21)),
+        ("2020-02-20",'+1d',date(2020,2,21)),
+
+        ## Should this yield a date or a datetime?  TODO!
+        #(date(2020,2,20),'1s',date(2020,2,20)),
+
+        (datetime(2020,2,20),'1s', datetime(2020,2,20,0,0,1)),
+        (datetime(2020,2,20),'2m', datetime(2020,2,20,0,2,0)),
+        (datetime(2020,2,20),'3h', datetime(2020,2,20,3,0,0)),
+        (datetime(2020,2,20),'4d', datetime(2020,2,24)),
+        (datetime(2020,2,20),'1w1s', datetime(2020,2,27,0,0,1)),
+        (datetime(2020,2,20),'2y1d', datetime(2022,2,21)),
+        (None, '1s', timedelta(seconds=1))
+         ])
+    def test_parseAddDur(self, dt, dur, expected):
+         if isinstance(dt, datetime):
+             dt = dt.replace(tzinfo=tz.implicit_timezone)
+         if isinstance(expected, datetime):
+             expected = expected.replace(tzinfo=tz.implicit_timezone)
+         assert parse_add_dur(dt, dur) == expected
 
     def _testTimeSpec(self, expected):
         expected_tz=tz.implicit_timezone

@@ -126,13 +126,13 @@ def parse_add_dur(dt, dur):
         'y': 1314000
     }
     while dur:
-        rx = re.match(r'([+-]?\d+(?:\.\d+)?)([smhdw])(.*)', dur)
+        rx = re.match(r'([+-]?\d+(?:\.\d+)?)([smhdwy])(.*)', dur)
         assert rx ## TODO: create some nicer error message (timedelta expected but not found)
         i = float(rx.group(1))
         u = rx.group(2)
         dur = rx.group(3)
         if u=='y' and dt:
-            dt = datetime.datetime.combine(datetime.date(dt.year+i, dt.month, dt.day), dt.time())
+            dt = datetime.datetime.combine(datetime.date(dt.year+int(i), dt.month, dt.day), dt.time(), tzinfo=dt.tzinfo)
         else:
             diff = datetime.timedelta(0, i*time_units[u])
             if dt:
