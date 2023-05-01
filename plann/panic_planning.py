@@ -27,6 +27,8 @@ class TimeLine(SortedKeyList):
         self.add(start, end, event)
 
     def add(self, begin, end, obj=None):
+        assert(begin.tzinfo)
+        assert(end.tzinfo)
         #import pdb; pdb.set_trace()
         obj_ = {'begin': begin, 'obj': obj}
         assert end > begin
@@ -113,8 +115,8 @@ def timeline_suggestion(ctx, hours_per_day=4):
             end = min(_ensure_ts(task.get_due()), slot['end'])
             begin = end-duration
         else:
-            begin = task.icalendar_component['DTSTART'].dt
-            end = task.get_due()
+            begin = _ensure_ts(task.icalendar_component['DTSTART'].dt)
+            end = _ensure_ts(task.get_due())
         timeline.add(begin, end, task)
         if slackbalance<timedelta(0):
             timeline.pad_slack(begin, -slackbalance)
