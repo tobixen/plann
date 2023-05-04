@@ -2,13 +2,45 @@
 
 ## TODO: work in progress
 
-from xandikos.web import run_simple_server
+from xandikos.web import XandikosBackend, XandikosApp
 from plann.lib import find_calendars
+import aiohttp
+import aiohttp.web
 import threading
+import requests
 from unittest.mock import MagicMock
+import asyncio
+import os
+import signal
+import tempfile
+import time
 
-def start_xandikos_server():
-    start_simple_server_with_defaults = lambda: run_simple_server
+class InterruptXandikosServer:
+    def graceful_exit_with_pdb(self):
+        import pdb; pdb.set_trace()
+        self.graceful_exit()
+    graceful_exit_ = lambda: 1
+
+interrupt_xandikos_server_singleton = InterruptXandikosServer()
+
+## TODO: this didn't quite work out ...
+## 1) the run_simple_server method does not work in threads due to signal
+## handling (sort of solved, but ...)
+## 2) it's difficult to stop the thread
+def start_xandikos_server_foobar():
+    ## We need to mock up a signal handler
+    global interrupt_xandikos_server_singleton
+    def add_signal_handler(signal, handler):
+        interrupt_xandikos_server_singleton.graceful_exit = handler
+    new_signal_handler = add_signal_handler
+    _orig_get_event_loop = asyncio.get_event_loop
+    def _new_get_event_loop(*largs, **kwargs):
+        loop = _orig_get_event_loop(*largs, **kwargs)
+        loop.add_signal_handler = new_signal_handler
+        return loop
+    asyncio.get_event_loop = _new_get_event_loop
+
+    ## Start xandikos in a thread
     thread = threading.Thread(target=run_simple_server, kwargs={'current_user_principal': '/sometestuser', 'directory': '/tmp/xandikos/', 'autocreate': True})
     thread.start()
     assert thread.is_alive()
@@ -18,14 +50,100 @@ def start_xandikos_server():
         'caldav_url': 'http://localhost:8080/'
     }
 
+def start_xandikos_server_fork():
+    ## We could have tried to do a fork ... but it (probably?) does not work
+    ## very well with pytest (or was it a problem only with nose?)  Testing anyway.
+    pid = os.fork()
+    if not pid:
+        run_simple_server(current_user_principal='/sometestuser', directory='/tmp/xandikos/', autocreate=True)
+    else:
+        return {
+            'caldav_user': 'sometestuser',
+            'caldav_password': 'pass1',
+            'caldav_url': 'http://localhost:8080/',
+            'pid': pid
+        }
+
+def start_xandikos_server():
+    ## Copying the code from the caldav test suite
+    serverdir = tempfile.TemporaryDirectory()
+    serverdir.__enter__()
+    ## Most of the stuff below is cargo-cult-copied from xandikos.web.main
+    ## Later jelmer created some API that could be used for this
+    backend = XandikosBackend(path=serverdir.name)
+    backend._mark_as_principal("/sometestuser/")
+    backend.create_principal("/sometestuser/", create_defaults=True)
+    mainapp = XandikosApp(
+        backend, current_user_principal="sometestuser", strict=True
+    )
+
+    async def xandikos_handler(request):
+        return await mainapp.aiohttp_handler(request, "/")
+
+    xapp = aiohttp.web.Application()
+    xapp.router.add_route("*", "/{path_info:.*}", xandikos_handler)
+    ## https://stackoverflow.com/questions/51610074/how-to-run-an-aiohttp-server-in-a-thread
+    xapp_loop = asyncio.new_event_loop()
+    xapp_runner = aiohttp.web.AppRunner(xapp)
+    asyncio.set_event_loop(xapp_loop)
+    xapp_loop.run_until_complete(xapp_runner.setup())
+    xapp_site = aiohttp.web.TCPSite(
+        xapp_runner, host='localhost', port=8080
+    )
+    xapp_loop.run_until_complete(xapp_site.start())
+
+    def aiohttp_server():
+        xapp_loop.run_forever()
+
+    xandikos_thread = threading.Thread(target=aiohttp_server)
+    xandikos_thread.start()
+    server_params = {
+        "caldav_url": "http://localhost:8080",
+        "caldav_password": "pass1",
+        "caldav_user": "sometestuser",
+        "xandikos_thread": xandikos_thread,
+        "xandikos_app_loop": xapp_loop,
+        "serverdir": serverdir,
+        "xandikos_app_runner": xapp_runner
+    }
+    return server_params
+
+def stop_xandikos_server(server_params):
+    server_params['xandikos_app_loop'].stop()
+    ## ... but the thread may be stuck waiting for a request ...
+    def silly_request():
+        try:
+            requests.get(server_params["caldav_url"])
+        except:
+            pass
+    threading.Thread(target=silly_request).start()
+    i = 0
+    while server_params['xandikos_app_loop'].is_running():
+        time.sleep(0.05)
+        i += 1
+        assert i < 100
+    server_params['xandikos_app_loop'].run_until_complete(server_params['xandikos_app_runner'].cleanup())
+    i = 0
+    while server_params['xandikos_thread'].is_alive():
+        time.sleep(0.05)
+        i += 1
+        assert i < 100
+
+    server_params['serverdir'].__exit__(None, None, None)
+
+    
 ## we start with a monolithic test testing various aspects
 ## of the plann towards a server - but eventually it would
 ## be better to make many small tests, and reset the calendar
 ## server to some known state prior to each test
+## (interrupt_xandikos_server_singleton.graceful_exit() causes locking problem)
 def test_plann():
     conn_details = start_xandikos_server()
-    ctx = MagicMock()
-    #calendars = find_calendars(conn_details, raise_errors=True)
+    try:
+        ctx = MagicMock()
+        calendars = find_calendars(conn_details, raise_errors=True)
+    finally:
+        stop_xandikos_server(conn_details)
 
 ## TODO:
 ## Things to be tested: lib._procrastinate, lib.find_calendars, cli._select, cli._cats, cli._list, cli._interactive_edit, cli._set_something, cli._interactive_ical_edit, cli._edit, cli._check_for_panic, _add_todo, _agenda, _check_due, 
