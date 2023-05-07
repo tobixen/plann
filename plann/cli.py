@@ -623,11 +623,11 @@ def complete(ctx, **kwargs):
 #@click.option('--limit', help='break after finding this many "panic"-items', default=4096)
 @click.option('--timeline-start', help='Timeline starting point')
 @click.option('--timeline-end', help='Timeline ending point')
-@click.option('--include-all-events', help='Include all events (and selected tasks)')
+@click.option('--include-all-events/--no-extra-events', help='Include all events (and selected tasks)')
 @click.option('--print-timeline/--no-print-timeline', help='Print a possible timeline')
 @click.option('--fix-timeline/--no-fix-timeline', help='Make events from the tasks and pin them to the calendar')
 @click.pass_context
-def check_for_panic(**kwargs):
+def check_for_panic(ctx, **kwargs):
     """Check if we need to panic
 
     Assuming we can spend a limited time per day on those tasks
@@ -646,16 +646,19 @@ def check_for_panic(**kwargs):
     TODO: Only tasks supported so far.  It should also warn on
     overlapping events and substract time spent on events.
     """
-    for x in kwargs:
+    for x in list_type(kwargs.keys()):
         if kwargs[x] is None:
             del kwargs[x]
-    return _check_for_panic(**kwargs)
+    return _check_for_panic(ctx, **kwargs)
 
 def _check_for_panic(ctx, hours_per_day, output=True, print_timeline=True, fix_timeline=False, timeline_start=None, timeline_end=None, include_all_events=False):
+    if not timeline_start:
+        timeline_start = _now()
     if include_all_events:
-        ctx.obj['objs'] = [x for x in ctx.obj['objs'] if 'BEGIN:VEVENT' in x.data]
-        _select(ctx, event=True, extend_objects=True)
-    possible_timeline = timeline_suggestion(ctx, hours_per_day=hours_per_day, timeline_end=timeline_end)
+        ctx.obj['objs'] = [x for x in ctx.obj['objs'] if not 'BEGIN:VEVENT' in x.data]
+        _select(ctx, event=True, start=timeline_start, end=timeline_end, extend_objects=True)
+    import pdb; pdb.set_trace()
+    possible_timeline = timeline_suggestion(ctx, hours_per_day=hours_per_day, timeline_end=parse_dt(timeline_end, datetime.datetime))
     def summary(obj):
         if obj is None:
             return "-- unallocated time --"
@@ -674,13 +677,13 @@ def _check_for_panic(ctx, hours_per_day, output=True, print_timeline=True, fix_t
         click.echo("THESE TASKS WILL NEED TO BE PROCRASTINATED:")
         for foo in possible_timeline:
             if 'begin' in foo and 'obj' in foo and not isinstance(foo['obj'], str):
-                if _ensure_ts(foo['begin'])<_now():
+                if _ensure_ts(foo['begin'])<timeline_start:
                     click.echo(f"{foo['obj'].get_due():%FT%H%M %Z} {foo['obj'].icalendar_component.get('PRIORITY', 0)} {_summary(foo['obj'])}")
 
     if fix_timeline:
         for foo in possible_timeline:
             if 'begin' in foo and 'obj' in foo and not isinstance(foo['obj'], str):
-                if _ensure_ts(foo['begin'])>_now():
+                if _ensure_ts(foo['begin'])>timeline_start:
                     click.echo(f"{foo['obj'].get_due():%FT%H%M %Z} {foo['obj'].icalendar_component.get('PRIORITY', 0)} {_summary(foo['obj'])}")
             
     return possible_timeline
@@ -942,9 +945,8 @@ def dismiss_panic(ctx, hours_per_day, lookahead='60d'):
 def _dismiss_panic(ctx, hours_per_day, lookahead='60d'):
     ## TODO: fetch both events and tasks
     lookahead=f"+{lookahead}"
-    _select(ctx=ctx, event=True, start=_now(), end=lookahead)
-    _select(ctx=ctx, todo=True, end=lookahead, extend_objects=True)
-    timeline = _check_for_panic(ctx=ctx, output=False, hours_per_day=hours_per_day)
+    _select(ctx=ctx, todo=True, end=lookahead)
+    timeline = _check_for_panic(ctx=ctx, output=False, hours_per_day=hours_per_day, timeline_end=parse_add_dur(dur=end), include_all_events=True)
 
     if not timeline or _ensure_ts(timeline[0]['begin'])>_now():
         click.echo("No need to panic :-)")
@@ -1082,7 +1084,6 @@ def _relships_by_type(obj, reltype_wanted=None):
         back_rels = ret[reltype][-1].icalendar_component.get('RELATED-TO')
         if not back_rels:
             ## TODO: we should ensure the relationship is bidirectional
-            import pdb; pdb.set_trace()
             back_rels = []
             
         elif not isinstance(back_rels, list_type):

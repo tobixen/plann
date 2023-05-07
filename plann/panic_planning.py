@@ -121,7 +121,7 @@ def timeline_suggestion(ctx, hours_per_day=4, timeline_end=None):
         slackbalance -= duration*(24-hours_per_day)/hours_per_day
         slot, slackbalance = timeline.find_opening(end, duration, slackbalance)
         if 'end' in slot:
-            end = min(due, slot['end'])
+            end = min(end, slot['end'])
         begin = end - duration
         timeline.add(begin, end, task)
         if slackbalance<timedelta(0):
