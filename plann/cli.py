@@ -621,9 +621,13 @@ def complete(ctx, **kwargs):
 @select.command()
 @click.option('--hours-per-day', help='how many hours per day you expect to be able to dedicate to those tasks/events', default=4)
 #@click.option('--limit', help='break after finding this many "panic"-items', default=4096)
+@click.option('--timeline-start', help='Timeline starting point')
+@click.option('--timeline-end', help='Timeline ending point')
+@click.option('--include-all-events', help='Include all events (and selected tasks)')
 @click.option('--print-timeline/--no-print-timeline', help='Print a possible timeline')
+@click.option('--fix-timeline/--no-fix-timeline', help='Make events from the tasks and pin them to the calendar')
 @click.pass_context
-def check_for_panic(ctx, hours_per_day, print_timeline):
+def check_for_panic(**kwargs):
     """Check if we need to panic
 
     Assuming we can spend a limited time per day on those tasks
@@ -642,10 +646,16 @@ def check_for_panic(ctx, hours_per_day, print_timeline):
     TODO: Only tasks supported so far.  It should also warn on
     overlapping events and substract time spent on events.
     """
-    return _check_for_panic(ctx, hours_per_day, output=True, print_timeline=True)
+    for x in kwargs:
+        if kwargs[x] is None:
+            del kwargs[x]
+    return _check_for_panic(**kwargs)
 
-def _check_for_panic(ctx, hours_per_day, output=True, print_timeline=True):
-    possible_timeline = timeline_suggestion(ctx, hours_per_day=hours_per_day)
+def _check_for_panic(ctx, hours_per_day, output=True, print_timeline=True, fix_timeline=False, timeline_start=None, timeline_end=None, include_all_events=False):
+    if include_all_events:
+        ctx.obj['objs'] = [x for x in ctx.obj['objs'] if 'BEGIN:VEVENT' in x.data]
+        _select(ctx, event=True, extend_objects=True)
+    possible_timeline = timeline_suggestion(ctx, hours_per_day=hours_per_day, timeline_end=timeline_end)
     def summary(obj):
         if obj is None:
             return "-- unallocated time --"
@@ -666,6 +676,13 @@ def _check_for_panic(ctx, hours_per_day, output=True, print_timeline=True):
             if 'begin' in foo and 'obj' in foo and not isinstance(foo['obj'], str):
                 if _ensure_ts(foo['begin'])<_now():
                     click.echo(f"{foo['obj'].get_due():%FT%H%M %Z} {foo['obj'].icalendar_component.get('PRIORITY', 0)} {_summary(foo['obj'])}")
+
+    if fix_timeline:
+        for foo in possible_timeline:
+            if 'begin' in foo and 'obj' in foo and not isinstance(foo['obj'], str):
+                if _ensure_ts(foo['begin'])>_now():
+                    click.echo(f"{foo['obj'].get_due():%FT%H%M %Z} {foo['obj'].icalendar_component.get('PRIORITY', 0)} {_summary(foo['obj'])}")
+            
     return possible_timeline
 
 @select.command()

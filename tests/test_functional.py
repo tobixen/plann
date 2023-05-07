@@ -4,6 +4,9 @@
 
 from xandikos.web import XandikosBackend, XandikosApp
 from plann.lib import find_calendars
+from plann.cli import _add_todo, _select, _list
+from plann.panic_planning import timeline_suggestion
+from caldav import Todo
 import aiohttp
 import aiohttp.web
 import threading
@@ -14,6 +17,7 @@ import os
 import signal
 import tempfile
 import time
+from tests.test_panic import datetime_
 
 class InterruptXandikosServer:
     def graceful_exit_with_pdb(self):
@@ -141,7 +145,46 @@ def test_plann():
     conn_details = start_xandikos_server()
     try:
         ctx = MagicMock()
-        calendars = find_calendars(conn_details, raise_errors=True)
+        ctx.obj = dict()
+        ctx.obj['calendars'] = find_calendars(conn_details, raise_errors=True)
+        todo1 = _add_todo(ctx, summary=['make plann good'], set_due='2012-12-20 23:15:00', set_dtstart='2012-12-20 22:15:00')
+        todo2 = _add_todo(ctx, summary=['make plann even better'], set_parent=[todo1.icalendar_component['uid']], set_due='2012-12-21 23:15:00', set_dtstart='2012-12-21 22:15:00')
+        _select(ctx, todo=True, skip_children=True)
+        assert len(ctx.obj['objs'])==1
+        _select(ctx, todo=True, skip_parents=True)
+        _list(ctx, top_down=True)
+        _list(ctx, bottom_up=True)
+        assert len(ctx.obj['objs'])==1
+        _select(ctx, todo=True)
+        assert len(ctx.obj['objs'])==2
+        _select(ctx, summary='make plann good')
+        ## this breaks with xandikos
+        #assert len(ctx.obj['objs'])==1
+        _select(ctx, summary='make plann good', todo=True)
+        assert len(ctx.obj['objs'])==1
+
+        _select(ctx, todo=True)
+        assert len(ctx.obj['objs'])==2
+        ## panic planning, timeline_suggestion.
+        ## We have two tasks in the calendar, each with one hour duration
+        timeline = timeline_suggestion(ctx, hours_per_day=24)
+        assert(timeline.count() == 2)
+        foo = timeline.get(datetime_(year=2012, month=12, day=20, hour=22, minute=35))
+        assert foo['begin'] == datetime_(year=2012, month=12, day=20, hour=22, minute=15)
+        assert foo['end'] == datetime_(year=2012, month=12, day=20, hour=23, minute=15)
+
+        ## panic planning, timeline_suggestion with timeline_end
+        ## Those two tasks should be neatly stacked up 
+        assert len(ctx.obj['objs'])==2
+        timeline = timeline_suggestion(ctx, timeline_end=datetime_(year=2011, month=11, day=11, hour=11, minute=11), hours_per_day=24)
+        assert(timeline.count() == 2)
+        foo = timeline.get(datetime_(year=2011, month=11, day=11, hour=11, minute=10))
+        assert foo['begin'] == datetime_(year=2011, month=11, day=11, hour=10, minute=11)
+        assert foo['end'] == datetime_(year=2011, month=11, day=11, hour=11, minute=11)
+        foo = timeline.get(datetime_(year=2011, month=11, day=11, hour=10, minute=10))
+        assert foo['begin'] == datetime_(year=2011, month=11, day=11, hour=9, minute=11)
+        assert foo['end'] == datetime_(year=2011, month=11, day=11, hour=10, minute=11)
+        
     finally:
         stop_xandikos_server(conn_details)
 

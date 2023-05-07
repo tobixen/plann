@@ -13,7 +13,11 @@ class TimeLine(SortedKeyList):
     """
     def __init__(self):
         SortedKeyList.__init__(self, key=lambda x: x['begin'])
-        
+
+    def count(self):
+        """Includes all real objects on the list.  Ignores start and end markers, as well as slack"""
+        return len([x for x in self if 'obj' in x and x['obj'] != 'slack'])
+
     def add_event(self, event):
         start = event.icalendar_component.get('dtstart')
         end = event.icalendar_component.get('dtend')
@@ -89,7 +93,7 @@ class TimeLine(SortedKeyList):
         if duration:
             self.add(begin=end-duration, end=end, obj='slack')
 
-def timeline_suggestion(ctx, hours_per_day=4):
+def timeline_suggestion(ctx, hours_per_day=4, timeline_end=None):
     timeline = TimeLine()
     objs = ctx.obj['objs']
     events = [x for x in objs if 'BEGIN:VEVENT' in x.data]
@@ -107,16 +111,18 @@ def timeline_suggestion(ctx, hours_per_day=4):
     tasks.sort(key=lambda x: (x.icalendar_component.get('PRIORITY',0), _now()-_ensure_ts(x.get_due())))
     slackbalance = timedelta(0)
     for task in tasks:
-        due = _ensure_ts(task.get_due())
+        due = task.get_due()
+        if due is None:
+            due = timeline_end
+        end = _ensure_ts(due)
+        if timeline_end:
+            end = min(end, timeline_end)
         duration = task.get_duration()
         slackbalance -= duration*(24-hours_per_day)/hours_per_day
-        slot, slackbalance = timeline.find_opening(due, duration, slackbalance)
+        slot, slackbalance = timeline.find_opening(end, duration, slackbalance)
         if 'end' in slot:
-            end = min(_ensure_ts(task.get_due()), slot['end'])
-            begin = end-duration
-        else:
-            begin = _ensure_ts(task.icalendar_component['DTSTART'].dt)
-            end = _ensure_ts(task.get_due())
+            end = min(due, slot['end'])
+        begin = end - duration
         timeline.add(begin, end, task)
         if slackbalance<timedelta(0):
             timeline.pad_slack(begin, -slackbalance)
