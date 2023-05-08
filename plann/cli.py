@@ -946,7 +946,7 @@ def _dismiss_panic(ctx, hours_per_day, lookahead='60d'):
     ## TODO: fetch both events and tasks
     lookahead=f"+{lookahead}"
     _select(ctx=ctx, todo=True, end=lookahead)
-    timeline = _check_for_panic(ctx=ctx, output=False, hours_per_day=hours_per_day, timeline_end=parse_add_dur(dur=end), include_all_events=True)
+    timeline = _check_for_panic(ctx=ctx, output=False, hours_per_day=hours_per_day, timeline_end=parse_add_dur(dt=None, dur=lookahead), include_all_events=True)
 
     if not timeline or _ensure_ts(timeline[0]['begin'])>_now():
         click.echo("No need to panic :-)")
