@@ -20,7 +20,7 @@ class TimeLine(SortedKeyList):
 
     def add_event(self, event):
         start = event.icalendar_component.get('dtstart')
-        end = event.icalendar_component.get('dtend')
+        end = event.get_dtend()
         if not end and start and not isinstance(start.dt, datetime):
             end = start.dt + timedelta(days=1)
         if not end or not start:
@@ -33,7 +33,6 @@ class TimeLine(SortedKeyList):
     def add(self, begin, end, obj=None):
         assert(begin.tzinfo)
         assert(end.tzinfo)
-        #import pdb; pdb.set_trace()
         obj_ = {'begin': begin, 'obj': obj}
         assert end > begin
         i = self.bisect_right(obj_)

@@ -169,6 +169,7 @@ def _set_attr_options(verb="", desc=""):
 @click.option('--skip-children/--include-children', help="Skip children if it's parent is selected.  Useful for getting an overview of the big picture if children are subtasks", default=False)
 @click.option('--limit', help='Number of objects to show', type=int)
 @click.option('--offset', help='Skip the first objects', type=int)
+@click.option('--freebusyhack', help='removes almost everything from the ical and replaces the summary with the provided string.  (this option is to be replaced with something better in a future release)')
 @click.pass_context
 def select(*largs, **kwargs):
     """Search command, allows listing, editing, etc
@@ -198,7 +199,7 @@ def _select(ctx, interactive=False, **kwargs):
             if click.confirm(f"select {_summary(obj)}?"):
                 ctx.obj['objs'].append(obj)
 
-def __select(ctx, extend_objects=False, all=None, uid=[], abort_on_missing_uid=None, sort_key=[], skip_parents=None, skip_children=None, limit=None, offset=None, **kwargs_):
+def __select(ctx, extend_objects=False, all=None, uid=[], abort_on_missing_uid=None, sort_key=[], skip_parents=None, skip_children=None, limit=None, offset=None, freebusyhack=None, **kwargs_):
     """
     select/search/filter tasks/events, for listing/editing/deleting, etc
     """
@@ -314,6 +315,19 @@ def __select(ctx, extend_objects=False, all=None, uid=[], abort_on_missing_uid=N
         if dtstart and dtend and dtstart.dt > dtend.dt:
             logging.error(f"task with uuid {comp['uid']} as dtstart after dtend/due")
 
+    ## I need a way to copy time information from one calendar to another
+    ## (typically between private and work calendars) without carrying over
+    ## (too much potentially) private/confidential information.
+    if freebusyhack:
+        for obj in ctx.obj['objs']:
+            comp = obj.icalendar_component
+            attribs = list_type(comp.keys())
+            for attr in attribs:
+                if not attr in ('DUE', 'DTEND', 'DTSTART', 'DTSTAMP', 'UID', 'RRULE', 'SEQUENCE', 'EXDATE', 'STATUS', 'CLASS'):
+                    del comp[attr]
+                if attr == 'SUMMARY':
+                    comp[attr] = freebusyhack
+
 @select.command()
 @click.pass_context
 def list_categories(ctx):
@@ -375,7 +389,7 @@ def _list(objs, ics=False, template="{DTSTART:?{DUE:?(date missing)?}?%F %H:%M:%
             continue
 
         uid = obj.icalendar_component['UID']
-        if uid in uids:
+        if uid in uids and not 'RECURRENCE-ID' in obj.icalendar_component:
             continue
         else:
             uids.add(uid)
@@ -621,8 +635,8 @@ def complete(ctx, **kwargs):
 @select.command()
 @click.option('--hours-per-day', help='how many hours per day you expect to be able to dedicate to those tasks/events', default=4)
 #@click.option('--limit', help='break after finding this many "panic"-items', default=4096)
-@click.option('--timeline-start', help='Timeline starting point')
-@click.option('--timeline-end', help='Timeline ending point')
+@click.option('--timeline-start', help='Timeline starting point (default=now)')
+@click.option('--timeline-end', help='Timeline ending point (default=in 1 year)')
 @click.option('--include-all-events/--no-extra-events', help='Include all events (and selected tasks)')
 @click.option('--print-timeline/--no-print-timeline', help='Print a possible timeline')
 @click.option('--fix-timeline/--no-fix-timeline', help='Make events from the tasks and pin them to the calendar')
@@ -654,10 +668,11 @@ def check_for_panic(ctx, **kwargs):
 def _check_for_panic(ctx, hours_per_day, output=True, print_timeline=True, fix_timeline=False, timeline_start=None, timeline_end=None, include_all_events=False):
     if not timeline_start:
         timeline_start = _now()
+    if not timeline_end:
+        timeline_end = '+1y'
     if include_all_events:
         ctx.obj['objs'] = [x for x in ctx.obj['objs'] if not 'BEGIN:VEVENT' in x.data]
         _select(ctx, event=True, start=timeline_start, end=timeline_end, extend_objects=True)
-    import pdb; pdb.set_trace()
     possible_timeline = timeline_suggestion(ctx, hours_per_day=hours_per_day, timeline_end=parse_dt(timeline_end, datetime.datetime))
     def summary(obj):
         if obj is None:
@@ -946,7 +961,7 @@ def _dismiss_panic(ctx, hours_per_day, lookahead='60d'):
     ## TODO: fetch both events and tasks
     lookahead=f"+{lookahead}"
     _select(ctx=ctx, todo=True, end=lookahead)
-    timeline = _check_for_panic(ctx=ctx, output=False, hours_per_day=hours_per_day, timeline_end=parse_add_dur(dt=None, dur=lookahead), include_all_events=True)
+    timeline = _check_for_panic(ctx=ctx, output=False, hours_per_day=hours_per_day, timeline_end=lookahead, include_all_events=True)
 
     if not timeline or _ensure_ts(timeline[0]['begin'])>_now():
         click.echo("No need to panic :-)")
