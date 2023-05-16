@@ -4,7 +4,7 @@
 
 from xandikos.web import XandikosBackend, XandikosApp
 from plann.lib import find_calendars
-from plann.cli import _add_todo, _select, _list
+from plann.cli import _add_todo, _select, _list, _check_for_panic
 from plann.panic_planning import timeline_suggestion
 from caldav import Todo
 import aiohttp
@@ -163,6 +163,8 @@ def test_plann():
         _select(ctx, summary='make plann good', todo=True)
         assert len(ctx.obj['objs'])==1
 
+        _select(ctx, event=True)
+        assert len(ctx.obj['objs'])==0
         _select(ctx, todo=True)
         assert len(ctx.obj['objs'])==2
         ## panic planning, timeline_suggestion.
@@ -184,6 +186,15 @@ def test_plann():
         foo = timeline.get(datetime_(year=2011, month=11, day=11, hour=10, minute=10))
         assert foo['begin'] == datetime_(year=2011, month=11, day=11, hour=9, minute=11)
         assert foo['end'] == datetime_(year=2011, month=11, day=11, hour=10, minute=11)
+        
+        ## fix_timeline feature
+        _check_for_panic(ctx, timeline_start='2010-10-10', timeline_end=datetime_(year=2011, month=11, day=11, hour=11, minute=11), hours_per_day=24, fix_timeline=True, include_all_events=True)
+        _select(ctx, event=True)
+        assert len(ctx.obj['objs'])==2
+        ## Re-running it should be a noop
+        _check_for_panic(ctx, timeline_start='2010-10-10', timeline_end=datetime_(year=2011, month=11, day=11, hour=11, minute=11), hours_per_day=24, fix_timeline=True, include_all_events=True)
+        _select(ctx, event=True)
+        assert len(ctx.obj['objs'])==2
         
     finally:
         stop_xandikos_server(conn_details)

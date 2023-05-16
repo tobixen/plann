@@ -96,9 +96,20 @@ def timeline_suggestion(ctx, hours_per_day=4, timeline_end=None):
     timeline = TimeLine()
     objs = ctx.obj['objs']
     events = [x for x in objs if 'BEGIN:VEVENT' in x.data]
+    event_parents = []
+    for event in events:
+        comp = event.icalendar_component
+        if 'RELATED-TO' in comp:
+            rels = comp['RELATED-TO']
+            if not isinstance(rels, list):
+                rels = [ rels ]
+            for rel in rels:
+                if rel.params.get('RELTYPE') == 'PARENT':
+                    event_parents.append(str(rel))
     tasks = [x for x in objs if 'BEGIN:VTODO' in x.data]
     assert len(events) + len(tasks) == len(objs)
     tasks = [x for x in tasks if '\nDUE' in x.data and '\nDTSTART' in x.data]
+    
     for event in events:
         if not 'BEGIN:VEVENT' in event.data:
             continue
@@ -110,6 +121,9 @@ def timeline_suggestion(ctx, hours_per_day=4, timeline_end=None):
     tasks.sort(key=lambda x: (x.icalendar_component.get('PRIORITY',0), _now()-_ensure_ts(x.get_due())))
     slackbalance = timedelta(0)
     for task in tasks:
+        if str(task.icalendar_component['UID']) in event_parents:
+            ## task is presumably already included in timeline
+            continue
         due = task.get_due()
         if due is None:
             due = timeline_end

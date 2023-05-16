@@ -158,6 +158,16 @@ def parse_timespec(timespec):
 
     One timestamp should be accepted, and the second return value will be None.
     """
+    if isinstance(timespec, datetime.date):
+        return (timespec,timespec)
+
+    if (
+            isinstance(timespec, tuple) and
+            len(timespec)==2 and
+            isinstance(timespec[0], datetime.date) and
+            isinstance(timespec[1], datetime.date)):
+        return timespec
+    
     ## calendar-cli format, 1998-10-03 15:00+2h
     if '+' in timespec:
         rx = re.match(r'(.*)\+((?:\d+(?:\.\d+)?[smhdwy])+)$', timespec)

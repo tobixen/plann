@@ -668,12 +668,15 @@ def check_for_panic(ctx, **kwargs):
 def _check_for_panic(ctx, hours_per_day, output=True, print_timeline=True, fix_timeline=False, timeline_start=None, timeline_end=None, include_all_events=False):
     if not timeline_start:
         timeline_start = _now()
+    else:
+        timeline_start = parse_dt(timeline_start, datetime.datetime)
     if not timeline_end:
-        timeline_end = '+1y'
+        timeline_end = parse_add_dur(timeline_start, '+1y')
+    timeline_end = parse_dt(timeline_end, datetime.datetime)
     if include_all_events:
         ctx.obj['objs'] = [x for x in ctx.obj['objs'] if not 'BEGIN:VEVENT' in x.data]
         _select(ctx, event=True, start=timeline_start, end=timeline_end, extend_objects=True)
-    possible_timeline = timeline_suggestion(ctx, hours_per_day=hours_per_day, timeline_end=parse_dt(timeline_end, datetime.datetime))
+    possible_timeline = timeline_suggestion(ctx, hours_per_day=hours_per_day, timeline_end=timeline_end)
     def summary(obj):
         if obj is None:
             return "-- unallocated time --"
@@ -696,11 +699,16 @@ def _check_for_panic(ctx, hours_per_day, output=True, print_timeline=True, fix_t
                     click.echo(f"{foo['obj'].get_due():%FT%H%M %Z} {foo['obj'].icalendar_component.get('PRIORITY', 0)} {_summary(foo['obj'])}")
 
     if fix_timeline:
-        for foo in possible_timeline:
+        for i in range(len(possible_timeline)-1):
+            foo = possible_timeline[i]
+            next = possible_timeline[i+1]
             if 'begin' in foo and 'obj' in foo and not isinstance(foo['obj'], str):
                 if _ensure_ts(foo['begin'])>timeline_start:
-                    click.echo(f"{foo['obj'].get_due():%FT%H%M %Z} {foo['obj'].icalendar_component.get('PRIORITY', 0)} {_summary(foo['obj'])}")
-            
+                    obj = foo['obj']
+                    if isinstance(obj, caldav.Todo):
+                        comp = obj.icalendar_component
+                        ## TODO: copy other attributes?
+                        _add_event(ctx, summary=_summary(obj), timespec=(foo['begin'], next['begin']), first_calendar=True, set_parent=[comp['UID']])
     return possible_timeline
 
 @select.command()
@@ -840,6 +848,9 @@ def event(ctx, timespec, **kwargs):
     kal add event "final bughunting session" 2004-11-25+5d
     kal add event "release party" 2004-11-30T19:00+2h
     """
+    _add_event(ctx, timespec, **kwargs)
+
+def _add_event(ctx, timespec, **kwargs):
     _process_set_args(ctx, kwargs)
     for cal in ctx.obj['calendars']:
         (dtstart, dtend) = parse_timespec(timespec)
@@ -1009,7 +1020,7 @@ def _dismiss_panic(ctx, hours_per_day, lookahead='60d'):
             for item in first_low_pri_tasks:
                 _interactive_edit(item['obj'])
         else:
-            _procrastinate([x['obj'] for x in first_low_pri_tasks], procrastination_time, with_children='interactive', with_parent='interactive', with_family='interactive', check_dependent='interactive', err_callback=click.echo, confirm_callback=click.confirm)
+            _procrastinate([x['obj'] for x in first_low_pri_tasks], procrastination_time,  check_dependent='interactive', err_callback=click.echo, confirm_callback=click.confirm)
 
         if other_low_pri_tasks:
             click.echo(f"There are {len(other_low_pri_tasks)} later pri>={priority} tasks selected which should maybe probably be considered to be postponed a bit as well")
