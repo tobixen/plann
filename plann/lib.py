@@ -23,8 +23,8 @@ class Tz():
     """
     show_native_timezone: bool=False
     _implicit_timezone: zoneinfo.ZoneInfo = None
-    _store_timezone: zoneinfo.ZoneInfo = None
-    
+    _store_timezone: zoneinfo.ZoneInfo = zoneinfo.ZoneInfo('UTC')
+
     @property
     def implicit_timezone(self):
         return self._implicit_timezone
