@@ -170,6 +170,7 @@ def _set_attr_options(verb="", desc=""):
 @click.option('--limit', help='Number of objects to show', type=int)
 @click.option('--offset', help='Skip the first objects', type=int)
 @click.option('--freebusyhack', help='removes almost everything from the ical and replaces the summary with the provided string.  (this option is to be replaced with something better in a future release)')
+@click.option('--pinned-tasks/--no-pinned-tasks', default=None, help='select all/no pinned tasks')
 @click.pass_context
 def select(*largs, **kwargs):
     """Search command, allows listing, editing, etc
@@ -199,7 +200,7 @@ def _select(ctx, interactive=False, **kwargs):
             if click.confirm(f"select {_summary(obj)}?"):
                 ctx.obj['objs'].append(obj)
 
-def __select(ctx, extend_objects=False, all=None, uid=[], abort_on_missing_uid=None, sort_key=[], skip_parents=None, skip_children=None, limit=None, offset=None, freebusyhack=None, **kwargs_):
+def __select(ctx, extend_objects=False, all=None, uid=[], abort_on_missing_uid=None, sort_key=[], skip_parents=None, skip_children=None, limit=None, offset=None, freebusyhack=None, pinned_tasks=None, **kwargs_):
     """
     select/search/filter tasks/events, for listing/editing/deleting, etc
     """
@@ -246,6 +247,10 @@ def __select(ctx, extend_objects=False, all=None, uid=[], abort_on_missing_uid=N
     if uid:
         return
 
+    if pinned_tasks:
+        kwargs['event'] = True
+        kwargs['todo'] = None
+
     if kwargs_.get('start') or kwargs_.get('end'):
         if kwargs_.get('start'):
             kwargs['start'] = parse_dt(kwargs['start'])
@@ -282,6 +287,23 @@ def __select(ctx, extend_objects=False, all=None, uid=[], abort_on_missing_uid=N
                 objs.pop(i)
                 continue
             i += 1
+
+    if pinned_tasks is not None:
+        ret_objs = []
+        for obj in ctx.obj['objs']:
+            if isinstance(obj, caldav.Event):
+                if obj.icalendar_component.get('STATUS', '') != 'CANCELLED':
+                    parents = _relships_by_type(obj, 'PARENT').get('PARENT',[])
+                    if any(x for x in parents if isinstance(x, caldav.Todo) and x.icalendar_component.get('STATUS', 'NEEDS-ACTION') == 'NEEDS-ACTION') == pinned_tasks:
+                        if kwargs_.get('todo'):
+                            ret_objs.extend([x for x in parents if isinstance(x, caldav.Todo)  and x.icalendar_component.get('STATUS', 'NEEDS-ACTION') == 'NEEDS-ACTION'])
+                        else:
+                            ret_objs.append(obj)
+            if isinstance(obj, caldav.Todo) and not pinned_tasks:
+                children = _relships_by_type(obj, 'CHILD').get('CHILD',[])
+                if not any(x.icalendar_comp.get('STATUS', '')!='CANCELLED' for x in parents if isinstance(x, event.Event)):
+                    ret_objs.append(obj)
+        ctx.obj['objs'] = ret_objs
 
     ## OPTIMIZE TODO: sorting the list multiple times rather than once is a bit of brute force, if there are several sort keys and long list of objects, we should sort once and consider all sort keys while sorting
     ## TODO: Consider that an object may be expanded and contain lots of event instances.  We will then need to expand the caldav.Event object into multiple objects, each containing one recurrance instance.  This should probably be done on the caldav side of things.
@@ -544,7 +566,7 @@ def _set_something(obj, arg, value):
     else:
         if arg in comp:
             comp.pop(arg)
-            comp.add(arg, value)
+        comp.add(arg, value)
 
 def _interactive_ical_edit(objs):
     with tempfile.NamedTemporaryFile(mode='w', encoding='UTF-8', delete=False) as tmpfile:
@@ -1103,7 +1125,11 @@ def _relships_by_type(obj, reltype_wanted=None):
         reltype = rel.params.get('RELTYPE', 'PARENT')
         if reltype_wanted and not reltype in reltype_wanted:
             continue
-        other = obj.parent.object_by_uid(rel)
+        try:
+            other = obj.parent.object_by_uid(rel)
+        except caldav.error.NotFoundError:
+            ## TODO ... delete invalid relation?
+            continue
         ret[reltype].append(other)
             
         ## Consistency check ... TODO ... look more into this

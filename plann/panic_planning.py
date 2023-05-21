@@ -99,7 +99,9 @@ def timeline_suggestion(ctx, hours_per_day=4, timeline_end=None):
     event_parents = []
     for event in events:
         comp = event.icalendar_component
-        if 'RELATED-TO' in comp:
+        if comp.get('STATUS', '') == 'CANCELLED':
+            continue
+        if 'RELATED-TO' in comp and event.get_dtend()>_now():
             rels = comp['RELATED-TO']
             if not isinstance(rels, list):
                 rels = [ rels ]
@@ -108,7 +110,7 @@ def timeline_suggestion(ctx, hours_per_day=4, timeline_end=None):
                     event_parents.append(str(rel))
     tasks = [x for x in objs if 'BEGIN:VTODO' in x.data]
     assert len(events) + len(tasks) == len(objs)
-    tasks = [x for x in tasks if '\nDUE' in x.data and '\nDTSTART' in x.data]
+    tasks = [x for x in tasks if ('\nDUE' in x.data or '\nDURATION' in x.data) and '\nDTSTART' in x.data]
     
     for event in events:
         if not 'BEGIN:VEVENT' in event.data:
