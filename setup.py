@@ -26,6 +26,7 @@ setup(
         "Topic :: Internet :: WWW/HTTP :: Dynamic Content :: CGI Tools/Libraries",
     ],
     py_modules=['plann'],
+    tests_requires=['xandikos>=0.2.8'],
     install_requires=[
         'icalendar',
         'caldav>=0.12-dev0',
