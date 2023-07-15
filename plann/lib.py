@@ -2,6 +2,8 @@
 
 TODO: Should consider to remove the leading underscore from many of
 them, document them and write up test code.
+
+TODO: Move time handling to a separate timespec.py
 """
 
 import caldav
@@ -12,6 +14,7 @@ import logging
 import re
 from dataclasses import dataclass
 import zoneinfo
+from collections import defaultdict
 
 ## Singleton (aka global variable)
 @dataclass
@@ -59,7 +62,10 @@ def _ensure_ts(dt):
     if dt is None:
         return datetime.datetime(1970,1,1).astimezone(tz.implicit_timezone)
     if isinstance(dt, datetime.datetime):
-        return dt.replace(tzinfo=tz.implicit_timezone).astimezone(tz.implicit_timezone)
+        if not dt.tzinfo:
+            return dt.replace(tzinfo=tz.implicit_timezone).astimezone(tz.implicit_timezone)
+        else:
+            return dt
     return datetime.datetime(dt.year, dt.month, dt.day, tzinfo=tz.implicit_timezone).astimezone(tz.implicit_timezone)
 
 def parse_dt(input, return_type=None):
@@ -269,9 +275,9 @@ def _procrastinate(objs, delay, check_dependent="error", with_children=False, wi
         if x.icalendar_component.get('RELATED-TO'):
             if with_family == 'interactive':
                 with_family = confirm_callback("There are relations - postpone the whole family tree?")
-            if not with_family and with_parent == 'interactive' and _hasreltype(x, {'PARENT', 'FIRST', 'DEPENDS-ON', 'STARTTOFINISH'}):
+            if not with_family and with_parent == 'interactive' and _hasreltype(x, parentlike):
                 with_parent = confirm_callback("There exists (a) parent(s) - postpone the parent?")
-            if not with_family and with_children == 'interactive' and _hasreltype(x, {'CHILD', 'NEXT', 'FINISHTOSTART'}):
+            if not with_family and with_children == 'interactive' and _hasreltype(x, childlike):
                 with_children = confirm_callback("There exists children - postpone the children?")
         if with_family:
             parents = x.get_relatives(reltypes={'PARENT', 'FIRST', 'DEPENDS-ON', 'STARTTOFINISH'}) ## TODO: consider reverse FINISHTOSTART, STARTTOSTART, FINISHTOFINISH and SIBLING
@@ -312,4 +318,109 @@ def _procrastinate(objs, delay, check_dependent="error", with_children=False, wi
             children = x.get_relatives(reltypes={'CHILD', 'NEXT', 'FINISHTOSTART'}) ## TODO: consider reverse relationships
             _procrastinate(children, delay, check_dependent, with_children=True, with_family=False, with_parent=False, err_callback=err_callback, confirm_callback=confirm_callback, recursivity=recursivity+1)
 
+def _adjust_relations(obj, relations_wanted={}):
+    """
+    obj is an event/task/journal object from caldav library.
+    relations_wanted is a dict with RELTYPE as key and list or set of UUIDs as value.
+    reltypes in OBJ that does not exist in RELATIONS_WANTED will be ignored.
+    TODO: NOT SUPPORTED YET:
+    If {'childlike'=>[]} or {'parentlike'=>[]} is in the dict, then:
+      1) All "parentlike" or "childlike" relations not in relations_wanted will be wiped
+      2) The original RELTYPE will be kept if ... TODO: we need another parameter for this
+    """
 
+
+childlike = {'CHILD', 'NEXT', 'FINISHTOSTART'}
+parentlike = {'PARENT', 'FIRST', 'DEPENDS-ON', 'STARTTOFINISH'}
+
+def _relatedto_by_type(obj, reltype_wanted=None):
+    ## TODO: get_relatives refactoring
+    ret = defaultdict(set)
+    rts = _rels(obj)
+    if not rts:
+        return ret
+    if reltype_wanted == 'childlike':
+        reltype_wanted = childlike
+    elif reltype_wanted == 'parentlike':
+        reltype_wanted = parentlike
+    if isinstance(reltype_wanted, str):
+        reltype_wanted = {reltype_wanted}
+    for rel in rts:
+        reltype = rel.params.get('RELTYPE', 'PARENT')
+        if reltype_wanted and not reltype in reltype_wanted:
+            continue
+        ret[reltype].add(str(rel))
+    return ret
+
+def _relships_by_type(obj, reltype_wanted=None):
+    rels_by_type = _relatedto_by_type(obj, reltype_wanted)
+    ret = defaultdict(list)
+    for reltype in rels_by_type:
+        for rel in ret[reltype]:
+            try:
+                other = obj.parent.object_by_uid(rel)
+            except caldav.error.NotFoundError:
+                ## TODO ... delete invalid relation?
+                continue
+            ret[reltype].append(other)
+            
+            ## Consistency check ... TODO ... look more into this
+            back_rels = _rels(ret[reltype][-1])
+            if not back_rels:
+                ## TODO: we should ensure the relationship is bidirectional
+                back_rels = []
+
+            elif not isinstance(back_rels, list):
+                back_rels = [ back_rels ]
+
+            my_back_rel = [x for x in back_rels if str(x)==str(obj.icalendar_component['UID'])]
+            if len(my_back_rel) > 1:
+                import pdb; pdb.set_trace()
+            if len(my_back_rel) == 0:
+                import pdb; pdb.set_trace()
+                backreltypes = {'CHILD': 'PARENT', 'PARENT': 'CHILD', 'undefined': 'CHILD', 'SIBLING': 'SIBLING'}
+                ## adding the missing back rel
+                other.icalendar_component.add('RELATED-TO', str(obj.icalendar_component['UID']), parameters={'RELTYPE': backreltypes[reltype]})
+                1
+
+            else:
+                if reltype == 'undefined' and my_back_rel[0].params.get('RELTYPE')=='CHILD':
+                    click.echo("fixing a missing parent RELTYPE")
+                    ## (this is the default)
+                    rel.params['RELTYPE']='PARENT'
+                    obj.save()
+                elif reltype == 'undefined' and my_back_rel[0].params.get('RELTYPE') is None:
+                    import pdb; pdb.set_trace()
+                    1
+                elif reltype == 'CHILD' and not 'RELTYPE' in my_back_rel[0].params:
+                    my_back_rel[0].params['RELTYPE'] = 'PARENT'
+                    other.save()
+                    import pdb; pdb.set_trace()
+                    1
+                elif reltype == 'CHILD' and my_back_rel[0].params.get('RELTYPE') != 'PARENT':
+                    if not my_back_rel[0].params.get('RELTYPE'):
+                        my_back_rel[0].params['RELTYPE']='PARENT'
+                        other.save()
+                    else:
+                        import pdb; pdb.set_trace()
+                elif reltype == 'PARENT' and my_back_rel[0].params.get('RELTYPE') != 'CHILD':
+                    if not my_back_rel[0].params.get('RELTYPE'):
+                        my_back_rel[0].params['RELTYPE']='CHILD'
+                        other.save()
+    return ret
+
+def _get_summary(obj):
+    i = obj.icalendar_component
+    return i.get('summary') or i.get('description') or i.get('uid')
+
+def _relationship_text(obj, reltype_wanted=None):
+    rels = _relships_by_type(obj, reltype_wanted=None)
+    if not rels:
+        return "(None)"
+    ret = []
+    for rel in rels:
+        objs = []
+        for relobj in rels[rel]:
+            objs.append(_get_summary(relobj))
+        ret.append(rel + "\n" + "\n".join(objs) + "\n")
+    return "\n".join(ret)

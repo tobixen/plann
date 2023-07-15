@@ -33,11 +33,10 @@ import re
 import sys
 from plann.template import Template
 from plann.config import interactive_config, config_section, read_config, expand_config_section
-from collections import defaultdict
 import tempfile
 import subprocess
 from plann.panic_planning import timeline_suggestion
-from plann.lib import _now, _ensure_ts, parse_dt, parse_add_dur, parse_timespec, find_calendars, _summary, _procrastinate, tz
+from plann.lib import _now, _ensure_ts, parse_dt, parse_add_dur, parse_timespec, find_calendars, _summary, _procrastinate, tz, _relships_by_type, _get_summary, _relationship_text
 
 list_type = list
 
@@ -296,6 +295,7 @@ def __select(ctx, extend_objects=False, all=None, uid=[], abort_on_missing_uid=N
                     parents = _relships_by_type(obj, 'PARENT').get('PARENT',[])
                     if any(x for x in parents if isinstance(x, caldav.Todo) and x.icalendar_component.get('STATUS', 'NEEDS-ACTION') == 'NEEDS-ACTION') == pinned_tasks:
                         if kwargs_.get('todo'):
+                            ## TODO: special handling for recurring tasks
                             ret_objs.extend([x for x in parents if isinstance(x, caldav.Todo)  and x.icalendar_component.get('STATUS', 'NEEDS-ACTION') == 'NEEDS-ACTION'])
                         else:
                             ret_objs.append(obj)
@@ -490,6 +490,7 @@ def delete(ctx, multi_delete, **kwargs):
 @click.option('--add-category', default=None, help="Delete multiple things without confirmation prompt", multiple=True)
 @click.option('--postpone', help="Add something to the DTSTART and DTEND/DUE")
 @click.option('--interactive-ical/--no-interactive-ical', help="Edit the ical interactively")
+@click.option('--interactive-relations/--no-interactive-relations', help="Edit the relationships")
 @click.option('--interactive/--no-interactive', help="Interactive edit")
 @click.option('--cancel/--uncancel', default=None, help="Mark task(s) as cancelled")
 @click.option('--complete/--uncomplete', default=None, help="Mark task(s) as completed")
@@ -523,7 +524,7 @@ def _interactive_edit(obj):
         return
     dtstart = _ensure_ts(dtstart)
     click.echo(f"pri={pri} {dtstart:%F %H:%M:%S %Z} - {due:%F %H:%M:%S %Z}: {summary}")
-    input = click.prompt("postpone <n>d / ignore / part(ially-complete) / complete / split / cancel / set foo=bar / edit / pdb?", default='ignore')
+    input = click.prompt("postpone <n>d / ignore / part(ially-complete) / complete / split / cancel / set foo=bar / edit / family / pdb?", default='ignore')
     if input == 'ignore':
         return
     elif input == 'part':
@@ -543,6 +544,8 @@ def _interactive_edit(obj):
         _set_something(obj, input[0], input[1])
     elif input == 'edit':
         _interactive_ical_edit([obj])
+    elif input == 'family':
+        _interactive_relation_edit([obj])
     elif input == 'pdb':
         click.echo("icalendar component available as comp")
         click.echo("caldav object available as obj")
@@ -568,11 +571,9 @@ def _set_something(obj, arg, value):
             comp.pop(arg)
         comp.add(arg, value)
 
-def _interactive_ical_edit(objs):
+def _editor(sometext):
     with tempfile.NamedTemporaryFile(mode='w', encoding='UTF-8', delete=False) as tmpfile:
-        for obj in objs:
-            tmpfile.write(obj.data)
-            tmpfile.write("\n")
+        tmpfile.write(sometext)
         fn = tmpfile.name
     editor = os.environ.get("VISUAL") or os.environ.get("EDITOR") or ""
     if not '/' in editor:
@@ -586,8 +587,13 @@ def _interactive_ical_edit(objs):
             break
     foo = subprocess.run([ed, fn])
     with open(fn, "r") as tmpfile:
-        data = tmpfile.read()
+        ret = tmpfile.read()
     os.unlink(fn)
+    return ret
+
+def _interactive_ical_edit(objs):
+    ical = "\n".join([x.data for x in objs])
+    data = _editor(ical)
     data = data.strip()
     icals = _split_vcal(data)
     assert len(icals) == len(objs)
@@ -596,8 +602,149 @@ def _interactive_ical_edit(objs):
         ## ... or, leave it to the calendar server to handle changed UIDs
         obj.data = new
         obj.save()
+
+def _interactive_relation_edit(objs):
+    if not objs:
+        return
+    indented_family = "\n".join(_list(
+        objs, top_down=True, echo=False,
+        template="{UID}: {SUMMARY:?{DESCRIPTION:?(no summary given)?}?} (STATUS={STATUS:-})"))
+    edited = _editor(indented_family)
+    _set_relations_from_text_list(objs[0].parent, edited.split("\n"))
+
+def _set_relations_from_text_list(calendar, some_list, parent=None, indent=0, dry_run=False):
+    """
+    Takes a list of indented strings identifying some relationships,
+    ensures parent and child is
+
+    Caveats:
+    * Currently it does not support RFC 9253 and enforces RELTYPE to be PARENT or CHILD
+    * Currently it also lacks Support for multiple parents
+    * Relation type SIBLING is ignored
+    """
+    ## Logic:
+    ## * If a parent is not set and indent is 0, make sure the item has either no parents or multiple parents
+    ## * For all following lines where the indent is higher than the expected indent, recurse over the lines that are indented
+    ## * If a parent is set, collect all children (all lines with expected indent), then make sure all children has parent correctly set, and make sure the parent has those and no more children.
+    ## * Return a list of changes done.
+    ## * Dry-run obviously means we should return changes needed to be done, without actually doing them
+    output = []
+
+    ## Internal methods
+    def count_indent(line):
+        """count the left hand spaces on a line"""
+        j = 0
+        while j<len(line):
+            if line[j] == '\t':
+                j+=8
+            elif line[j] == ' ':
+                j+=1
+            else:
+                return j
+        return None
     
-def _edit(ctx, add_category=None, cancel=None, interactive_ical=False, interactive=False, complete=None, complete_recurrence_mode='safe', postpone=None, **kwargs):
+    def get_obj(line):
+        """Check the uuid on the line and return the caldav object"""
+        uid = line.lstrip().split(':')[0]
+        if not uid:
+            raise NotImplementedError("No uid - what now?")
+        return calendar.object_by_uid(uid)
+    
+    i=0
+    if parent:
+        children = []
+    while i<len(some_list):
+        line = some_list[i]
+        line_indent = count_indent(line)
+
+        ## empty line
+        if line_indent is None:
+            i += 1
+            continue
+
+        ## unexpected - indentation going backwards
+        if line_indent < indent:
+            raise NotImplementedError("unexpected indentation 0")
+
+        ## indentation going forward - recurse over the indented section
+        #if line_indent > indent or (line_indent == indent and i>0): # TODO: think this more through?  The last is supposed to rip existing children from lines without a following indented sublist
+        if line_indent > indent:
+            if not i:
+                raise NotImplementedError("unexpected indentation 1")
+            j=i
+            while j<len(some_list):
+                new_indent = count_indent(some_list[j])
+                if new_indent < line_indent and new_indent != indent:
+                    raise NotImplementedError("unexpected indentation 2")
+                if new_indent is None or new_indent==indent:
+                    break
+                j+=1
+            output.extend(_set_relations_from_text_list(calendar, some_list[i:j], indent=line_indent, parent=get_obj(some_list[i-1]), dry_run=dry_run))
+            i=j
+            continue
+
+        ## Unindented line without a parent.
+        if line_indent == indent and not parent:
+            ## Noop as for now but ... TODO ... shouldn't be
+            ## TODO: if no indented list follows, then remove all children.
+            ## TODO: if the object has a parent, remove it
+            i+=1
+            continue
+
+        ## Unindented line with a parent.  Should be a direct child under parent
+        if line_indent == indent and parent:
+            children.append(get_obj(some_list[i]))
+            i+=1
+            continue
+        
+        ## TODO: look through all the conditions above.  should we ever be here?
+        import pdb; pdb.set_trace()
+    if parent:
+        children_old = _relships_by_type(parent, 'childlike')
+        children_old_set = set([x.icalendar_component['UID'] for x in sum([x for x in children_old.values()], start=[])])
+        children_new_set = set([x.icalendar_component['UID'] for x in children])
+        add = (children_new_set-children_old_set)
+        remove = (children_old_set - children_new_set)
+        if add:
+            output.append(f"{parent.icalendar_component['UID']} - children to be added: {add}")
+        if remove:
+            output.append(f"{parent.icalendar_component['UID']} - children to be removed: {remove}")
+        if add or remove and not dry_run:
+            import pdb; pdb.set_trace()
+            if 'RELATED-TO' in parent.icalendar_component:
+                parent.icalendar_component.pop('RELATED-TO')
+            for child in children:
+                ## for each child, set the parent as given in the input feed
+                child_rels = _relships_by_type(child)
+                child_parents = _relships_by_type(child, 'parentlike')
+                ## remove the existing RELATED-TO fields
+                if 'RELATED-TO' in child.icalendar_component:
+                    child.icalendar_component.pop('RELATED-TO')
+                ## keep on any relationship that isn't parent-like
+                for reltype in child_rels:
+                    if reltype not in child_parents:
+                        for obj in child_rels[reltype]:
+                            child.icalendar_component.add('RELATED-TO', str(obj.icalendar_component['UID']), parameters={'RELTYPE': reltype})
+                parents_old_set = set([str(x.icalendar_component['UID']) for x in sum([x for x in child_parents.values()], start=[])])
+                if len(parents_old_set) > 1:
+                    raise NotImplementedError("Children with multiple parents")
+                ## finally, add the parent as given in the file
+                child.icalendar_component.add('RELATED-TO', str(parent.icalendar_component['UID']), parameters={'RELTYPE': 'PARENT'})
+                child.save()
+                
+                ## Then, add this child-relation to the parent
+                parent.icalendar_conmponent.add('RELATED-TO', str(obj.icalendar_component['UID']), parameters={'RELTYPE': 'CHILD'})
+
+            ## All non-child relations for the parent should be kept as they were
+            for reltype in all_old_relations:
+                if reltype not in children_old:
+                    for obj in all_old_relations[reltype]:
+                        parent.icalendar_component.add('RELATED-TO', str(obj.icalendar_component['UID']), parameters={'RELTYPE': reltype})
+            parent.save()
+                    
+    return output
+
+def _edit(ctx, add_category=None, cancel=None, interactive_ical=False, interactive_relations=False, interactive=False, complete=None, complete_recurrence_mode='safe', postpone=None, **kwargs):
     """
     Edits a task/event/journal
     """
@@ -606,6 +753,8 @@ def _edit(ctx, add_category=None, cancel=None, interactive_ical=False, interacti
     _process_set_args(ctx, kwargs)
     if interactive_ical:
         _interactive_ical_edit(ctx.obj['objs'])
+    if interactive_relations:
+        _interactive_relation_edit(ctx.obj['objs'])
 
     for obj in ctx.obj['objs']:
         if interactive:
@@ -730,7 +879,7 @@ def _check_for_panic(ctx, hours_per_day, output=True, print_timeline=True, fix_t
                     if isinstance(obj, caldav.Todo):
                         comp = obj.icalendar_component
                         ## TODO: copy other attributes?
-                        _add_event(ctx, summary=_summary(obj), timespec=(foo['begin'], next['begin']), first_calendar=True, set_parent=[comp['UID']])
+                        _add_event(ctx, summary=_summary(obj), timespec=(foo['begin'], next['begin']), set_status='TENTATIVE', first_calendar=True, set_parent=[comp['UID']])
     return possible_timeline
 
 @select.command()
@@ -938,6 +1087,10 @@ def manage_tasks(ctx):
     * split-high-pri-tasks
     * dismiss-panic
     """
+    ## TODO: pinned tasks for the previous week.
+    ## * Go through the events ... for each of them, ask if it was done or not
+    ## * If the event was done, mark the task as completed
+    ## * If the event wasn't done, mark the event as cancelled
     click.echo("Checking if there are any huge tasks that may need to be split")
     _split_huge_tasks(ctx)
     click.echo("Checking if there are any high-priority tasks ... it's adviceable to split them up into subtasks with a shorter due-date")
@@ -989,7 +1142,7 @@ def dismiss_panic(ctx, hours_per_day, lookahead='60d'):
     procrastinating tasks, comes up with suggestions
     """
     return _dismiss_panic(ctx, hours_per_day, f"+{lookahead}")
-    
+
 def _dismiss_panic(ctx, hours_per_day, lookahead='60d'):
     ## TODO: fetch both events and tasks
     lookahead=f"+{lookahead}"
@@ -1102,96 +1255,12 @@ def _split_high_pri_tasks(ctx, threshold=2, max_lookahead='60d', limit_lookahead
     objs = ctx.obj['objs']
     for obj in objs:
         if obj.icalendar_component.get('PRIORITY') and obj.icalendar_component.get('PRIORITY') <= threshold:
+            ## TODO: get_relatives refactoring
             relations = obj.icalendar_component.get('RELATED-TO') or []
             if relations and not isinstance(relations, list_type):
                 relations = [ relations ]
             if not any(x.params.get('RELTYPE') == 'CHILD' for x in relations):
                 interactive_split_task(obj, too_big=False)
-
-def _relships_by_type(obj, reltype_wanted=None):
-    ret = defaultdict(list_type)
-    rts = obj.icalendar_component.get('RELATED-TO')
-    if not rts:
-        return ret
-    if not isinstance(rts, list_type):
-        rts = [ rts ]
-    if reltype_wanted == 'childlike':
-        reltype_wanted = {'CHILD', 'NEXT', 'FINISHTOSTART'}
-    elif reltype_wanted == 'parentlike':
-        reltype_wanted = {'PARENT', 'FIRST', 'DEPENDS-ON', 'STARTTOFINISH'}
-    if isinstance(reltype_wanted, str):
-        reltype_wanted = {reltype_wanted}
-    for rel in rts:
-        reltype = rel.params.get('RELTYPE', 'PARENT')
-        if reltype_wanted and not reltype in reltype_wanted:
-            continue
-        try:
-            other = obj.parent.object_by_uid(rel)
-        except caldav.error.NotFoundError:
-            ## TODO ... delete invalid relation?
-            continue
-        ret[reltype].append(other)
-            
-        ## Consistency check ... TODO ... look more into this
-        back_rels = ret[reltype][-1].icalendar_component.get('RELATED-TO')
-        if not back_rels:
-            ## TODO: we should ensure the relationship is bidirectional
-            back_rels = []
-            
-        elif not isinstance(back_rels, list_type):
-            back_rels = [ back_rels ]
-            
-        my_back_rel = [x for x in back_rels if str(x)==str(obj.icalendar_component['UID'])]
-        if len(my_back_rel) > 1:
-            import pdb; pdb.set_trace()
-        if len(my_back_rel) == 0:
-            import pdb; pdb.set_trace()
-            backreltypes = {'CHILD': 'PARENT', 'PARENT': 'CHILD', 'undefined': 'CHILD', 'SIBLING': 'SIBLING'}
-            ## adding the missing back rel
-            other.icalendar_component.add('RELATED-TO', obj.icalendar_component['UID'], parameters={'RELTYPE': backreltypes[reltype]})
-            1
-            
-        else:
-            if reltype == 'undefined' and my_back_rel[0].params.get('RELTYPE')=='CHILD':
-                click.echo("fixing a missing parent RELTYPE")
-                ## (this is the default)
-                rel.params['RELTYPE']='PARENT'
-                obj.save()
-            elif reltype == 'undefined' and my_back_rel[0].params.get('RELTYPE') is None:
-                import pdb; pdb.set_trace()
-                1
-            elif reltype == 'CHILD' and not 'RELTYPE' in my_back_rel[0].params:
-                my_back_rel[0].params['RELTYPE'] = 'PARENT'
-                other.save()
-                import pdb; pdb.set_trace()
-                1
-            elif reltype == 'CHILD' and my_back_rel[0].params.get('RELTYPE') != 'PARENT':
-                if not my_back_rel[0].params.get('RELTYPE'):
-                    my_back_rel[0].params['RELTYPE']='PARENT'
-                    other.save()
-                else:
-                    import pdb; pdb.set_trace()
-            elif reltype == 'PARENT' and my_back_rel[0].params.get('RELTYPE') != 'CHILD':
-                if not my_back_rel[0].params.get('RELTYPE'):
-                    my_back_rel[0].params['RELTYPE']='CHILD'
-                    other.save()
-    return ret
-
-def _get_summary(obj):
-    i = obj.icalendar_component
-    return i.get('summary') or i.get('description') or i.get('uid')
-
-def _relationship_text(obj, reltype_wanted=None):
-    rels = _relships_by_type(obj, reltype_wanted=None)
-    if not rels:
-        return "(None)"
-    ret = []
-    for rel in rels:
-        objs = []
-        for relobj in rels[rel]:
-            objs.append(_get_summary(relobj))
-        ret.append(rel + "\n" + "\n".join(objs) + "\n")
-    return "\n".join(ret)
 
 def interactive_split_task(obj, partially_complete=False, too_big=True):
     comp = obj.icalendar_component

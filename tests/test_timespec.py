@@ -1,7 +1,9 @@
 import pytest
-from datetime import datetime, date, timedelta
+from datetime import datetime, date, timedelta, timezone
 from plann.lib import tz
-from plann.lib import parse_timespec, parse_dt, parse_add_dur
+from plann.lib import parse_timespec, parse_dt, parse_add_dur, _ensure_ts
+
+utc = timezone.utc
 
 class TestParseTimestamp:
     @pytest.mark.parametrize("input", ["2012-12-12", "2011-11-11 11:11:11", datetime(2011, 11, 11, 11, 11, 11), date(2012, 12, 12), "+14d"])
@@ -125,3 +127,11 @@ class TestParseTimestamp:
         }
         self._testTimeSpec(expected)
 
+def test_ensure_ts():
+    now = datetime.now()
+    utcnow = now.astimezone(utc)
+    implicitnow = now.replace(tzinfo=tz.implicit_timezone)
+
+    assert(_ensure_ts(now) == implicitnow)
+    assert(_ensure_ts(utcnow) == utcnow)
+    assert(_ensure_ts(implicitnow) == implicitnow)

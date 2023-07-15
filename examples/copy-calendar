@@ -4,4 +4,4 @@ plann select print-ical | plann --config-section new-calendar add ical
 
 ## * "plann select" without any options will select everything on the default calendar.
 ## * "print-ical" will print all this to STDOUT in ical format
-## * "plann --config-
+## * "plann --config-section new-calendar" will connect to the new calendar, if $HOME/.config/calendar.conf is properly populated

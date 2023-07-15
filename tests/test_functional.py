@@ -4,14 +4,14 @@
 
 from xandikos.web import XandikosBackend, XandikosApp
 from plann.lib import find_calendars
-from plann.cli import _add_todo, _select, _list, _check_for_panic
+from plann.cli import _add_todo, _select, _list, _check_for_panic, _interactive_relation_edit
 from plann.panic_planning import timeline_suggestion
 from caldav import Todo
 import aiohttp
 import aiohttp.web
 import threading
 import requests
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 import asyncio
 import os
 import signal
@@ -27,7 +27,11 @@ class InterruptXandikosServer:
 
 interrupt_xandikos_server_singleton = InterruptXandikosServer()
 
-## TODO: this didn't quite work out ...
+## I've made three different attempts on starting up xandikos.
+## I should eventually look through this once more, as it's still non-trivial to restart the xandikos-server.
+
+## This function is currently not in use
+## TODO: this is how I would like to start the xandikos server, but it didn't quite work out ...
 ## 1) the run_simple_server method does not work in threads due to signal
 ## handling (sort of solved, but ...)
 ## 2) it's difficult to stop the thread
@@ -54,9 +58,9 @@ def start_xandikos_server_foobar():
         'caldav_url': 'http://localhost:8080/'
     }
 
+## This function is currently not in use
 def start_xandikos_server_fork():
-    ## We could have tried to do a fork ... but it (probably?) does not work
-    ## very well with pytest (or was it a problem only with nose?)  Testing anyway.
+    ## It's simple to fork out a xandikos server, but somehow I can't get it to work with pytest
     pid = os.fork()
     if not pid:
         run_simple_server(current_user_principal='/sometestuser', directory='/tmp/xandikos/', autocreate=True)
@@ -195,9 +199,34 @@ def test_plann():
         _check_for_panic(ctx, timeline_start='2010-10-10', timeline_end=datetime_(year=2011, month=11, day=11, hour=11, minute=11), hours_per_day=24, fix_timeline=True, include_all_events=True)
         _select(ctx, event=True)
         assert len(ctx.obj['objs'])==2
-        
+
+        ## We now have one task with one subtask, and both tasks have children
+        ## events.
+        ## Testing the interactive relation edit - if doing nothing in the
+        ## editor, the algorithm should change nothing.
+        cal_pre_interactive_relation_edit = "\n".join([x.data for x in ctx.obj['objs']])
+        passthrough = lambda x: x
+        with patch('plann.cli._editor', new=passthrough) as _editor:
+            _interactive_relation_edit((ctx.obj['objs']))
+
+        for obj in ctx.obj['objs']:
+            obj.load()
+        cal_post_interactive_relation_edit = "\n".join([x.data for x in ctx.obj['objs']])
+        assert cal_post_interactive_relation_edit == cal_pre_interactive_relation_edit
+
+        ## Now we delete the last two lines in the file.  That should cause changes in the relations
+        skiplastlines = lambda x: "\n".join(x.split("\n")[0:-2])
+        with patch('plann.cli._editor', new=skiplastlines) as _editor:
+            _interactive_relation_edit((ctx.obj['objs']))
+
+        for obj in ctx.obj['objs']:
+            obj.load()
+
+        cal_post_interactive_relation_edit = "\n".join([x.data for x in ctx.obj['objs']])
+        assert cal_post_interactive_relation_edit == cal_pre_interactive_relation_edit
+
     finally:
         stop_xandikos_server(conn_details)
 
 ## TODO:
-## Things to be tested: lib._procrastinate, lib.find_calendars, cli._select, cli._cats, cli._list, cli._interactive_edit, cli._set_something, cli._interactive_ical_edit, cli._edit, cli._check_for_panic, _add_todo, _agenda, _check_due, 
+## Things to be tested: lib._procrastinate, cli._select, cli._cats, cli._list, cli._interactive_edit, cli._set_something, cli._interactive_ical_edit, cli._edit, cli._check_for_panic, _add_todo, _agenda, _check_due, 
