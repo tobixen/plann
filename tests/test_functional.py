@@ -3,7 +3,7 @@
 ## TODO: work in progress
 
 from xandikos.web import XandikosBackend, XandikosApp
-from plann.lib import find_calendars
+from plann.lib import find_calendars, _relatedto_by_type, _relships_by_type
 from plann.cli import _add_todo, _select, _list, _check_for_panic, _interactive_relation_edit
 from plann.panic_planning import timeline_suggestion
 from caldav import Todo
@@ -150,13 +150,54 @@ def test_plann():
     try:
         ctx = MagicMock()
         ctx.obj = dict()
+
+        ## Testing find_calendars
         ctx.obj['calendars'] = find_calendars(conn_details, raise_errors=True)
+
+        ## Add two tasks, one should be the child of the other
         todo1 = _add_todo(ctx, summary=['make plann good'], set_due='2012-12-20 23:15:00', set_dtstart='2012-12-20 22:15:00')
         todo2 = _add_todo(ctx, summary=['make plann even better'], set_parent=[todo1.icalendar_component['uid']], set_due='2012-12-21 23:15:00', set_dtstart='2012-12-21 22:15:00')
+        uid1 = str(todo1.icalendar_component['UID'])
+        uid2 = str(todo2.icalendar_component['UID'])
+
+        ## testing relships_by_type
+        foo = _relships_by_type(todo2)
+        assert(foo['PARENT'][0].icalendar_component['UID'] == uid1)
+        todo1.load()
+        foo = _relships_by_type(todo1, {'CHILD'})
+        assert len(foo['CHILD']) == 1
+        for obj in foo['CHILD']:
+            assert(obj.icalendar_component['UID'] == uid2)
+        foo = _relships_by_type(todo1, {'PARENT'})
+        assert not foo
+
+        ## Test _select and skip_children
+        ## Test that relations got right
         _select(ctx, todo=True, skip_children=True)
         assert len(ctx.obj['objs'])==1
+        assert ctx.obj['objs'][0].icalendar_component['UID'] == uid1
+        rels = _relatedto_by_type(ctx.obj['objs'][0])
+        assert len(rels) == 1
+        assert len(rels['CHILD']) == 1
+        for obj in rels['CHILD']:
+            assert str(obj) == uid2
+        ## a "top-down list" should return both - no matter if it's fed with the child or the parent
+        foo = _list(ctx.obj['objs'], top_down=True)
+        assert(len(foo)) == 2
+
+        ## Also, test _select and skip_parents
         _select(ctx, todo=True, skip_parents=True)
-        _list(ctx, top_down=True)
+        assert len(ctx.obj['objs'])==1
+        assert ctx.obj['objs'][0].icalendar_component['UID'] == uid2
+        rels = _relatedto_by_type(ctx.obj['objs'][0])
+        assert len(rels) == 1
+        assert len(rels['PARENT']) == 1
+        for obj in rels['PARENT']:
+            assert str(obj) == uid1
+        ## a "top-down list" should return both - no matter if it's fed with the child or the parent
+        foo = _list(ctx.obj['objs'], top_down=True)
+        assert(len(foo)) == 2
+
         _list(ctx, bottom_up=True)
         assert len(ctx.obj['objs'])==1
         _select(ctx, todo=True)
@@ -197,6 +238,7 @@ def test_plann():
         assert len(ctx.obj['objs'])==2
         ## Re-running it should be a noop
         _check_for_panic(ctx, timeline_start='2010-10-10', timeline_end=datetime_(year=2011, month=11, day=11, hour=11, minute=11), hours_per_day=24, fix_timeline=True, include_all_events=True)
+
         _select(ctx, event=True)
         assert len(ctx.obj['objs'])==2
 
@@ -204,14 +246,16 @@ def test_plann():
         ## events.
         ## Testing the interactive relation edit - if doing nothing in the
         ## editor, the algorithm should change nothing.
-        cal_pre_interactive_relation_edit = "\n".join([x.data for x in ctx.obj['objs']])
+        for obj in [todo1, todo2]:
+            obj.load()
+        cal_pre_interactive_relation_edit = "\n".join([x.data for x in ctx.obj['objs'] + [todo1, todo2]])
         passthrough = lambda x: x
         with patch('plann.cli._editor', new=passthrough) as _editor:
             _interactive_relation_edit((ctx.obj['objs']))
 
-        for obj in ctx.obj['objs']:
+        for obj in ctx.obj['objs'] + [todo1, todo2]:
             obj.load()
-        cal_post_interactive_relation_edit = "\n".join([x.data for x in ctx.obj['objs']])
+        cal_post_interactive_relation_edit = "\n".join([x.data for x in ctx.obj['objs'] + [todo1, todo2]])
         assert cal_post_interactive_relation_edit == cal_pre_interactive_relation_edit
 
         ## Now we delete the last two lines in the file.  That should cause changes in the relations
@@ -219,11 +263,10 @@ def test_plann():
         with patch('plann.cli._editor', new=skiplastlines) as _editor:
             _interactive_relation_edit((ctx.obj['objs']))
 
-        for obj in ctx.obj['objs']:
+        for obj in ctx.obj['objs'] + [todo1, todo2]:
             obj.load()
-
-        cal_post_interactive_relation_edit = "\n".join([x.data for x in ctx.obj['objs']])
-        assert cal_post_interactive_relation_edit == cal_pre_interactive_relation_edit
+        cal_post_interactive_relation_edit = "\n".join([x.data for x in ctx.obj['objs'] + [todo1, todo2]])
+        assert cal_post_interactive_relation_edit != cal_pre_interactive_relation_edit
 
     finally:
         stop_xandikos_server(conn_details)

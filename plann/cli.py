@@ -36,7 +36,7 @@ from plann.config import interactive_config, config_section, read_config, expand
 import tempfile
 import subprocess
 from plann.panic_planning import timeline_suggestion
-from plann.lib import _now, _ensure_ts, parse_dt, parse_add_dur, parse_timespec, find_calendars, _summary, _procrastinate, tz, _relships_by_type, _get_summary, _relationship_text
+from plann.lib import _now, _ensure_ts, parse_dt, parse_add_dur, parse_timespec, find_calendars, _summary, _procrastinate, tz, _relships_by_type, _get_summary, _relationship_text, _adjust_relations
 
 list_type = list
 
@@ -612,7 +612,7 @@ def _interactive_relation_edit(objs):
     edited = _editor(indented_family)
     _set_relations_from_text_list(objs[0].parent, edited.split("\n"))
 
-def _set_relations_from_text_list(calendar, some_list, parent=None, indent=0, dry_run=False):
+def _set_relations_from_text_list(calendar, some_list, parent=None, indent=0):
     """
     Takes a list of indented strings identifying some relationships,
     ensures parent and child is
@@ -627,8 +627,6 @@ def _set_relations_from_text_list(calendar, some_list, parent=None, indent=0, dr
     ## * For all following lines where the indent is higher than the expected indent, recurse over the lines that are indented
     ## * If a parent is set, collect all children (all lines with expected indent), then make sure all children has parent correctly set, and make sure the parent has those and no more children.
     ## * Return a list of changes done.
-    ## * Dry-run obviously means we should return changes needed to be done, without actually doing them
-    output = []
 
     ## Internal methods
     def count_indent(line):
@@ -674,12 +672,12 @@ def _set_relations_from_text_list(calendar, some_list, parent=None, indent=0, dr
             j=i
             while j<len(some_list):
                 new_indent = count_indent(some_list[j])
-                if new_indent < line_indent and new_indent != indent:
-                    raise NotImplementedError("unexpected indentation 2")
                 if new_indent is None or new_indent==indent:
                     break
+                if new_indent < line_indent and new_indent != indent:
+                    raise NotImplementedError("unexpected indentation 2")
                 j+=1
-            output.extend(_set_relations_from_text_list(calendar, some_list[i:j], indent=line_indent, parent=get_obj(some_list[i-1]), dry_run=dry_run))
+            _set_relations_from_text_list(calendar, some_list[i:j], parent=get_obj(some_list[i-1]), indent=line_indent)
             i=j
             continue
 
@@ -700,49 +698,13 @@ def _set_relations_from_text_list(calendar, some_list, parent=None, indent=0, dr
         ## TODO: look through all the conditions above.  should we ever be here?
         import pdb; pdb.set_trace()
     if parent:
-        children_old = _relships_by_type(parent, 'childlike')
-        children_old_set = set([x.icalendar_component['UID'] for x in sum([x for x in children_old.values()], start=[])])
-        children_new_set = set([x.icalendar_component['UID'] for x in children])
-        add = (children_new_set-children_old_set)
-        remove = (children_old_set - children_new_set)
-        if add:
-            output.append(f"{parent.icalendar_component['UID']} - children to be added: {add}")
-        if remove:
-            output.append(f"{parent.icalendar_component['UID']} - children to be removed: {remove}")
-        if add or remove and not dry_run:
-            import pdb; pdb.set_trace()
-            if 'RELATED-TO' in parent.icalendar_component:
-                parent.icalendar_component.pop('RELATED-TO')
-            for child in children:
-                ## for each child, set the parent as given in the input feed
-                child_rels = _relships_by_type(child)
-                child_parents = _relships_by_type(child, 'parentlike')
-                ## remove the existing RELATED-TO fields
-                if 'RELATED-TO' in child.icalendar_component:
-                    child.icalendar_component.pop('RELATED-TO')
-                ## keep on any relationship that isn't parent-like
-                for reltype in child_rels:
-                    if reltype not in child_parents:
-                        for obj in child_rels[reltype]:
-                            child.icalendar_component.add('RELATED-TO', str(obj.icalendar_component['UID']), parameters={'RELTYPE': reltype})
-                parents_old_set = set([str(x.icalendar_component['UID']) for x in sum([x for x in child_parents.values()], start=[])])
-                if len(parents_old_set) > 1:
-                    raise NotImplementedError("Children with multiple parents")
-                ## finally, add the parent as given in the file
-                child.icalendar_component.add('RELATED-TO', str(parent.icalendar_component['UID']), parameters={'RELTYPE': 'PARENT'})
+        pmutated = _adjust_relations(parent, {'CHILD': {str(x.icalendar_component['UID']) for x in children}})
+        for child in children:
+            cmutated = _adjust_relations(child, {'PARENT': {str(parent.icalendar_component['UID'])}})
+            if cmutated:
                 child.save()
-                
-                ## Then, add this child-relation to the parent
-                parent.icalendar_conmponent.add('RELATED-TO', str(obj.icalendar_component['UID']), parameters={'RELTYPE': 'CHILD'})
-
-            ## All non-child relations for the parent should be kept as they were
-            for reltype in all_old_relations:
-                if reltype not in children_old:
-                    for obj in all_old_relations[reltype]:
-                        parent.icalendar_component.add('RELATED-TO', str(obj.icalendar_component['UID']), parameters={'RELTYPE': reltype})
+        if pmutated:
             parent.save()
-                    
-    return output
 
 def _edit(ctx, add_category=None, cancel=None, interactive_ical=False, interactive_relations=False, interactive=False, complete=None, complete_recurrence_mode='safe', postpone=None, **kwargs):
     """

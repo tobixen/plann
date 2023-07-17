@@ -255,13 +255,20 @@ def find_calendars(args, raise_errors):
             calendars = _try(principal.calendars, {}, "conn_params['url'] - all calendars")
     return calendars or []
 
+def _icalendar_component(obj):
+    try:
+        return obj.icalendar_component
+    except AttributeError:
+        ## assume obj is an icalendar_component
+        return obj
+
 def _summary(i):
-    if hasattr(i, 'icalendar_component'):
-        i = i.icalendar_component
+    i = _icalendar_component(i)
     return i.get('summary') or i.get('description') or i.get('uid')
 
 def _rels(obj):
-    rels = obj.icalendar_component.get('RELATED-TO', [])
+    obj = _icalendar_component(obj)
+    rels = obj.get('RELATED-TO', [])
     if not isinstance(rels, list):
         rels = [ rels ]
     return rels
@@ -318,6 +325,9 @@ def _procrastinate(objs, delay, check_dependent="error", with_children=False, wi
             children = x.get_relatives(reltypes={'CHILD', 'NEXT', 'FINISHTOSTART'}) ## TODO: consider reverse relationships
             _procrastinate(children, delay, check_dependent, with_children=True, with_family=False, with_parent=False, err_callback=err_callback, confirm_callback=confirm_callback, recursivity=recursivity+1)
 
+childlike = {'CHILD', 'NEXT', 'FINISHTOSTART'}
+parentlike = {'PARENT', 'FIRST', 'DEPENDS-ON', 'STARTTOFINISH'}
+
 def _adjust_relations(obj, relations_wanted={}):
     """
     obj is an event/task/journal object from caldav library.
@@ -327,12 +337,29 @@ def _adjust_relations(obj, relations_wanted={}):
     If {'childlike'=>[]} or {'parentlike'=>[]} is in the dict, then:
       1) All "parentlike" or "childlike" relations not in relations_wanted will be wiped
       2) The original RELTYPE will be kept if ... TODO: we need another parameter for this
+
+    Does not save the object.
     """
+    iobj = _icalendar_component(obj)
+    mutated = False
+    rels = _relatedto_by_type(iobj)
+    for rel_type in relations_wanted:
+        if (not rel_type in rels) or rels[rel_type] != relations_wanted[rel_type]:
+            mutated = True
+        rels[rel_type] = relations_wanted[rel_type]
+    if not mutated:
+        return False
+            
+    if 'RELATED-TO' in iobj:
+        iobj.pop('RELATED-TO')
 
+    for rel_type in rels:
+        for uid in rels[rel_type]:
+            iobj.add('RELATED-TO', uid, parameters={'RELTYPE': rel_type})
 
-childlike = {'CHILD', 'NEXT', 'FINISHTOSTART'}
-parentlike = {'PARENT', 'FIRST', 'DEPENDS-ON', 'STARTTOFINISH'}
+    return True
 
+## TODO: perhaps better naming - relatedto_by_type vs relations_by_type?
 def _relatedto_by_type(obj, reltype_wanted=None):
     ## TODO: get_relatives refactoring
     ret = defaultdict(set)
@@ -356,7 +383,7 @@ def _relships_by_type(obj, reltype_wanted=None):
     rels_by_type = _relatedto_by_type(obj, reltype_wanted)
     ret = defaultdict(list)
     for reltype in rels_by_type:
-        for rel in ret[reltype]:
+        for rel in rels_by_type[reltype]:
             try:
                 other = obj.parent.object_by_uid(rel)
             except caldav.error.NotFoundError:
@@ -410,7 +437,7 @@ def _relships_by_type(obj, reltype_wanted=None):
     return ret
 
 def _get_summary(obj):
-    i = obj.icalendar_component
+    i = _icalendar_component(obj)
     return i.get('summary') or i.get('description') or i.get('uid')
 
 def _relationship_text(obj, reltype_wanted=None):
