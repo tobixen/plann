@@ -35,14 +35,6 @@ setup(
         'PyYAML',
         'sortedcontainers'
     ],
-    extras_require={ "tests": [
-        "pytest",
-        "pytest-coverage",
-        "coverage",
-        "xandikos",
-        "sphinx",
-        "xandikos>=0.2.8",
-    ]},
 
     entry_points={
         'console_scripts': [
