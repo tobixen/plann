@@ -31,12 +31,19 @@ setup(
         'icalendar',
         'caldav>=0.12-dev0',
 #        'isodate',
-        'pytz', ## pytz is supposed to be obsoleted, but see https://github.com/collective/icalendar/issues/333 
         'tzlocal',
         'Click',
         'PyYAML',
         'sortedcontainers'
     ],
+    test_packages = [
+        "pytest",
+        "pytest-coverage",
+        "coverage",
+        "xandikos",
+        "sphinx",
+    ]
+
     entry_points={
         'console_scripts': [
             'plann = plann.cli:cli',
