@@ -11,4 +11,4 @@ The format of this file is based on [Keep a Changelog](https://keepachangelog.co
 
 ## [v0.15.0] - 2023-07-19
 
-First release of plann.  The tool works for me, but has plenty of rough edges.
+First release of plann (as of v0.14 it was a part of calendar-cli).  Development up until v0.15 has been fast-paced and erratic, prioritizing to "get things to work out well enough for the author".  The tool works for me, but has plenty of rough edges.
