@@ -6,10 +6,10 @@ metadata = {
     "license": "GPLv3+",
     "license_url": "http://www.gnu.org/licenses/gpl-3.0-standalone.html",
     "maintainer": "Tobias Brox",
-    "author_email": "t-calendar-cli@tobixen.no",
+    "author_email": "t-plann@tobixen.no",
     "status": "Development",
     "product": "plann",
     "name": "plann",
     "description": "Simple command-line CalDAV client and planning tool, for adding and browsing calendar items, todo list items, etc.",
-    "url": "https://github.com/tobixen/plann",
+    "url": "https://plann.no/",
 }
