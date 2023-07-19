@@ -36,7 +36,7 @@ from plann.config import interactive_config, config_section, read_config, expand
 import tempfile
 import subprocess
 from plann.panic_planning import timeline_suggestion
-from plann.lib import _now, _ensure_ts, parse_dt, parse_add_dur, parse_timespec, find_calendars, _summary, _procrastinate, tz, _relships_by_type, _get_summary, _relationship_text, _adjust_relations
+from plann.lib import _now, _ensure_ts, parse_dt, parse_add_dur, parse_timespec, find_calendars, _summary, _procrastinate, tz, _relships_by_type, _get_summary, _relationship_text, _adjust_relations, parentlike, childlike
 
 list_type = list
 
@@ -279,10 +279,10 @@ def __select(ctx, extend_objects=False, all=None, uid=[], abort_on_missing_uid=N
         i = 0
         while i < len(objs):
             obj = objs[i]
-            if skip_children and _relships_by_type(obj, 'parentlike'):
+            if skip_children and obj.get_relatives(parentlike, fetch_objects=False):
                 objs.pop(i)
                 continue
-            if skip_parents and _relships_by_type(obj, 'childlike'):
+            if skip_parents and obj.get_relatives(childlike, fetch_objects=False):
                 objs.pop(i)
                 continue
             i += 1
@@ -1218,10 +1218,8 @@ def _split_high_pri_tasks(ctx, threshold=2, max_lookahead='60d', limit_lookahead
     for obj in objs:
         if obj.icalendar_component.get('PRIORITY') and obj.icalendar_component.get('PRIORITY') <= threshold:
             ## TODO: get_relatives refactoring
-            relations = obj.icalendar_component.get('RELATED-TO') or []
-            if relations and not isinstance(relations, list_type):
-                relations = [ relations ]
-            if not any(x.params.get('RELTYPE') == 'CHILD' for x in relations):
+            relations = obj.get_relations(fetch_object=False)
+            if not 'CHILD' in relations:
                 interactive_split_task(obj, too_big=False)
 
 def interactive_split_task(obj, partially_complete=False, too_big=True):
