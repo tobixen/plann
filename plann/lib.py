@@ -281,6 +281,7 @@ def _procrastinate(objs, delay, check_dependent="error", with_children=False, wi
                 with_children = confirm_callback("There exists children - postpone the children?")
         if with_family:
             parents = x.get_relatives(reltypes=parentlike)
+            parents = sum([x.values() for x in parents], start=[])
             if parents:
                 _procrastinate(parents, delay, check_dependent, with_children, with_family, with_parent, err_callback, confirm_callback, recursivity=recursivity+1)
                 continue
