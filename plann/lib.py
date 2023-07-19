@@ -275,9 +275,9 @@ def _procrastinate(objs, delay, check_dependent="error", with_children=False, wi
         if x.icalendar_component.get('RELATED-TO'):
             if with_family == 'interactive':
                 with_family = confirm_callback("There are relations - postpone the whole family tree?")
-            if not with_family and with_parent == 'interactive' and _hasreltype(x, parentlike):
+            if not with_family and with_parent == 'interactive' and x.get_relatives(parentlike, fetch_objs=False)
                 with_parent = confirm_callback("There exists (a) parent(s) - postpone the parent?")
-            if not with_family and with_children == 'interactive' and _hasreltype(x, childlike):
+            if not with_family and with_children == 'interactive' and x.get_telatives(childlike, fetch_objs=False)
                 with_children = confirm_callback("There exists children - postpone the children?")
         if with_family:
             parents = x.get_relatives(reltypes=parentlike)
