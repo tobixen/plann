@@ -1,5 +1,5 @@
 metadata = {
-    "version": "0.15",
+    "version": "0.15.1",
     "author": "Tobias Brox",
     "author_short": "tobixen",
     "copyright": "Copyright 2013-2023, Tobias Brox and contributors",
