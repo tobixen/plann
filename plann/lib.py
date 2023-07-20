@@ -68,7 +68,13 @@ def _ensure_ts(dt):
             return dt
     return datetime.datetime(dt.year, dt.month, dt.day, tzinfo=tz.implicit_timezone).astimezone(tz.implicit_timezone)
 
-def parse_dt(input, return_type=None):
+def parse_dt(input, return_type=None, for_storage=False):
+    ret = _parse_dt(input, return_type)
+    if for_storage:
+        ret = ret.astimezone(tz.store_timezone)
+    return ret
+    
+def _parse_dt(input, return_type=None):
     """
     Convenience-method, it is very liberal in what it accepts as input:
 
@@ -106,7 +112,7 @@ def parse_dt(input, return_type=None):
     else:
         return _ensure_ts(ret)
 
-def parse_add_dur(dt, dur):
+def parse_add_dur(dt, dur, for_storage=False):
     """
     duration may be something like this:
       * 1s (one second)
@@ -144,12 +150,18 @@ def parse_add_dur(dt, dur):
             if dt:
                 dt = dt + diff
     if dt:
-        return dt
+        return dt.astimezone(tz.store_timezone) if for_storage else dt
     else:
         return diff
    
 
-def parse_timespec(timespec):
+def parse_timespec(timespec, for_storage=False):
+    ret = _parse_timespec(timespec)
+    if for_storage:
+        ret = (x and x.astimezone(tz.store_timezone) for x in ret)
+    return ret
+
+def _parse_timespec(timespec):
     """parses a timespec and return two timestamps
 
     The ISO8601 interval format, format 1, 2 or 3 as described at
@@ -275,9 +287,9 @@ def _procrastinate(objs, delay, check_dependent="error", with_children=False, wi
         if x.icalendar_component.get('RELATED-TO'):
             if with_family == 'interactive':
                 with_family = confirm_callback("There are relations - postpone the whole family tree?")
-            if not with_family and with_parent == 'interactive' and x.get_relatives(parentlike, fetch_objs=False)
+            if not with_family and with_parent == 'interactive' and x.get_relatives(parentlike, fetch_objs=False):
                 with_parent = confirm_callback("There exists (a) parent(s) - postpone the parent?")
-            if not with_family and with_children == 'interactive' and x.get_telatives(childlike, fetch_objs=False)
+            if not with_family and with_children == 'interactive' and x.get_telatives(childlike, fetch_objs=False):
                 with_children = confirm_callback("There exists children - postpone the children?")
         if with_family:
             parents = x.get_relatives(reltypes=parentlike)
