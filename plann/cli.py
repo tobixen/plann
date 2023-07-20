@@ -748,7 +748,7 @@ def _edit(ctx, add_category=None, cancel=None, interactive_ical=False, interacti
         if postpone:
             for attrib in ('DTSTART', 'DTEND', 'DUE'):
                 if comp.get(attrib):
-                    comp[attrib].dt = parse_add_dur(comp[attrib].dt, postpone).astimezone(tz.store_timezone)
+                    comp[attrib].dt = parse_add_dur(comp[attrib].dt, postpone, for_storage=True)
         obj.save()
 
 
@@ -917,6 +917,8 @@ def _process_set_args(ctx, kwargs):
     for x in kwargs:
         if kwargs[x] is None or kwargs[x]==():
             continue
+        if x in ('set_due', 'set_dtend', 'set_dtstart', 'set_completed'):
+            kwargs[x] = parse_dt(kwargs[x], for_storage=True)
         if x == 'set_rrule':
             rrule = {}
             for split1 in kwargs[x].split(';'):
@@ -986,7 +988,7 @@ def event(ctx, timespec, **kwargs):
 def _add_event(ctx, timespec, **kwargs):
     _process_set_args(ctx, kwargs)
     for cal in ctx.obj['calendars']:
-        (dtstart, dtend) = parse_timespec(timespec)
+        (dtstart, dtend) = parse_timespec(timespec, for_storage=True)
         event = cal.save_event(dtstart=dtstart, dtend=dtend, **ctx.obj['set_args'], no_overwrite=True)
         click.echo(f"uid={event.id}")
 
