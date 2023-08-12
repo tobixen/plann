@@ -331,7 +331,7 @@ def _procrastinate(objs, delay, check_dependent="error", with_children=False, wi
             children = x.get_relatives(reltypes=childlike) ## TODO: consider reverse relationships
             _procrastinate(children, delay, check_dependent, with_children=True, with_family=False, with_parent=False, err_callback=err_callback, confirm_callback=confirm_callback, recursivity=recursivity+1)
 
-def _adjust_relations(obj, relations_wanted={}):
+def _adjust_ical_relations(obj, relations_wanted={}):
     """
     obj is an event/task/journal object from caldav library or icalendar library.
     relations_wanted is a dict with RELTYPE as key and list or set of UUIDs as value.

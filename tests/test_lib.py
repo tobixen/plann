@@ -1,7 +1,7 @@
 import pytest
 from unittest.mock import patch
 from caldav import Todo
-from plann.lib import _summary,  _procrastinate, _adjust_relations
+from plann.lib import _summary,  _procrastinate, _adjust_ical_relations
 from datetime import datetime, timedelta
 from datetime import timezone
 
@@ -62,7 +62,7 @@ def test_procrastinate_without_relations():
             timearg = set_due_mocked.call_args[0][0]
             assert(timearg.astimezone(utc) == future+timedelta(days=10))
 
-def test_adjust_relations():
+def test_adjust_ical_relations():
     t = Todo()
     t.data = todo
 
@@ -74,9 +74,9 @@ def test_adjust_relations():
     ical_data1 = t.data
 
     ## This should keep all the parents, add all missing A-children, and remove all B-children
-    assert _adjust_relations(t, {}) is False
+    assert _adjust_ical_relations(t, {}) is False
     assert(t.data == ical_data1)
-    _adjust_relations(t, {'CHILD': {'CHILD-A0', 'CHILD-A1', 'CHILD-A2'}}) is True
+    _adjust_ical_relations(t, {'CHILD': {'CHILD-A0', 'CHILD-A1', 'CHILD-A2'}}) is True
     assert(t.data != ical_data1)
     
     rels = t.get_relatives(reltypes={'CHILD'}, fetch_objects=False)
