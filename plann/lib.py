@@ -362,6 +362,21 @@ def _adjust_ical_relations(obj, relations_wanted={}):
 
     return True
 
+def _adjust_relations(parent, children):
+    """
+    * Only classic parent/child-relations covered so far
+    * Only one-parent-per-child covered so far
+    * All relations should be bidirectional
+    * siblings are not supported
+    """
+    pmutated = _adjust_ical_relations(parent, {'CHILD': {str(x.icalendar_component['UID']) for x in children}})
+    for child in children:
+        cmutated = _adjust_ical_relations(child, {'PARENT': {str(parent.icalendar_component['UID'])}})
+        if cmutated:
+            child.save()
+    if pmutated:
+        parent.save()
+
 ## TODO: As for now, this one will throw the user into the python debugger if inconsistencies are found.
 ## It for sure cannot be like that when releasing plann 1.0!
 def _relships_by_type(obj, reltype_wanted=None):

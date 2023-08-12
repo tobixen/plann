@@ -36,7 +36,7 @@ from plann.config import interactive_config, config_section, read_config, expand
 import tempfile
 import subprocess
 from plann.panic_planning import timeline_suggestion
-from plann.lib import _now, _ensure_ts, parse_dt, parse_add_dur, parse_timespec, find_calendars, _summary, _procrastinate, tz, _relships_by_type, _get_summary, _relationship_text, _adjust_ical_relations, parentlike, childlike
+from plann.lib import _now, _ensure_ts, parse_dt, parse_add_dur, parse_timespec, find_calendars, _summary, _procrastinate, tz, _relships_by_type, _get_summary, _relationship_text, _adjust_relations, parentlike, childlike
 
 list_type = list
 
@@ -698,13 +698,7 @@ def _set_relations_from_text_list(calendar, some_list, parent=None, indent=0):
         ## TODO: look through all the conditions above.  should we ever be here?
         import pdb; pdb.set_trace()
     if parent:
-        pmutated = _adjust_ical_relations(parent, {'CHILD': {str(x.icalendar_component['UID']) for x in children}})
-        for child in children:
-            cmutated = _adjust_ical_relations(child, {'PARENT': {str(parent.icalendar_component['UID'])}})
-            if cmutated:
-                child.save()
-        if pmutated:
-            parent.save()
+        _adjust_relations(parent, children)
 
 def _edit(ctx, add_category=None, cancel=None, interactive_ical=False, interactive_relations=False, interactive=False, complete=None, complete_recurrence_mode='safe', postpone=None, **kwargs):
     """
