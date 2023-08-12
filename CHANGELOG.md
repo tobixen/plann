@@ -9,6 +9,12 @@ the first proper release.
 
 The format of this file is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and I do try to adhere to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixes
+
+* More comments, mostly in the functional test
+
 ## [v0.15.1] - 2023-07-20
 
 Summary: Misc bugfixes

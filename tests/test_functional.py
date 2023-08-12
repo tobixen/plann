@@ -139,40 +139,49 @@ def stop_xandikos_server(server_params):
 
     server_params['serverdir'].__exit__(None, None, None)
 
-    
-## we start with a monolithic test testing various aspects
-## of the plann towards a server - but eventually it would
-## be better to make many small tests, and reset the calendar
-## server to some known state prior to each test
-## (interrupt_xandikos_server_singleton.graceful_exit() causes locking problem)
+
+## TODO: Rather than one monolithic test going through various aspects,
+## we should make many small tests and reset the calendar server to some known
+## state prior to each test.  However, we have some problems with restarting
+## xandikos ((interrupt_xandikos_server_singleton.graceful_exit() causes
+## locking problem)
+## (TODO: why is this not an issue in the caldav ftest?)
 def test_plann():
     conn_details = start_xandikos_server()
     try:
         ctx = MagicMock()
         ctx.obj = dict()
         ctx.obj['calendars'] = find_calendars(conn_details, raise_errors=True)
+
+        ## We create two tasks todo1 and todo2, todo2 being a child of todo1
         todo1 = _add_todo(ctx, summary=['make plann good'], set_due='2012-12-20 23:15:00', set_dtstart='2012-12-20 22:15:00')
-        todo2 = _add_todo(ctx, summary=['make plann even better'], set_parent=[todo1.icalendar_component['uid']], set_due='2012-12-21 23:15:00', set_dtstart='2012-12-21 22:15:00')
+        uid1 = todo1.icalendar_component['uid']
+        todo2 = _add_todo(ctx, summary=['make plann even better'], set_parent=[uid1], set_due='2012-12-21 23:15:00', set_dtstart='2012-12-21 22:15:00')
+        uid2 = todo2.icalendar_component['uid']
+
+        ## Selecting the tasks should yield ... 2 (but only one if skip_children or skip_parents is used)
+        _select(ctx, todo=True)
+        assert len(ctx.obj['objs'])==2
         _select(ctx, todo=True, skip_children=True)
         assert len(ctx.obj['objs'])==1
         _select(ctx, todo=True, skip_parents=True)
-        _list(ctx, top_down=True)
-        _list(ctx, bottom_up=True)
         assert len(ctx.obj['objs'])==1
-        _select(ctx, todo=True)
-        assert len(ctx.obj['objs'])==2
         _select(ctx, summary='make plann good')
         ## this breaks with xandikos
         #assert len(ctx.obj['objs'])==1
         _select(ctx, summary='make plann good', todo=True)
         assert len(ctx.obj['objs'])==1
-
         _select(ctx, event=True)
         assert len(ctx.obj['objs'])==0
-        _select(ctx, todo=True)
-        assert len(ctx.obj['objs'])==2
+
+        ## This should return a list of human-readable strings.
+        list_td = _list(ctx, top_down=True)
+        list_bu = _list(ctx, bottom_up=True)
+        ## TODO: run tests on the returns
+
         ## panic planning, timeline_suggestion.
         ## We have two tasks in the calendar, each with one hour duration
+        _select(ctx, todo=True)
         timeline = timeline_suggestion(ctx, hours_per_day=24)
         assert(timeline.count() == 2)
         foo = timeline.get(datetime_(year=2012, month=12, day=20, hour=22, minute=35))
@@ -192,9 +201,15 @@ def test_plann():
         assert foo['end'] == datetime_(year=2011, month=11, day=11, hour=10, minute=11)
         
         ## fix_timeline feature
+        ## This will create events that are children of the tasks.
+        ## (Those events contains a suggested timeslot for doing the task
+        ## Task contains due date (may be a hard limit) and duration
         _check_for_panic(ctx, timeline_start='2010-10-10', timeline_end=datetime_(year=2011, month=11, day=11, hour=11, minute=11), hours_per_day=24, fix_timeline=True, include_all_events=True)
+
+        ## Two events should be created by now
         _select(ctx, event=True)
         assert len(ctx.obj['objs'])==2
+
         ## Re-running it should be a noop
         _check_for_panic(ctx, timeline_start='2010-10-10', timeline_end=datetime_(year=2011, month=11, day=11, hour=11, minute=11), hours_per_day=24, fix_timeline=True, include_all_events=True)
         _select(ctx, event=True)

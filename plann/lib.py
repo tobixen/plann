@@ -287,9 +287,9 @@ def _procrastinate(objs, delay, check_dependent="error", with_children=False, wi
         if x.icalendar_component.get('RELATED-TO'):
             if with_family == 'interactive':
                 with_family = confirm_callback("There are relations - postpone the whole family tree?")
-            if not with_family and with_parent == 'interactive' and x.get_relatives(parentlike, fetch_objs=False):
+            if not with_family and with_parent == 'interactive' and x.get_relatives(parentlike, fetch_objects=False):
                 with_parent = confirm_callback("There exists (a) parent(s) - postpone the parent?")
-            if not with_family and with_children == 'interactive' and x.get_telatives(childlike, fetch_objs=False):
+            if not with_family and with_children == 'interactive' and x.get_relatives(childlike, fetch_objects=False):
                 with_children = confirm_callback("There exists children - postpone the children?")
         if with_family:
             parents = x.get_relatives(reltypes=parentlike)
@@ -333,7 +333,7 @@ def _procrastinate(objs, delay, check_dependent="error", with_children=False, wi
 
 def _adjust_relations(obj, relations_wanted={}):
     """
-    obj is an event/task/journal object from caldav library.
+    obj is an event/task/journal object from caldav library or icalendar library.
     relations_wanted is a dict with RELTYPE as key and list or set of UUIDs as value.
     reltypes in OBJ that does not exist in RELATIONS_WANTED will be ignored.
     TODO: NOT SUPPORTED YET:
@@ -341,7 +341,7 @@ def _adjust_relations(obj, relations_wanted={}):
       1) All "parentlike" or "childlike" relations not in relations_wanted will be wiped
       2) The original RELTYPE will be kept if ... TODO: we need another parameter for this
 
-    Does not save the object.
+    Does not save the object.  Does not consider reverse relations, that's up to the caller.
     """
     rels = obj.get_relatives(fetch_objects=False)
     iobj = _icalendar_component(obj)
