@@ -74,7 +74,7 @@ def test_adjust_ical_relations():
     ical_data1 = t.data
 
     ## This should keep all the parents, add all missing A-children, and remove all B-children
-    assert _adjust_ical_relations(t, {}) is False
+    assert not _adjust_ical_relations(t, {})
     assert(t.data == ical_data1)
     _adjust_ical_relations(t, {'CHILD': {'CHILD-A0', 'CHILD-A1', 'CHILD-A2'}}) is True
     assert(t.data != ical_data1)

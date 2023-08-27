@@ -345,14 +345,17 @@ def _adjust_ical_relations(obj, relations_wanted={}):
     """
     rels = obj.get_relatives(fetch_objects=False)
     iobj = _icalendar_component(obj)
-    mutated = False
+    mutated = defaultdict(dict)
     for rel_type in relations_wanted:
-        if (not rel_type in rels) or rels[rel_type] != relations_wanted[rel_type]:
-            mutated = True
+        if not rel_type in rels and relations_wanted[rel_type]:
+            mutated['added'][rel_type] = set(rels[rel_type])
+        if set(rels[rel_type]) != set(relations_wanted[rel_type]):
+            mutated['removed'][rel_type] = set(rels[rel_type]) - set(relations_wanted[rel_type])
+            mutated['added'][rel_type] = set(relations_wanted[rel_type]) - set(rels[rel_type]) 
         rels[rel_type] = relations_wanted[rel_type]
     if not mutated:
-        return False
-            
+        return {}
+
     if 'RELATED-TO' in iobj:
         iobj.pop('RELATED-TO')
 
@@ -360,7 +363,7 @@ def _adjust_ical_relations(obj, relations_wanted={}):
         for uid in rels[rel_type]:
             iobj.add('RELATED-TO', uid, parameters={'RELTYPE': rel_type})
 
-    return True
+    return mutated
 
 def _adjust_relations(parent, children):
     """
@@ -373,9 +376,24 @@ def _adjust_relations(parent, children):
     for child in children:
         cmutated = _adjust_ical_relations(child, {'PARENT': {str(parent.icalendar_component['UID'])}})
         if cmutated:
+            ## TODO: if a parent is removed from a child ... same algorithm as below should be run?
             child.save()
     if pmutated:
         parent.save()
+        ## Child has been removed from a parent.
+        ## Algorithm below for removing the parent from the child.
+        ## TODO: move into a separate function, so it can be reused
+        if 'removed' in pmutated:
+            ## TODO: should only consider the reverse relationship
+            for reltype in pmutated['removed']:
+                for uid in pmutated['removed'][reltype]:
+                    obj = parent.parent.object_by_uid(uid)
+                    rels = obj.get_relatives(fetch_objects=False)
+                    backreltypes = rels.keys()
+                    for backreltype in backreltypes:
+                        rels[backreltype] = rels[backreltype] - {str(parent.icalendar_component['UID'])}
+            assert _adjust_ical_relations(obj, rels)
+            obj.save()
 
 ## TODO: As for now, this one will throw the user into the python debugger if inconsistencies are found.
 ## It for sure cannot be like that when releasing plann 1.0!

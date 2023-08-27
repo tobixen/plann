@@ -3,7 +3,7 @@
 ## TODO: work in progress
 
 from xandikos.web import XandikosBackend, XandikosApp
-from plann.lib import find_calendars
+from plann.lib import find_calendars, _adjust_relations, _adjust_ical_relations
 from plann.cli import _add_todo, _select, _list, _check_for_panic, _interactive_relation_edit
 from plann.panic_planning import timeline_suggestion
 from caldav import Todo
@@ -155,9 +155,9 @@ def test_plann():
 
         ## We create two tasks todo1 and todo2, todo2 being a child of todo1
         todo1 = _add_todo(ctx, summary=['make plann good'], set_due='2012-12-20 23:15:00', set_dtstart='2012-12-20 22:15:00')
-        uid1 = todo1.icalendar_component['uid']
-        todo2 = _add_todo(ctx, summary=['make plann even better'], set_parent=[uid1], set_due='2012-12-21 23:15:00', set_dtstart='2012-12-21 22:15:00')
-        uid2 = todo2.icalendar_component['uid']
+        uid1 = str(todo1.icalendar_component['uid'])
+        todo2 = _add_todo(ctx, summary=['fix some bugs in plann'], set_parent=[uid1], set_due='2012-12-21 23:15:00', set_dtstart='2012-12-21 22:15:00')
+        uid2 = str(todo2.icalendar_component['uid'])
 
         ## Selecting the tasks should yield ... 2 (but only one if skip_children or skip_parents is used)
         _select(ctx, todo=True)
@@ -216,7 +216,31 @@ def test_plann():
         assert len(ctx.obj['objs'])==2
 
         ## We now have one task with one subtask, and both tasks have children
-        ## events.
+        ## events.  Let's find the uids
+        e1 = [x for x in ctx.obj['objs'] if x.icalendar_component['summary'] == 'make plann good'][0]
+        e2 = [x for x in ctx.obj['objs'] if x.icalendar_component['summary'] == 'fix some bugs in plann'][0]
+        uide1 = str(e1.icalendar_component['uid'])
+        uide2 = str(e1.icalendar_component['uid'])
+
+        ## Testing the _adjust_relations
+        todo1.load()
+        ## todo1 has children todo2 and e1.  _adjust_relations over those should be a noop
+        with patch.object(todo1, 'save') as _t1save:
+            with patch.object(todo2, 'save') as _t2save:
+                with patch.object(e1, 'save') as _e1save:
+                    with patch.object(e2, 'save') as _e2save:
+                        _adjust_relations(parent=todo1, children=[todo2, e1])
+                        assert not any(x.call_count for x in (_t1save, _t2save, _e1save, _e2save))
+
+        ## Testing to remove todo2 as child of todo1
+        _adjust_relations(parent=todo1, children=[e1])
+        todo1.load()
+        todo2.load()
+        e1.load()
+        ## _adjust_ical_relations returns a dict if the object was changed
+        assert(not _adjust_ical_relations(todo1, {'CHILD': {uide1}}))
+        assert(not _adjust_ical_relations(todo2, {'PARENT': set()}))
+
         ## Testing the interactive relation edit - if doing nothing in the
         ## editor, the algorithm should change nothing.
         cal_pre_interactive_relation_edit = "\n".join([x.data for x in ctx.obj['objs']])
