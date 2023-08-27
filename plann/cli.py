@@ -698,6 +698,8 @@ def _set_relations_from_text_list(calendar, some_list, parent=None, indent=0):
         ## TODO: look through all the conditions above.  should we ever be here?
         import pdb; pdb.set_trace()
     if parent:
+        for c in children:
+            c.load()
         _adjust_relations(parent, children)
 
 def _edit(ctx, add_category=None, cancel=None, interactive_ical=False, interactive_relations=False, interactive=False, complete=None, complete_recurrence_mode='safe', postpone=None, **kwargs):

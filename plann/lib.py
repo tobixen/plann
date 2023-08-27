@@ -4,6 +4,8 @@ TODO: Should consider to remove the leading underscore from many of
 them, document them and write up test code.
 
 TODO: Move time handling to a separate timespec.py
+
+TODO: make a separate class for relations.  (perhaps in the caldav library?)
 """
 
 import caldav
@@ -292,8 +294,11 @@ def _procrastinate(objs, delay, check_dependent="error", with_children=False, wi
             if not with_family and with_children == 'interactive' and x.get_relatives(childlike, fetch_objects=False):
                 with_children = confirm_callback("There exists children - postpone the children?")
         if with_family:
-            parents = x.get_relatives(reltypes=parentlike)
-            parents = sum([x.values() for x in parents], start=[])
+            ## TODO: refactor.  Make relations into a class.
+            parents_ = x.get_relatives(reltypes=parentlike)
+            parents = set()
+            for rel_type in parents_:
+                parents.update(parents_[rel_type])
             if parents:
                 _procrastinate(parents, delay, check_dependent, with_children, with_family, with_parent, err_callback, confirm_callback, recursivity=recursivity+1)
                 continue
@@ -302,8 +307,9 @@ def _procrastinate(objs, delay, check_dependent="error", with_children=False, wi
                 continue
         if with_parent:
             parents = x.get_relatives(reltypes=parentlike)
-            _procrastinate(parents, delay, check_dependent, with_children=True, with_family=False, with_parent=False, err_callback=err_callback, confirm_callback=confirm_callback, recursivity=recursivity+1)
-        
+            for rel_type in parents: ## Should only be PARENT as for now.
+                _procrastinate(parents[rel_type], delay, check_dependent, with_children=True, with_family=False, with_parent=False, err_callback=err_callback, confirm_callback=confirm_callback, recursivity=recursivity+1)
+
         chk_parent = 'return' if check_dependent else False
         if isinstance(delay, datetime.date):
             new_due = delay
@@ -328,7 +334,11 @@ def _procrastinate(objs, delay, check_dependent="error", with_children=False, wi
         else:
             x.save()
         if with_children:
-            children = x.get_relatives(reltypes=childlike) ## TODO: consider reverse relationships
+            ## TODO: refactor.  Make relations into a class.
+            children_ = x.get_relatives(reltypes=childlike)
+            children = set()
+            for rel_type in children_:
+                children_.update(parents_[rel_type])
             _procrastinate(children, delay, check_dependent, with_children=True, with_family=False, with_parent=False, err_callback=err_callback, confirm_callback=confirm_callback, recursivity=recursivity+1)
 
 def _adjust_ical_relations(obj, relations_wanted={}):
@@ -365,6 +375,23 @@ def _adjust_ical_relations(obj, relations_wanted={}):
 
     return mutated
 
+def _remove_reverse_relations(obj, removed_rels):
+    """
+    obj is an object that may have "lost" some relations,
+    removed_rels is the relation-dict of "lost" relations,
+    and this function will ensure the objects does not link back here.
+    """
+    for reltype in removed_rels:
+        for uid in removed_rels[reltype]:
+            rev_obj = obj.parent.object_by_uid(uid)
+            rels = rev_obj.get_relatives(fetch_objects=False)
+            backreltypes = rels.keys()
+            ## TODO: should only consider the reverse relationship - check reltype attribute
+            for backreltype in backreltypes:
+                rels[backreltype] = rels[backreltype] - {str(obj.icalendar_component['UID'])}
+            _adjust_ical_relations(rev_obj, rels)
+            rev_obj.save()
+
 def _adjust_relations(parent, children):
     """
     * Only classic parent/child-relations covered so far
@@ -376,24 +403,11 @@ def _adjust_relations(parent, children):
     for child in children:
         cmutated = _adjust_ical_relations(child, {'PARENT': {str(parent.icalendar_component['UID'])}})
         if cmutated:
-            ## TODO: if a parent is removed from a child ... same algorithm as below should be run?
+            _remove_reverse_relations(child, cmutated['removed'])
             child.save()
     if pmutated:
         parent.save()
-        ## Child has been removed from a parent.
-        ## Algorithm below for removing the parent from the child.
-        ## TODO: move into a separate function, so it can be reused
-        if 'removed' in pmutated:
-            ## TODO: should only consider the reverse relationship
-            for reltype in pmutated['removed']:
-                for uid in pmutated['removed'][reltype]:
-                    obj = parent.parent.object_by_uid(uid)
-                    rels = obj.get_relatives(fetch_objects=False)
-                    backreltypes = rels.keys()
-                    for backreltype in backreltypes:
-                        rels[backreltype] = rels[backreltype] - {str(parent.icalendar_component['UID'])}
-            assert _adjust_ical_relations(obj, rels)
-            obj.save()
+        _remove_reverse_relations(parent, pmutated['removed'])
 
 ## TODO: As for now, this one will throw the user into the python debugger if inconsistencies are found.
 ## It for sure cannot be like that when releasing plann 1.0!

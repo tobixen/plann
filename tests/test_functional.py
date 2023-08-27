@@ -174,6 +174,12 @@ def test_plann():
         _select(ctx, event=True)
         assert len(ctx.obj['objs'])==0
 
+        ## assert that relations are as expected
+        todo1.load()
+        todo2.load()
+        assert(not _adjust_ical_relations(todo1, {'CHILD': {uid2}, 'PARENT': set()}))
+        assert(not _adjust_ical_relations(todo2, {'PARENT': {uid1}, 'CHILD': set()}))
+
         ## This should return a list of human-readable strings.
         list_td = _list(ctx, top_down=True)
         list_bu = _list(ctx, bottom_up=True)
@@ -241,8 +247,17 @@ def test_plann():
         assert(not _adjust_ical_relations(todo1, {'CHILD': {uide1}}))
         assert(not _adjust_ical_relations(todo2, {'PARENT': set()}))
 
+        ## Reset ... let's connect todo1 and todo2 again, and remove events
+        _adjust_relations(todo1, {todo2})
+        _adjust_relations(todo2, set())
+        todo1.load()
+        todo2.load()
+        assert(not _adjust_ical_relations(todo1, {'CHILD': {uid2}, 'PARENT': set()}))
+        assert(not _adjust_ical_relations(todo2, {'PARENT': {uid1}, 'CHILD': set()}))
+        
         ## Testing the interactive relation edit - if doing nothing in the
         ## editor, the algorithm should change nothing.
+        _select(ctx, todo=True)
         cal_pre_interactive_relation_edit = "\n".join([x.data for x in ctx.obj['objs']])
         passthrough = lambda x: x
         with patch('plann.cli._editor', new=passthrough) as _editor:
@@ -253,17 +268,47 @@ def test_plann():
         cal_post_interactive_relation_edit = "\n".join([x.data for x in ctx.obj['objs']])
         assert cal_post_interactive_relation_edit == cal_pre_interactive_relation_edit
 
-        ## Now we delete the last two lines in the file.  That should cause changes in the relations
-        skiplastlines = lambda x: "\n".join(x.split("\n")[0:-2])+"\n\n"
-        with patch('plann.cli._editor', new=skiplastlines) as _editor:
+        ## Let's add some more tasks
+        todo3 = _add_todo(ctx, summary=['fix some more features in plann'], set_parent=[uid1], set_due='2012-12-21 23:15:00', set_dtstart='2012-12-21 22:15:00')
+        todo4 = _add_todo(ctx, summary=['make plann even better'], set_parent=[uid1], set_due='2012-12-21 23:15:00', set_dtstart='2012-12-21 22:15:00')
+        #todo5 = _add_todo(ctx, summary=['use plann on a daily basis to find more bugs and missing features'], set_parent=[uid1], set_due='2012-12-21 23:15:00', set_dtstart='2012-12-21 22:15:00')
+
+        uid3 = str(todo2.icalendar_component['uid'])
+        uid4 = str(todo3.icalendar_component['uid'])
+        #uid5 = str(todo4.icalendar_component['uid'])
+
+        _select(ctx, todo=True)
+        cal_post_interactive_relation_edit = "\n".join([x.data for x in ctx.obj['objs']])
+        
+        ## Let's add some incremental indentation to all lines - making every task except one having one child
+        def add_indent(text):
+            i = 0
+            ret = ""
+            for x in text.split("\n"):
+                ret += " "*i
+                ret += x
+                ret += "\n"
+                i += 1
+            return ret
+        with patch('plann.cli._editor', new=add_indent) as _editor:
             _interactive_relation_edit((ctx.obj['objs']))
 
         for obj in ctx.obj['objs']:
             obj.load()
 
         cal_post_interactive_relation_edit = "\n".join([x.data for x in ctx.obj['objs']])
-        assert cal_post_interactive_relation_edit == cal_pre_interactive_relation_edit
+        assert cal_post_interactive_relation_edit != cal_pre_interactive_relation_edit
 
+        ## Check that, except for one root node and one leaf node, all tasks have a child and a parent
+        termcnt = 0
+        for obj in ctx.obj['objs']:
+            rels = obj.get_relatives(fetch_objects=False)
+            rel_num = len(rels.get('CHILD', set()).union(rels.get('PARENT', set())))
+            assert rel_num in (1,2)
+            if rel_num == 1:
+                termcnt += 1
+        assert termcnt == 2
+        
     finally:
         stop_xandikos_server(conn_details)
 
