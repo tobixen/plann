@@ -286,6 +286,10 @@ parentlike = {'PARENT', 'FIRST', 'DEPENDS-ON', 'STARTTOFINISH'}
 def _procrastinate(objs, delay, check_dependent="error", with_children=False, with_family=False, with_parent=False, err_callback=print, confirm_callback=lambda x: False, recursivity=0):
     assert recursivity<16 ## TODO: better error message.  Probably we have some kind of relationship loop here.
     for x in objs:
+        if not hasattr(x, 'set_due'):
+            continue
+        if x.icalendar_component.get('STATUS', 'NEEDS-ACTION') == 'COMPLETED':
+            continue
         if x.icalendar_component.get('RELATED-TO'):
             if with_family == 'interactive':
                 with_family = confirm_callback("There are relations - postpone the whole family tree?")
@@ -338,7 +342,7 @@ def _procrastinate(objs, delay, check_dependent="error", with_children=False, wi
             children_ = x.get_relatives(reltypes=childlike)
             children = set()
             for rel_type in children_:
-                children_.update(parents_[rel_type])
+                children.update(children_[rel_type])
             _procrastinate(children, delay, check_dependent, with_children=True, with_family=False, with_parent=False, err_callback=err_callback, confirm_callback=confirm_callback, recursivity=recursivity+1)
 
 def _adjust_ical_relations(obj, relations_wanted={}):
@@ -447,13 +451,13 @@ def _get_summary(obj):
     return i.get('summary') or i.get('description') or i.get('uid')
 
 def _relationship_text(obj, reltype_wanted=None):
-    rels = obj.get_relatives(fetch_objects=False, reltype_wanted=reltype_wanted)
+    rels = obj.get_relatives(reltypes=reltype_wanted)
     if not rels:
         return "(None)"
     ret = []
-    for rel in rels:
+    for reltype in rels:
         objs = []
-        for relobj in rels[rel]:
+        for relobj in rels[reltype]:
             objs.append(_get_summary(relobj))
-        ret.append(rel + "\n" + "\n".join(objs) + "\n")
-    return "\n".join(ret)
+        ret.append(reltype + "\n" + "\n".join(objs) + "\n")
+        return "\n".join(ret)
