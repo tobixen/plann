@@ -134,6 +134,7 @@ def timeline_suggestion(ctx, hours_per_day=4, timeline_end=None):
         if timeline_end:
             end = min(end, timeline_end)
         duration = task.get_duration()
+        ## TODO: we should verify that duration is set and positive, otherwise the panic planning will panic
         slackbalance -= duration*(24-hours_per_day)/hours_per_day
         slot, slackbalance = timeline.find_opening(end, duration, slackbalance)
         if 'end' in slot:

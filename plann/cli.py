@@ -1216,7 +1216,7 @@ def _split_high_pri_tasks(ctx, threshold=2, max_lookahead='60d', limit_lookahead
     for obj in objs:
         if obj.icalendar_component.get('PRIORITY') and obj.icalendar_component.get('PRIORITY') <= threshold:
             ## TODO: get_relatives refactoring
-            relations = obj.get_relatives(fetch_object=False)
+            relations = obj.get_relatives(fetch_objects=False)
             if not 'CHILD' in relations:
                 interactive_split_task(obj, too_big=False)
 

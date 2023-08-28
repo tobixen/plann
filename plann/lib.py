@@ -114,7 +114,7 @@ def _parse_dt(input, return_type=None):
     else:
         return _ensure_ts(ret)
 
-def parse_add_dur(dt, dur, for_storage=False):
+def parse_add_dur(dt, dur, for_storage=False, ts_allowed=False):
     """
     duration may be something like this:
       * 1s (one second)
@@ -141,7 +141,11 @@ def parse_add_dur(dt, dur, for_storage=False):
     }
     while dur:
         rx = re.match(r'([+-]?\d+(?:\.\d+)?)([smhdwy])(.*)', dur)
-        assert rx ## TODO: create some nicer error message (timedelta expected but not found)
+        if not rx:
+            if ts_allowed:
+                return parse_dt(dur)
+            else:
+                raise ValueError(f"A duration (like 3h for three hours) expected, but got: {dur}")
         i = float(rx.group(1))
         u = rx.group(2)
         dur = rx.group(3)
@@ -322,7 +326,7 @@ def _procrastinate(objs, delay, check_dependent="error", with_children=False, wi
             new_due = _now()
             if old_due:
                 new_due = max(new_due, old_due)
-            new_due = parse_add_dur(new_due, delay)
+            new_due = parse_add_dur(new_due, delay, ts_allowed=True)
         parent = x.set_due(new_due, move_dtstart=True, check_dependent=chk_parent)
         if parent:
             if check_dependent in ("error", "interactive"):
