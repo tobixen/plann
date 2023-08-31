@@ -1253,11 +1253,12 @@ def interactive_split_task(obj, partially_complete=False, too_big=True):
                 break
         new_estimate_suggestion = f"{estimate.total_seconds()//3600//cnt+1}h"
         new_estimate = click.prompt("what is the remaining estimate for the parent task?", default=new_estimate_suggestion)
-        obj.set_duration(parse_add_dur(None, new_estimate), movable_attr='dtstart') ## TODO: verify
+        import pdb; pdb.set_trace()
+        obj.set_duration(parse_add_dur(None, new_estimate), movable_attr='DTSTART') ## TODO: verify
         new_summary = click.prompt("Summary of the parent task?", default=obj.icalendar_component['SUMMARY'])
         obj.icalendar_component['SUMMARY'] = new_summary
         postpone = click.prompt("Should we postpone the parent task?", default='0h')
-        if postpone != '0h':
+        if postpone in ('0h', '0'): ## TODO: regexp?
             _procrastinate([obj], postpone, check_dependent='interactive', err_callback=click.echo, confirm_callback=click.confirm)
         obj.save()
 
