@@ -389,7 +389,7 @@ def _list(objs, ics=False, template="{DTSTART:?{DUE:?(date missing)?}?%F %H:%M:%
     TODO: will crash if there are loops in the relationships
     TODO: if there are parent/child-relationships that aren't bidrectionally linked, we may get problems
     """
-    if indent>8:
+    if indent>32:
         import pdb; pdb.set_trace()
     if ics:
         if not objs:
@@ -1253,7 +1253,6 @@ def interactive_split_task(obj, partially_complete=False, too_big=True):
                 break
         new_estimate_suggestion = f"{estimate.total_seconds()//3600//cnt+1}h"
         new_estimate = click.prompt("what is the remaining estimate for the parent task?", default=new_estimate_suggestion)
-        import pdb; pdb.set_trace()
         obj.set_duration(parse_add_dur(None, new_estimate), movable_attr='DTSTART') ## TODO: verify
         new_summary = click.prompt("Summary of the parent task?", default=obj.icalendar_component['SUMMARY'])
         obj.icalendar_component['SUMMARY'] = new_summary

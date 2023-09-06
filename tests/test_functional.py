@@ -153,6 +153,19 @@ def test_plann():
         ctx.obj = dict()
         ctx.obj['calendars'] = find_calendars(conn_details, raise_errors=True)
 
+        def dag(obj, reltype, observed=None):
+            if not hasattr(obj, 'get_relatives'):
+                obj = ctx.obj['calendars'][0].object_by_uid(obj)
+            if not observed:
+                observed = set()
+            ret = {}
+            relatives = obj.get_relatives(reltypes={reltype}, fetch_objects=False)
+            for x in relatives[reltype]:
+                assert x not in observed
+                observed.add(x)
+                ret[x] = dag(x, reltype, observed)
+            return ret
+
         ## We create two tasks todo1 and todo2, todo2 being a child of todo1
         todo1 = _add_todo(ctx, summary=['make plann good'], set_due='2012-12-20 23:15:00', set_dtstart='2012-12-20 22:15:00')
         uid1 = str(todo1.icalendar_component['uid'])
@@ -177,6 +190,8 @@ def test_plann():
         ## assert that relations are as expected
         todo1.load()
         todo2.load()
+        assert(dag(todo1, 'CHILD') == {uid2: {}})
+        assert(dag(todo2, 'PARENT') == {uid1: {}})
         assert(not _adjust_ical_relations(todo1, {'CHILD': {uid2}, 'PARENT': set()}))
         assert(not _adjust_ical_relations(todo2, {'PARENT': {uid1}, 'CHILD': set()}))
 
@@ -271,44 +286,34 @@ def test_plann():
         ## Let's add some more tasks
         todo3 = _add_todo(ctx, summary=['fix some more features in plann'], set_parent=[uid1], set_due='2012-12-21 23:15:00', set_dtstart='2012-12-21 22:15:00')
         todo4 = _add_todo(ctx, summary=['make plann even better'], set_parent=[uid1], set_due='2012-12-21 23:15:00', set_dtstart='2012-12-21 22:15:00')
-        #todo5 = _add_todo(ctx, summary=['use plann on a daily basis to find more bugs and missing features'], set_parent=[uid1], set_due='2012-12-21 23:15:00', set_dtstart='2012-12-21 22:15:00')
+        todo5 = _add_todo(ctx, summary=['use plann on a daily basis to find more bugs and missing features'], set_parent=[uid1], set_due='2012-12-21 23:15:00', set_dtstart='2012-12-21 22:15:00')
 
-        uid3 = str(todo2.icalendar_component['uid'])
-        uid4 = str(todo3.icalendar_component['uid'])
-        #uid5 = str(todo4.icalendar_component['uid'])
+        uid3 = str(todo3.icalendar_component['uid'])
+        uid4 = str(todo4.icalendar_component['uid'])
+        uid5 = str(todo5.icalendar_component['uid'])
 
-        _select(ctx, todo=True)
-        cal_post_interactive_relation_edit = "\n".join([x.data for x in ctx.obj['objs']])
-        
-        ## Let's add some incremental indentation to all lines - making every task except one having one child
+        todo1.load()
+        assert(dag(todo1, 'CHILD') == {uid2: {}, uid3: {}, uid4: {}, uid5: {}})
+        assert(dag(todo4, 'PARENT') == {uid1: {}})
+
+        ## Let's add some incremental indentation to the last lines.
+        ## This one will leave todo1 with two children, then the next lines are indented more.
         def add_indent(text):
-            i = 0
-            ret = ""
-            for x in text.split("\n"):
-                ret += " "*i
-                ret += x
-                ret += "\n"
-                i += 1
-            return ret
+            return f"{uid1}: todo1\n {uid2}: todo2\n {uid3}: todo3\n  {uid4}: todo4\n     {uid5}: todo5"
         with patch('plann.cli._editor', new=add_indent) as _editor:
-            _interactive_relation_edit((ctx.obj['objs']))
+            _interactive_relation_edit([todo1])
 
-        for obj in ctx.obj['objs']:
+        ## Reload the object list
+        for obj in (todo1, todo2, todo3, todo4, todo5):
             obj.load()
 
-        cal_post_interactive_relation_edit = "\n".join([x.data for x in ctx.obj['objs']])
-        assert cal_post_interactive_relation_edit != cal_pre_interactive_relation_edit
+        assert(dag(todo1, 'CHILD') == {uid2: {}, uid3: {uid4: {uid5: {}}}})
+        assert(dag(todo2, 'PARENT') == {uid1: {}})
+        assert(dag(todo5, 'PARENT') == {uid4: {uid3: {uid1: {}}}})
 
-        ## Check that, except for one root node and one leaf node, all tasks have a child and a parent
-        termcnt = 0
-        for obj in ctx.obj['objs']:
-            rels = obj.get_relatives(fetch_objects=False)
-            rel_num = len(rels.get('CHILD', set()).union(rels.get('PARENT', set())))
-            assert rel_num in (1,2)
-            if rel_num == 1:
-                termcnt += 1
-        assert termcnt == 2
-        
+        ## This should not throw one into the debugger
+        list_td = _list(ctx, top_down=True)
+
     finally:
         stop_xandikos_server(conn_details)
 

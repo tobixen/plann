@@ -443,6 +443,7 @@ def _relships_by_type(obj, reltype_wanted=None):
                 ## Inconsistency will be automatically fixed: no related-to property pointing from other to obj
                 ## adding the missing back rel
                 other.icalendar_component.add('RELATED-TO', str(obj.icalendar_component['UID']), parameters={'RELTYPE': backreltypes[reltype]})
+                other.save()
             else:
                 if back_rel_types != { backreltypes[reltype] }:
                     import pdb; pdb.set_trace()
