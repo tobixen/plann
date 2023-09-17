@@ -36,7 +36,7 @@ from plann.config import interactive_config, config_section, read_config, expand
 import tempfile
 import subprocess
 from plann.panic_planning import timeline_suggestion
-from plann.lib import _now, _ensure_ts, parse_dt, parse_add_dur, parse_timespec, find_calendars, _summary, _procrastinate, tz, _relships_by_type, _get_summary, _relationship_text, _adjust_relations, parentlike, childlike
+from plann.lib import _now, _ensure_ts, parse_dt, parse_add_dur, parse_timespec, find_calendars, _summary, _procrastinate, tz, _relships_by_type, _get_summary, _relationship_text, _adjust_relations, parentlike, childlike, _remove_reverse_relations
 
 list_type = list
 
@@ -619,7 +619,7 @@ def _set_relations_from_text_list(calendar, some_list, parent=None, indent=0):
 
     Caveats:
     * Currently it does not support RFC 9253 and enforces RELTYPE to be PARENT or CHILD
-    * Currently it also lacks Support for multiple parents
+    * Currently it also lacks support for multiple parents
     * Relation type SIBLING is ignored
     """
     ## Logic:
@@ -649,8 +649,7 @@ def _set_relations_from_text_list(calendar, some_list, parent=None, indent=0):
         return calendar.object_by_uid(uid)
     
     i=0
-    if parent:
-        children = []
+    children = []
     while i<len(some_list):
         line = some_list[i]
         line_indent = count_indent(line)
@@ -681,26 +680,17 @@ def _set_relations_from_text_list(calendar, some_list, parent=None, indent=0):
             i=j
             continue
 
-        ## Unindented line without a parent.
-        if line_indent == indent and not parent:
-            ## Noop as for now but ... TODO ... shouldn't be
-            ## TODO: if no indented list follows, then remove all children.
-            ## TODO: if the object has a parent, remove it
-            i+=1
-            continue
-
-        ## Unindented line with a parent.  Should be a direct child under parent
-        if line_indent == indent and parent:
+        ## Unindented line.  Should be a direct child under parent
+        if line_indent == indent:
             children.append(get_obj(some_list[i]))
             i+=1
             continue
         
         ## TODO: look through all the conditions above.  should we ever be here?
         import pdb; pdb.set_trace()
-    if parent:
-        for c in children:
-            c.load()
-        _adjust_relations(parent, children)
+    for c in children:
+        c.load()
+    _adjust_relations(parent, children)
 
 def _edit(ctx, add_category=None, cancel=None, interactive_ical=False, interactive_relations=False, interactive=False, complete=None, complete_recurrence_mode='safe', postpone=None, **kwargs):
     """

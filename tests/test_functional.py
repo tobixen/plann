@@ -3,6 +3,7 @@
 ## TODO: work in progress
 
 from xandikos.web import XandikosBackend, XandikosApp
+import plann.lib
 from plann.lib import find_calendars, _adjust_relations, _adjust_ical_relations
 from plann.cli import _add_todo, _select, _list, _check_for_panic, _interactive_relation_edit
 from plann.panic_planning import timeline_suggestion
@@ -156,6 +157,8 @@ def test_plann():
         def dag(obj, reltype, observed=None):
             if not hasattr(obj, 'get_relatives'):
                 obj = ctx.obj['calendars'][0].object_by_uid(obj)
+            else:
+                obj.load()
             if not observed:
                 observed = set()
             ret = {}
@@ -167,9 +170,9 @@ def test_plann():
             return ret
 
         ## We create two tasks todo1 and todo2, todo2 being a child of todo1
-        todo1 = _add_todo(ctx, summary=['make plann good'], set_due='2012-12-20 23:15:00', set_dtstart='2012-12-20 22:15:00')
+        todo1 = _add_todo(ctx, summary=['make plann good'], set_due='2012-12-20 23:15:00', set_dtstart='2012-12-20 22:15:00', set_uid='todo1')
         uid1 = str(todo1.icalendar_component['uid'])
-        todo2 = _add_todo(ctx, summary=['fix some bugs in plann'], set_parent=[uid1], set_due='2012-12-21 23:15:00', set_dtstart='2012-12-21 22:15:00')
+        todo2 = _add_todo(ctx, summary=['fix some bugs in plann'], set_parent=[uid1], set_due='2012-12-21 23:15:00', set_dtstart='2012-12-21 22:15:00', set_uid='todo2')
         uid2 = str(todo2.icalendar_component['uid'])
 
         ## Selecting the tasks should yield ... 2 (but only one if skip_children or skip_parents is used)
@@ -284,9 +287,9 @@ def test_plann():
         assert cal_post_interactive_relation_edit == cal_pre_interactive_relation_edit
 
         ## Let's add some more tasks
-        todo3 = _add_todo(ctx, summary=['fix some more features in plann'], set_parent=[uid1], set_due='2012-12-21 23:15:00', set_dtstart='2012-12-21 22:15:00')
-        todo4 = _add_todo(ctx, summary=['make plann even better'], set_parent=[uid1], set_due='2012-12-21 23:15:00', set_dtstart='2012-12-21 22:15:00')
-        todo5 = _add_todo(ctx, summary=['use plann on a daily basis to find more bugs and missing features'], set_parent=[uid1], set_due='2012-12-21 23:15:00', set_dtstart='2012-12-21 22:15:00')
+        todo3 = _add_todo(ctx, summary=['fix some more features in plann'], set_parent=[uid1], set_due='2012-12-21 23:15:00', set_dtstart='2012-12-21 22:15:00', set_uid='todo3')
+        todo4 = _add_todo(ctx, summary=['make plann even better'], set_parent=[uid1], set_due='2012-12-21 23:15:00', set_dtstart='2012-12-21 22:15:00', set_uid='todo4')
+        todo5 = _add_todo(ctx, summary=['use plann on a daily basis to find more bugs and missing features'], set_parent=[uid1], set_due='2012-12-21 23:15:00', set_dtstart='2012-12-21 22:15:00', set_uid='todo5')
 
         uid3 = str(todo3.icalendar_component['uid'])
         uid4 = str(todo4.icalendar_component['uid'])
@@ -314,6 +317,22 @@ def test_plann():
         ## This should not throw one into the debugger
         list_td = _list(ctx, top_down=True)
 
+        def remove_parent(input):
+            return f"{uid2}: todo2\n{uid3}: todo3\n  {uid4}: todo4\n     {uid5}: todo5"
+
+        with patch('plann.cli._editor', new=remove_parent) as _editor:
+            _interactive_relation_edit([todo1])
+
+        assert(dag(todo1, 'CHILD') == {})
+        assert(dag(todo1, 'PARENT') == {})
+        assert(dag(todo2, 'PARENT') == {})
+        assert(dag(todo2, 'CHILD') == {})
+        assert(dag(todo3, 'CHILD') == {uid4: {uid5: {}}})
+        assert(dag(todo5, 'PARENT') == {uid4: {uid3: {}}})
+    
+        ## This should not throw one into the debugger
+        list_td = _list(ctx, top_down=True)
+        
     finally:
         stop_xandikos_server(conn_details)
 

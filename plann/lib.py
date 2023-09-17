@@ -407,6 +407,14 @@ def _adjust_relations(parent, children):
     * All relations should be bidirectional
     * siblings are not supported
     """
+    if not parent:
+        for child in children:
+            old_parents = child.get_relatives('PARENT', fetch_objects=False)
+            if len(old_parents['PARENT']) == 1:
+                _remove_reverse_relations(child, old_parents)
+                _adjust_ical_relations(child, {'PARENT': set()})
+                child.save()
+        return
     pmutated = _adjust_ical_relations(parent, {'CHILD': {str(x.icalendar_component['UID']) for x in children}})
     for child in children:
         cmutated = _adjust_ical_relations(child, {'PARENT': {str(parent.icalendar_component['UID'])}})
