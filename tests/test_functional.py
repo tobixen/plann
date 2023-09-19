@@ -5,7 +5,7 @@
 from xandikos.web import XandikosBackend, XandikosApp
 import plann.lib
 from plann.lib import find_calendars, _adjust_relations, _adjust_ical_relations
-from plann.cli import _add_todo, _select, _list, _check_for_panic, _interactive_relation_edit
+from plann.cli import _add_todo, _select, _list, _check_for_panic, _interactive_relation_edit, _interactive_edit
 from plann.panic_planning import timeline_suggestion
 from caldav import Todo
 import aiohttp
@@ -332,7 +332,30 @@ def test_plann():
     
         ## This should not throw one into the debugger
         list_td = _list(ctx, top_down=True)
-        
+
+        def gen_prompt(ret):
+            def prompt(*largs, **kwargs):
+                return ret
+            return prompt
+
+        ## testing _interactive_edit
+        with patch('click.echo') as _echo:
+            ## ignore should do nothing
+            with patch('click.prompt', new=gen_prompt('ignore')):
+                _interactive_edit(todo1)
+                ## no asserts needed
+            ## complete should complete it
+            with patch('click.prompt', new=gen_prompt('complete')):
+                _interactive_edit(todo1)
+                todo1.load()
+                assert(todo1.icalendar_component['STATUS']=='COMPLETED')
+                todo1.uncomplete()
+            with patch('click.prompt', new=gen_prompt('postpone 1d')):
+                _interactive_edit(todo1)
+                todo1.load()
+                assert(todo1.icalendar_component['DUE'].dt > datetime_(year=2023, month=9, day=19, hour=15))
+            ## TODO: part, split
+
     finally:
         stop_xandikos_server(conn_details)
 
