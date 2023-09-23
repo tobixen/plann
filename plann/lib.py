@@ -123,6 +123,20 @@ def _parse_dt(input, return_type=None):
     else:
         return _ensure_ts(ret)
 
+def _command_line_edit(line, calendar, interactive=True):
+    strip1 = re.compile("#.*$")
+    regexp = re.compile("((?:postpone [0-9]+[smhdwy](?:with [^ ])*(?:ask)?)|[^ ]*) (.*?)(: |$)")
+    line = strip1.sub('', line)
+    line = line.strip()
+    if not line:
+        return
+    splitted = regexp.match(line)
+    assert splitted
+    command = splitted.group(1)
+    uid = splitted.group(2)
+    obj = calendar.object_by_uid(uid)
+    command_edit(obj, command, interactive)
+
 def parse_add_dur(dt, dur, for_storage=False, ts_allowed=False):
     """
     duration may be something like this:
@@ -484,15 +498,34 @@ def _relationship_text(obj, reltype_wanted=None):
         ret.append(reltype + "\n" + "\n".join(objs) + "\n")
         return "\n".join(ret)
 
-def command_edit(obj, command):
+
+
+def command_edit(obj, command, interactive=True):
     if command == 'ignore':
         return
-    elif command == 'part':
+    elif command in ('part', 'partially-complete'):
         interactive_split_task(obj, partially_complete=True, too_big=False)
     elif command == 'split':
         interactive_split_task(obj, too_big=False)
     elif command.startswith('postpone'):
-        ## TODO: make this into an interactive recursive function
+        commands = command.split(' ')
+        if len(commands) > 2:
+            with_params = {}
+            if interactive:
+                with_params['confirm_callback'] = click.confirm
+                with_params['err_callback'] = click.echo
+            if interactive and 'ask' in command:
+                true = 'interactive'
+                with_params['check_dependent'] = 'interactive'
+            else:
+                true = True
+            if 'with family' in command:
+                with_params['with_family'] = true
+            if 'with children' in command:
+                with_params['with_children'] = true
+            if 'with family' in command:
+                with_params['with_family'] = true
+        ## TODO: we probably shouldn't be doing this interactively here?
         parent = _procrastinate([obj], command.split(' ')[1], with_children='interactive', with_parent='interactive', with_family='interactive', check_dependent="interactive", err_callback=click.echo, confirm_callback=click.confirm)
     elif command == 'complete':
         obj.complete(handle_rrule=True)
@@ -509,13 +542,17 @@ def command_edit(obj, command):
     elif command == 'family':
         _interactive_relation_edit([obj])
     elif command == 'pdb':
-        click.echo("icalendar component available as comp")
-        click.echo("caldav object available as obj")
-        click.echo("do the necessary changes and press c to continue normal code execution")
-        click.echo("happy hacking")
+        if interactive:
+            click.echo("icalendar component available as comp")
+            click.echo("caldav object available as obj")
+            click.echo("do the necessary changes and press c to continue normal code execution")
+            click.echo("happy hacking")
         import pdb; pdb.set_trace()
     else:
-        click.echo(f"unknown instruction '{command}' - ignoring")
+        if interactive:
+            click.echo(f"unknown instruction '{command}' - ignoring")
+        else:
+            raise NameError(f"unknown instruction '{command}' - ignoring")
         return
     obj.save()
 

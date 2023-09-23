@@ -2,10 +2,12 @@
 
 ## TODO: work in progress
 
+## TODO: tests with multiple source calendars.  Some of the interactive edit-through-editor functions will probably break.
+
 from xandikos.web import XandikosBackend, XandikosApp
 import plann.lib
 from plann.lib import find_calendars, _adjust_relations, _adjust_ical_relations
-from plann.cli import _add_todo, _select, _list, _check_for_panic, _interactive_relation_edit, _interactive_edit
+from plann.cli import _add_todo, _select, _list, _check_for_panic, _interactive_relation_edit, _interactive_edit, _mass_interactive_edit
 from plann.panic_planning import timeline_suggestion
 from caldav import Todo
 import aiohttp
@@ -359,7 +361,14 @@ def test_plann():
                 todo1.load()
                 assert([str(x) for x in todo1.icalendar_component['CATEGORIES'].cats] == ['foo'])
             ## TODO: part, split, family
-            ## TODO: cancel, 
+            ## TODO: cancel,
+
+        ## testing mass interactive edit
+        with patch('plann.cli._editor', new=passthrough) as _editor:
+            _mass_interactive_edit([todo1, todo2, todo3], default='complete')
+        for todo in (todo1, todo2, todo3, todo4, todo5):
+            todo.load()
+            assert todo.icalendar_component['STATUS'] == 'COMPLETED'
 
     finally:
         stop_xandikos_server(conn_details)

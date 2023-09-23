@@ -36,7 +36,7 @@ from plann.config import interactive_config, config_section, read_config, expand
 import tempfile
 import subprocess
 from plann.panic_planning import timeline_suggestion
-from plann.lib import _now, _ensure_ts, parse_dt, parse_add_dur, parse_timespec, find_calendars, _summary, _procrastinate, tz, _relships_by_type, _get_summary, _relationship_text, _adjust_relations, parentlike, childlike, _remove_reverse_relations, command_edit, _process_set_arg, attr_txt_one, attr_txt_many, attr_time, attr_int, _set_something
+from plann.lib import _now, _ensure_ts, parse_dt, parse_add_dur, parse_timespec, find_calendars, _summary, _procrastinate, tz, _relships_by_type, _get_summary, _relationship_text, _adjust_relations, parentlike, childlike, _remove_reverse_relations, command_edit, _process_set_arg, attr_txt_one, attr_txt_many, attr_time, attr_int, _set_something, _command_line_edit
 
 list_type = list
 
@@ -376,7 +376,7 @@ def list(ctx, ics, template, top_down=False, bottom_up=False):
     """
     return _list(ctx.obj['objs'], ics, template, top_down=top_down, bottom_up=bottom_up)
 
-def _list(objs, ics=False, template="{DTSTART:?{DUE:?(date missing)?}?%F %H:%M:%S %Z}: {SUMMARY:?{DESCRIPTION:?(no summary given)?}?}", top_down=False, bottom_up=False, indent=0, echo=True, uids=None):
+def _list(objs, ics=False, template="{DTSTART:?{DUE:?(date missing)?}?%F %H:%M:%S %Z}: {SUMMARY:?{DESCRIPTION:?(no summary given)?}?}", top_down=False, bottom_up=False, indent=0, echo=True, uids=None, filter=lambda obj: True):
     """
     Actual implementation of list
 
@@ -402,6 +402,9 @@ def _list(objs, ics=False, template="{DTSTART:?{DUE:?(date missing)?}?%F %H:%M:%
     for obj in objs:
         if isinstance(obj, str):
             output.append(obj)
+            continue
+
+        if not filter(obj):
             continue
 
         uid = obj.icalendar_component['UID']
@@ -520,6 +523,8 @@ def _interactive_edit(obj):
     dtstart = _ensure_ts(dtstart)
     click.echo(f"pri={pri} {dtstart:%F %H:%M:%S %Z} - {due:%F %H:%M:%S %Z}: {summary}")
     input = click.prompt("postpone <n>d / ignore / part(ially-complete) / complete / split / cancel / set foo=bar / edit / family / pdb?", default='ignore')
+    if input.startswith('postpone') and not 'ask' in input:
+        input += ' ask'
     command_edit(obj, input)
 
 def _editor(sometext):
@@ -656,13 +661,7 @@ def _edit(ctx, add_category=None, cancel=None, interactive_ical=False, interacti
         _interactive_relation_edit(ctx.obj['objs'])
 
     if mass_interactive:
-        ## send things through the editor
-        indented_family = "\n".join(_list(
-            ctx.obj['objs'], top_down=True, echo=False,
-            template="ignore {UID}: due={DUE} Pri={PRI:?0?} {SUMMARY:?{DESCRIPTION:?(no summary given)?}?} (STATUS={STATUS:-})"))
-        edited = _editor(indented_family)
-        for line in edited.split('\n'):
-            command_line_edit(line)
+        _mass_interactive_edit(ctx.obj['objs'])
 
     for obj in ctx.obj['objs']:
         if interactive:
@@ -697,6 +696,30 @@ def _edit(ctx, add_category=None, cancel=None, interactive_ical=False, interacti
                     comp[attrib].dt = parse_add_dur(comp[attrib].dt, postpone, for_storage=True)
         obj.save()
 
+def _mass_interactive_edit(objs, default='ignore'):
+    """send things through the editor, and expect commands back"""
+    instructions = """
+## Prepend a line with one of the following commands:
+## postpone <n>d [with parents] [with children] [with family] [ask]
+## ignore
+## part(ially-complete)
+## complete
+## split
+## cancel
+## set foo=bar
+## edit
+## family
+## pdb
+"""
+    text = instructions + "\n".join(_list(
+        objs, top_down=True, echo=False,
+        ## We only deal with tasks so far, and only tasks that needs action
+        ## TODO: this is bad design
+        template=default + " {UID}: due={DUE} Pri={PRI:?0?} {SUMMARY:?{DESCRIPTION:?(no summary given)?}?} (STATUS={STATUS:-})", filter=lambda obj: obj.icalendar_component['STATUS']=='NEEDS-ACTION'))
+    edited = _editor(text)
+    for line in edited.split('\n'):
+        ## BUG: does not work if the source data comes from multiple calendars!
+        _command_line_edit(line, interactive=True, calendar=objs[0].parent)
 
 @select.command()
 @click.pass_context
@@ -1088,10 +1111,12 @@ def _dismiss_panic(ctx, hours_per_day, lookahead='60d'):
             procrastination_time = f"{procrastination_time.days+1}d"
         else:
             procrastination_time = f"{procrastination_time.seconds//3600+1}h"
-        procrastination_time = click.prompt(f"Push the due-date with ... (press O for one-by-one)", default=procrastination_time)
+        procrastination_time = click.prompt(f"Push the due-date with ... (press O for one-by-one, E for edit all)", default=procrastination_time)
         if procrastination_time == 'O':
             for item in first_low_pri_tasks:
                 _interactive_edit(item['obj'])
+        elif procrastination_time == 'E':
+            _mass_interactive_edit([x['obj'] for x in first_low_pri_tasks], default=f"postpone {procrastination_time} ask")
         else:
             _procrastinate([x['obj'] for x in first_low_pri_tasks], procrastination_time,  check_dependent='interactive', err_callback=click.echo, confirm_callback=click.confirm)
 
