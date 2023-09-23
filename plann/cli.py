@@ -390,6 +390,8 @@ def _list(objs, ics=False, template="{DTSTART:?{DUE:?(date missing)?}?%F %H:%M:%
             return
         icalendar = objs.pop(0).icalendar_instance
         for obj in objs:
+            if not filter(obj):
+                continue
             icalendar.subcomponents.extend(obj.icalendar_instance.subcomponents)
         click.echo(icalendar.to_ical())
         return
@@ -433,17 +435,17 @@ def _list(objs, ics=False, template="{DTSTART:?{DUE:?(date missing)?}?%F %H:%M:%
             ## This should be a top-level thing
             output.append(" "*indent + template.format(**obj.icalendar_component))
             ## Recursively add children in an indented way
-            output.extend(_list(below, template=template, top_down=top_down, bottom_up=bottom_up, indent=indent+2, echo=False))
+            output.extend(_list(below, template=template, top_down=top_down, bottom_up=bottom_up, indent=indent+2, echo=False, filter=filter))
             if indent and top_down:
                 ## Include all siblings as same-level nodes
                 ## Use the top-level uids to avoid infinite recursion
                 ## TODO: siblings are probably not being handled correctly here.  Should write test code and investigate.
-                output.extend(_list(relations['SIBLING'], template=template, top_down=top_down, bottom_up=bottom_up, indent=indent, echo=False, uids=uids))
+                output.extend(_list(relations['SIBLING'], template=template, top_down=top_down, bottom_up=bottom_up, indent=indent, echo=False, uids=uids, filter=filter))
         for p in above:
             ## The item should be part of a sublist.  Find and add the top-level item, and the full indented list under there - recursively.
             puid = p.icalendar_component['UID']
             if not puid in uids:
-                output.extend(_list([p], template=template, top_down=top_down, bottom_up=bottom_up, indent=indent, echo=False, uids=uids))
+                output.extend(_list([p], template=template, top_down=top_down, bottom_up=bottom_up, indent=indent, echo=False, uids=uids, filter=filter))
     if echo:
         click.echo_via_pager("\n".join(output))
     return output
@@ -523,9 +525,7 @@ def _interactive_edit(obj):
     dtstart = _ensure_ts(dtstart)
     click.echo(f"pri={pri} {dtstart:%F %H:%M:%S %Z} - {due:%F %H:%M:%S %Z}: {summary}")
     input = click.prompt("postpone <n>d / ignore / part(ially-complete) / complete / split / cancel / set foo=bar / edit / family / pdb?", default='ignore')
-    if input.startswith('postpone') and not 'ask' in input:
-        input += ' ask'
-    command_edit(obj, input)
+    command_edit(obj, input, interactive=True)
 
 def _editor(sometext):
     with tempfile.NamedTemporaryFile(mode='w', encoding='UTF-8', delete=False) as tmpfile:
@@ -698,24 +698,25 @@ def _edit(ctx, add_category=None, cancel=None, interactive_ical=False, interacti
 
 def _mass_interactive_edit(objs, default='ignore'):
     """send things through the editor, and expect commands back"""
-    instructions = """
+    instructions = """\
 ## Prepend a line with one of the following commands:
-## postpone <n>d [with parents] [with children] [with family] [ask]
-## ignore
-## part(ially-complete)
-## complete
-## split
-## cancel
-## set foo=bar
-## edit
-## family
-## pdb
+# postpone <n>d
+# ignore
+# part(ially-complete)
+# complete
+# split
+# cancel
+# set foo=bar
+# edit
+# family
+# pdb
+
 """
     text = instructions + "\n".join(_list(
         objs, top_down=True, echo=False,
         ## We only deal with tasks so far, and only tasks that needs action
         ## TODO: this is bad design
-        template=default + " {UID}: due={DUE} Pri={PRI:?0?} {SUMMARY:?{DESCRIPTION:?(no summary given)?}?} (STATUS={STATUS:-})", filter=lambda obj: obj.icalendar_component['STATUS']=='NEEDS-ACTION'))
+        template=default + " {UID}: due={DUE} Pri={PRI:?0?} {SUMMARY:?{DESCRIPTION:?(no summary given)?}?} (STATUS={STATUS:-})", filter=lambda obj: obj.icalendar_component.get('STATUS', 'NEEDS-ACTION')=='NEEDS-ACTION'))
     edited = _editor(text)
     for line in edited.split('\n'):
         ## BUG: does not work if the source data comes from multiple calendars!
@@ -1111,12 +1112,13 @@ def _dismiss_panic(ctx, hours_per_day, lookahead='60d'):
             procrastination_time = f"{procrastination_time.days+1}d"
         else:
             procrastination_time = f"{procrastination_time.seconds//3600+1}h"
+        default_procrastination_time = procrastination_time
         procrastination_time = click.prompt(f"Push the due-date with ... (press O for one-by-one, E for edit all)", default=procrastination_time)
         if procrastination_time == 'O':
             for item in first_low_pri_tasks:
                 _interactive_edit(item['obj'])
         elif procrastination_time == 'E':
-            _mass_interactive_edit([x['obj'] for x in first_low_pri_tasks], default=f"postpone {procrastination_time} ask")
+            _mass_interactive_edit([x['obj'] for x in first_low_pri_tasks], default=f"postpone {default_procrastination_time}")
         else:
             _procrastinate([x['obj'] for x in first_low_pri_tasks], procrastination_time,  check_dependent='interactive', err_callback=click.echo, confirm_callback=click.confirm)
 

@@ -125,7 +125,7 @@ def _parse_dt(input, return_type=None):
 
 def _command_line_edit(line, calendar, interactive=True):
     strip1 = re.compile("#.*$")
-    regexp = re.compile("((?:postpone [0-9]+[smhdwy](?:with [^ ])*(?:ask)?)|[^ ]*) (.*?)(: |$)")
+    regexp = re.compile("((?:postpone [0-9]+[smhdwy])|[^ ]*) (.*?)(: |$)")
     line = strip1.sub('', line)
     line = line.strip()
     if not line:
@@ -508,17 +508,16 @@ def command_edit(obj, command, interactive=True):
     elif command == 'split':
         interactive_split_task(obj, too_big=False)
     elif command.startswith('postpone'):
+        with_params = {}
         commands = command.split(' ')
-        if len(commands) > 2:
-            with_params = {}
-            if interactive:
-                with_params['confirm_callback'] = click.confirm
-                with_params['err_callback'] = click.echo
-            if interactive and 'ask' in command:
-                true = 'interactive'
-                with_params['check_dependent'] = 'interactive'
-            else:
-                true = True
+        if interactive:
+            with_params['confirm_callback'] = click.confirm
+            with_params['err_callback'] = click.echo
+            true = 'interactive'
+            with_params['check_dependent'] = 'interactive'
+        else:
+            true = True
+        if len(commands)>2:
             if 'with family' in command:
                 with_params['with_family'] = true
             if 'with children' in command:
@@ -526,7 +525,7 @@ def command_edit(obj, command, interactive=True):
             if 'with family' in command:
                 with_params['with_family'] = true
         ## TODO: we probably shouldn't be doing this interactively here?
-        parent = _procrastinate([obj], command.split(' ')[1], with_children='interactive', with_parent='interactive', with_family='interactive', check_dependent="interactive", err_callback=click.echo, confirm_callback=click.confirm)
+        parent = _procrastinate([obj], command.split(' ')[1], **with_params)
     elif command == 'complete':
         obj.complete(handle_rrule=True)
     elif command == 'cancel':
