@@ -357,7 +357,6 @@ def test_plann():
             with patch('click.prompt', new=gen_prompt('set category=foo')):
                 _interactive_edit(todo1)
                 todo1.load()
-                import pdb; pdb.set_trace()
                 assert([str(x) for x in todo1.icalendar_component['CATEGORIES'].cats] == ['foo'])
             ## TODO: part, split, family
             ## TODO: cancel, 

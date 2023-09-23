@@ -6,6 +6,8 @@ them, document them and write up test code.
 TODO: Move time handling to a separate timespec.py
 
 TODO: make a separate class for relations.  (perhaps in the caldav library?)
+
+TODO: Sort all this mess.  Split out things that are interactive?
 """
 
 import caldav
@@ -17,6 +19,13 @@ import re
 from dataclasses import dataclass
 import zoneinfo
 from collections import defaultdict
+import click
+
+## TODO: maybe find those attributes through the icalendar library? icalendar.cal.singletons, icalendar.cal.multiple, etc
+attr_txt_one = ['location', 'description', 'geo', 'organizer', 'summary', 'class', 'rrule', 'status']
+attr_txt_many = ['category', 'comment', 'contact', 'resources', 'parent', 'child']
+attr_time = ['dtstamp', 'dtstart', 'due', 'dtend', 'duration']
+attr_int = ['priority']
 
 ## Singleton (aka global variable)
 @dataclass
@@ -474,3 +483,69 @@ def _relationship_text(obj, reltype_wanted=None):
             objs.append(_get_summary(relobj))
         ret.append(reltype + "\n" + "\n".join(objs) + "\n")
         return "\n".join(ret)
+
+def command_edit(obj, command):
+    if command == 'ignore':
+        return
+    elif command == 'part':
+        interactive_split_task(obj, partially_complete=True, too_big=False)
+    elif command == 'split':
+        interactive_split_task(obj, too_big=False)
+    elif command.startswith('postpone'):
+        ## TODO: make this into an interactive recursive function
+        parent = _procrastinate([obj], command.split(' ')[1], with_children='interactive', with_parent='interactive', with_family='interactive', check_dependent="interactive", err_callback=click.echo, confirm_callback=click.confirm)
+    elif command == 'complete':
+        obj.complete(handle_rrule=True)
+    elif command == 'cancel':
+        comp['STATUS'] = 'CANCELLED'
+    elif command.startswith('set '):
+        command = command[4:].split('=')
+        assert len(command) == 2
+        parsed = _process_set_arg(*command)
+        for x in parsed:
+            _set_something(obj, x, parsed[x])
+    elif command == 'edit':
+        _interactive_ical_edit([obj])
+    elif command == 'family':
+        _interactive_relation_edit([obj])
+    elif command == 'pdb':
+        click.echo("icalendar component available as comp")
+        click.echo("caldav object available as obj")
+        click.echo("do the necessary changes and press c to continue normal code execution")
+        click.echo("happy hacking")
+        import pdb; pdb.set_trace()
+    else:
+        click.echo(f"unknown instruction '{command}' - ignoring")
+        return
+    obj.save()
+
+def _process_set_arg(arg, value):
+    ret = {}
+    if arg in attr_time and arg != 'duration':
+        ret[arg] = parse_dt(value, for_storage=True)
+    elif arg == 'rrule':
+        rrule = {}
+        for split1 in value.split(';'):
+            k,v = split1.split('=')
+            rrule[k] = v
+        ret[arg] = rrule
+    elif arg == 'category':
+        ret['categories'] = [ value ]
+    elif arg == 'categories':
+        ret['categories'] = value.split(',')
+    else:
+        ret[arg] = value
+    return ret
+
+def _set_something(obj, arg, value):
+    comp = obj.icalendar_component
+    if arg in ('child', 'parent'):
+        for val in value:
+            obj.set_relation(reltype=arg, other=val)
+    elif arg == 'duration':
+        duration = parse_add_dur(dt=None, dur=value)
+        obj.set_duration(duration)
+    else:
+        if arg in comp:
+            comp.pop(arg)
+        comp.add(arg, value)

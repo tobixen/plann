@@ -36,7 +36,7 @@ from plann.config import interactive_config, config_section, read_config, expand
 import tempfile
 import subprocess
 from plann.panic_planning import timeline_suggestion
-from plann.lib import _now, _ensure_ts, parse_dt, parse_add_dur, parse_timespec, find_calendars, _summary, _procrastinate, tz, _relships_by_type, _get_summary, _relationship_text, _adjust_relations, parentlike, childlike, _remove_reverse_relations
+from plann.lib import _now, _ensure_ts, parse_dt, parse_add_dur, parse_timespec, find_calendars, _summary, _procrastinate, tz, _relships_by_type, _get_summary, _relationship_text, _adjust_relations, parentlike, childlike, _remove_reverse_relations, command_edit, _process_set_arg, attr_txt_one, attr_txt_many, attr_time, attr_int, _set_something
 
 list_type = list
 
@@ -51,12 +51,6 @@ list_type = list
 
 ## See https://click.palletsprojects.com/en/8.0.x/api/#click.ParamType and
 ## /usr/lib/*/site-packages/click/types.py on how to do this.
-
-## TODO: maybe find those attributes through the icalendar library? icalendar.cal.singletons, icalendar.cal.multiple, etc
-attr_txt_one = ['location', 'description', 'geo', 'organizer', 'summary', 'class', 'rrule', 'status']
-attr_txt_many = ['category', 'comment', 'contact', 'resources', 'parent', 'child']
-attr_time = ['dtstamp', 'dtstart', 'due', 'dtend', 'duration']
-attr_int = ['priority']
 
 @click.group()
 ## TODO: interactive config building
@@ -526,52 +520,7 @@ def _interactive_edit(obj):
     dtstart = _ensure_ts(dtstart)
     click.echo(f"pri={pri} {dtstart:%F %H:%M:%S %Z} - {due:%F %H:%M:%S %Z}: {summary}")
     input = click.prompt("postpone <n>d / ignore / part(ially-complete) / complete / split / cancel / set foo=bar / edit / family / pdb?", default='ignore')
-    if input == 'ignore':
-        return
-    elif input == 'part':
-        interactive_split_task(obj, partially_complete=True, too_big=False)
-    elif input == 'split':
-        interactive_split_task(obj, too_big=False)
-    elif input.startswith('postpone'):
-        ## TODO: make this into an interactive recursive function
-        parent = _procrastinate([obj], input.split(' ')[1], with_children='interactive', with_parent='interactive', with_family='interactive', check_dependent="interactive", err_callback=click.echo, confirm_callback=click.confirm)
-    elif input == 'complete':
-        obj.complete(handle_rrule=True)
-    elif input == 'cancel':
-        comp['STATUS'] = 'CANCELLED'
-    elif input.startswith('set '):
-        input = input[4:].split('=')
-        assert len(input) == 2
-        parsed = _process_set_arg(*input)
-        for x in parsed:
-            _set_something(obj, x, parsed[x])
-    elif input == 'edit':
-        _interactive_ical_edit([obj])
-    elif input == 'family':
-        _interactive_relation_edit([obj])
-    elif input == 'pdb':
-        click.echo("icalendar component available as comp")
-        click.echo("caldav object available as obj")
-        click.echo("do the necessary changes and press c to continue normal code execution")
-        click.echo("happy hacking")
-        import pdb; pdb.set_trace()
-    else:
-        click.echo(f"unknown instruction '{input}' - ignoring")
-        return
-    obj.save()
-
-def _set_something(obj, arg, value):
-    comp = obj.icalendar_component
-    if arg in ('child', 'parent'):
-        for val in value:
-            obj.set_relation(reltype=arg, other=val)
-    elif arg == 'duration':
-        duration = parse_add_dur(dt=None, dur=value)
-        obj.set_duration(duration)
-    else:
-        if arg in comp:
-            comp.pop(arg)
-        comp.add(arg, value)
+    command_edit(obj, input)
 
 def _editor(sometext):
     with tempfile.NamedTemporaryFile(mode='w', encoding='UTF-8', delete=False) as tmpfile:
@@ -708,7 +657,12 @@ def _edit(ctx, add_category=None, cancel=None, interactive_ical=False, interacti
 
     if mass_interactive:
         ## send things through the editor
-        raise NotImplementedError()
+        indented_family = "\n".join(_list(
+            ctx.obj['objs'], top_down=True, echo=False,
+            template="ignore {UID}: due={DUE} Pri={PRI:?0?} {SUMMARY:?{DESCRIPTION:?(no summary given)?}?} (STATUS={STATUS:-})"))
+        edited = _editor(indented_family)
+        for line in edited.split('\n'):
+            command_line_edit(line)
 
     for obj in ctx.obj['objs']:
         if interactive:
@@ -904,6 +858,7 @@ def ical(ctx, ical_data, ical_file):
             ## TODO: this may not be an event - should make a Calendar.save_object method
             c.save_event(ical)
 
+    
 def _process_set_args(ctx, kwargs):
     ctx.obj['set_args'] = {}
     for x in kwargs:
@@ -916,24 +871,6 @@ def _process_set_args(ctx, kwargs):
         ctx.obj['set_args']['summary'] = ctx.obj['set_args'].get('summary', '') + kwargs['summary']
     if 'ical_fragment' in kwargs:
         ctx.obj['set_args']['ics'] = kwargs['ical_fragment']
-
-def _process_set_arg(arg, value):
-    ret = {}
-    if arg in attr_time and arg != 'duration':
-        ret[arg] = parse_dt(value, for_storage=True)
-    elif arg == 'rrule':
-        rrule = {}
-        for split1 in value.split(';'):
-            k,v = split1.split('=')
-            rrule[k] = v
-        ret[arg] = rrule
-    elif arg == 'category':
-        ret['categories'] = [ value ]
-    elif arg == 'categories':
-        ret['categories'] = value.split(',')
-    else:
-        ret[arg] = value
-    return ret
 
 @add.command()
 @click.argument('summary', nargs=-1)
