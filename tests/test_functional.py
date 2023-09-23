@@ -354,7 +354,13 @@ def test_plann():
                 _interactive_edit(todo1)
                 todo1.load()
                 assert(todo1.icalendar_component['DUE'].dt > datetime_(year=2023, month=9, day=19, hour=15))
-            ## TODO: part, split
+            with patch('click.prompt', new=gen_prompt('set category=foo')):
+                _interactive_edit(todo1)
+                todo1.load()
+                import pdb; pdb.set_trace()
+                assert([str(x) for x in todo1.icalendar_component['CATEGORIES'].cats] == ['foo'])
+            ## TODO: part, split, family
+            ## TODO: cancel, 
 
     finally:
         stop_xandikos_server(conn_details)

@@ -492,6 +492,7 @@ def delete(ctx, multi_delete, **kwargs):
 @click.option('--interactive-ical/--no-interactive-ical', help="Edit the ical interactively")
 @click.option('--interactive-relations/--no-interactive-relations', help="Edit the relationships")
 @click.option('--interactive/--no-interactive', help="Interactive edit")
+@click.option('--mass-interactive/--no-mass-interactive', help="Interactive edit through editor")
 @click.option('--cancel/--uncancel', default=None, help="Mark task(s) as cancelled")
 @click.option('--complete/--uncomplete', default=None, help="Mark task(s) as completed")
 @click.option('--complete-recurrence-mode', default='safe', help="Completion of recurrent tasks, mode to use - can be 'safe', 'thisandfuture' or '' (see caldav library for details)")
@@ -541,7 +542,9 @@ def _interactive_edit(obj):
     elif input.startswith('set '):
         input = input[4:].split('=')
         assert len(input) == 2
-        _set_something(obj, input[0], input[1])
+        parsed = _process_set_arg(*input)
+        for x in parsed:
+            _set_something(obj, x, parsed[x])
     elif input == 'edit':
         _interactive_ical_edit([obj])
     elif input == 'family':
@@ -556,7 +559,6 @@ def _interactive_edit(obj):
         click.echo(f"unknown instruction '{input}' - ignoring")
         return
     obj.save()
-
 
 def _set_something(obj, arg, value):
     comp = obj.icalendar_component
@@ -692,7 +694,7 @@ def _set_relations_from_text_list(calendar, some_list, parent=None, indent=0):
         c.load()
     _adjust_relations(parent, children)
 
-def _edit(ctx, add_category=None, cancel=None, interactive_ical=False, interactive_relations=False, interactive=False, complete=None, complete_recurrence_mode='safe', postpone=None, **kwargs):
+def _edit(ctx, add_category=None, cancel=None, interactive_ical=False, interactive_relations=False, mass_interactive=False, interactive=False, complete=None, complete_recurrence_mode='safe', postpone=None, **kwargs):
     """
     Edits a task/event/journal
     """
@@ -703,6 +705,10 @@ def _edit(ctx, add_category=None, cancel=None, interactive_ical=False, interacti
         _interactive_ical_edit(ctx.obj['objs'])
     if interactive_relations:
         _interactive_relation_edit(ctx.obj['objs'])
+
+    if mass_interactive:
+        ## send things through the editor
+        raise NotImplementedError()
 
     for obj in ctx.obj['objs']:
         if interactive:
@@ -903,26 +909,31 @@ def _process_set_args(ctx, kwargs):
     for x in kwargs:
         if kwargs[x] is None or kwargs[x]==():
             continue
-        if x in ('set_due', 'set_dtend', 'set_dtstart', 'set_completed'):
-            kwargs[x] = parse_dt(kwargs[x], for_storage=True)
-        if x == 'set_rrule':
-            rrule = {}
-            for split1 in kwargs[x].split(';'):
-                k,v = split1.split('=')
-                rrule[k] = v
-            ctx.obj['set_args']['rrule'] = rrule
-        elif x == 'set_category':
-            ctx.obj['set_args']['categories'] = kwargs[x]
-        elif x.startswith('set_'):
-            ctx.obj['set_args'][x[4:]] = kwargs[x]
-    for arg in ctx.obj['set_args']:
-        if arg in attr_time and arg != 'duration':
-            ctx.obj['set_args'][arg] = parse_dt(ctx.obj['set_args'][arg])
-
+        if not x.startswith('set_'):
+            continue
+        ctx.obj['set_args'].update(_process_set_arg(x[4:], kwargs[x]))
     if 'summary' in kwargs:
         ctx.obj['set_args']['summary'] = ctx.obj['set_args'].get('summary', '') + kwargs['summary']
     if 'ical_fragment' in kwargs:
         ctx.obj['set_args']['ics'] = kwargs['ical_fragment']
+
+def _process_set_arg(arg, value):
+    ret = {}
+    if arg in attr_time and arg != 'duration':
+        ret[arg] = parse_dt(value, for_storage=True)
+    elif arg == 'rrule':
+        rrule = {}
+        for split1 in value.split(';'):
+            k,v = split1.split('=')
+            rrule[k] = v
+        ret[arg] = rrule
+    elif arg == 'category':
+        ret['categories'] = [ value ]
+    elif arg == 'categories':
+        ret['categories'] = value.split(',')
+    else:
+        ret[arg] = value
+    return ret
 
 @add.command()
 @click.argument('summary', nargs=-1)
