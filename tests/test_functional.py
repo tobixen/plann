@@ -280,7 +280,7 @@ def test_plann():
         _select(ctx, todo=True)
         cal_pre_interactive_relation_edit = "\n".join([x.data for x in ctx.obj['objs']])
         passthrough = lambda x: x
-        with patch('plann.cli._editor', new=passthrough) as _editor:
+        with patch('plann.lib._editor', new=passthrough) as _editor:
             _interactive_relation_edit((ctx.obj['objs']))
 
         for obj in ctx.obj['objs']:
@@ -305,7 +305,7 @@ def test_plann():
         ## This one will leave todo1 with two children, then the next lines are indented more.
         def add_indent(text):
             return f"{uid1}: todo1\n {uid2}: todo2\n {uid3}: todo3\n  {uid4}: todo4\n     {uid5}: todo5"
-        with patch('plann.cli._editor', new=add_indent) as _editor:
+        with patch('plann.lib._editor', new=add_indent) as _editor:
             _interactive_relation_edit([todo1])
 
         ## Reload the object list
@@ -322,7 +322,7 @@ def test_plann():
         def remove_parent(input):
             return f"{uid2}: todo2\n{uid3}: todo3\n  {uid4}: todo4\n     {uid5}: todo5"
 
-        with patch('plann.cli._editor', new=remove_parent) as _editor:
+        with patch('plann.lib._editor', new=remove_parent) as _editor:
             _interactive_relation_edit([todo1])
 
         assert(dag(todo1, 'CHILD') == {})
@@ -364,7 +364,7 @@ def test_plann():
             ## TODO: cancel,
 
         ## testing mass interactive edit
-        with patch('plann.cli._editor', new=passthrough) as _editor:
+        with patch('plann.lib._editor', new=passthrough) as _editor:
             _mass_interactive_edit([todo1, todo2, todo3], default='complete')
         for todo in (todo1, todo2, todo3, todo4, todo5):
             todo.load()

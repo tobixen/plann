@@ -8,7 +8,7 @@ I'm sure there must exist something like this?"""
 import datetime
 import string
 import re
-from plann.lib import tz
+from plann.timespec import tz
 
 class NoValue():
     def __getattr__(self, attr):

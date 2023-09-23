@@ -3,23 +3,22 @@
 TODO: Should consider to remove the leading underscore from many of
 them, document them and write up test code.
 
-TODO: Move time handling to a separate timespec.py
-
 TODO: make a separate class for relations.  (perhaps in the caldav library?)
 
 TODO: Sort all this mess.  Split out things that are interactive?
 """
 
-import caldav
+import tempfile
 import datetime
-import dateutil
-import dateutil.parser
+import caldav
 import logging
 import re
-from dataclasses import dataclass
-import zoneinfo
+import os
+import subprocess
 from collections import defaultdict
 import click
+from plann.template import Template
+from plann.timespec import tz, _now, _ensure_ts, parse_dt, parse_add_dur, parse_timespec
 
 ## TODO: maybe find those attributes through the icalendar library? icalendar.cal.singletons, icalendar.cal.multiple, etc
 attr_txt_one = ['location', 'description', 'geo', 'organizer', 'summary', 'class', 'rrule', 'status']
@@ -27,105 +26,29 @@ attr_txt_many = ['category', 'comment', 'contact', 'resources', 'parent', 'child
 attr_time = ['dtstamp', 'dtstart', 'due', 'dtend', 'duration']
 attr_int = ['priority']
 
-## Singleton (aka global variable)
-@dataclass
-class Tz():
-    """
-    Singleton class storing timezone preferences
-
-    (floating time not supported yet)
-    """
-    show_native_timezone: bool=False
-    _implicit_timezone: zoneinfo.ZoneInfo = None
-    _store_timezone: zoneinfo.ZoneInfo = zoneinfo.ZoneInfo('UTC')
-
-    @property
-    def implicit_timezone(self):
-        return self._implicit_timezone
-    
-    @property
-    def store_timezone(self):
-        return self._store_timezone
-
-    @implicit_timezone.setter
-    def implicit_timezone(self, value):
-        if value:
-            self._implicit_timezone = zoneinfo.ZoneInfo(value)
-            if not self.store_timezone:
-                self._store_timezone = self._implicit_timezone
-
-    @store_timezone.setter
-    def store_timezone(self, value):
-        if value:
-            self._store_timezone = zoneinfo.ZoneInfo(value)
-
-tz=Tz()
-
-def _now():
-    return datetime.datetime.now().astimezone(tz.implicit_timezone)
-
-def _ensure_ts(dt):
-    """
-    TODO: do we need this?  it's a bit overlapping with parse_dt
-    """
-    if hasattr(dt, 'dt'):
-        dt = dt.dt
-    if dt is None:
-        return datetime.datetime(1970,1,1).astimezone(tz.implicit_timezone)
-    if isinstance(dt, datetime.datetime):
-        if not dt.tzinfo:
-            return dt.replace(tzinfo=tz.implicit_timezone).astimezone(tz.implicit_timezone)
-        else:
-            return dt
-    return datetime.datetime(dt.year, dt.month, dt.day, tzinfo=tz.implicit_timezone).astimezone(tz.implicit_timezone)
-
-def parse_dt(input, return_type=None, for_storage=False):
-    ret = _parse_dt(input, return_type)
-    if for_storage:
-        ret = ret.astimezone(tz.store_timezone)
+def _editor(sometext):
+    with tempfile.NamedTemporaryFile(mode='w', encoding='UTF-8', delete=False) as tmpfile:
+        tmpfile.write(sometext)
+        fn = tmpfile.name
+    editor = os.environ.get("VISUAL") or os.environ.get("EDITOR") or ""
+    if not '/' in editor:
+        for path in os.environ.get("PATH", "").split(os.pathsep):
+            full_path = os.path.join(path, editor)
+            if os.path.exists(full_path) and os.access(full_path, os.X_OK):
+                editor = full_path
+                break
+    for ed in (editor, '/usr/bin/vim', '/usr/bin/vi', '/usr/bin/emacs', '/usr/bin/nano', '/usr/bin/pico', '/bin/vi'):
+        if os.path.isfile(ed) and os.access(ed, os.X_OK):
+            break
+    foo = subprocess.run([ed, fn])
+    with open(fn, "r") as tmpfile:
+        ret = tmpfile.read()
+    os.unlink(fn)
     return ret
-    
-def _parse_dt(input, return_type=None):
-    """
-    Convenience-method, it is very liberal in what it accepts as input:
-
-    * Date string or datetime string (uses dateutil.parser)
-    * datetime or date
-    * VDDDTypes from the icalendar library
-    * strings like "+2h" means "two hours in the future"
-
-    If return_type is date, return a date - if return_type is
-    datetime, return a datetime.  If no return_type is given, try to
-    guess if we should return a date or a datetime.  Datetime should
-    always have a timezone.
-    """
-    if hasattr(input, 'dt'):
-        input = input.dt
-    if isinstance(input, datetime.datetime):
-        if return_type is datetime.date:
-            return input.date()
-        return _ensure_ts(input)
-    if isinstance(input, datetime.date):
-        if return_type is datetime.datetime:
-            return _ensure_ts(input)
-        return input
-    ## dateutil.parser.parse does not recognize '+2 hours', like date does.
-    if input.startswith('+'):
-        ret = parse_add_dur(datetime.datetime.now(), input[1:])
-    else:
-        ret = dateutil.parser.parse(input)
-    if return_type is datetime.datetime:
-        return _ensure_ts(ret)
-    elif return_type is datetime.date:
-        return ret.date()
-    elif ret.time() == datetime.time(0,0) and len(input)<12 and not '00:00' in input and not '0000' in input:
-        return ret.date()
-    else:
-        return _ensure_ts(ret)
 
 def _command_line_edit(line, calendar, interactive=True):
     strip1 = re.compile("#.*$")
-    regexp = re.compile("((?:postpone [0-9]+[smhdwy])|[^ ]*) (.*?)(: |$)")
+    regexp = re.compile("((?:set [^ ]*=[^ ]*)|(?:postpone [0-9]+[smhdwy])|[^ ]*) (.*?)(: |$)")
     line = strip1.sub('', line)
     line = line.strip()
     if not line:
@@ -136,108 +59,6 @@ def _command_line_edit(line, calendar, interactive=True):
     uid = splitted.group(2)
     obj = calendar.object_by_uid(uid)
     command_edit(obj, command, interactive)
-
-def parse_add_dur(dt, dur, for_storage=False, ts_allowed=False):
-    """
-    duration may be something like this:
-      * 1s (one second)
-      * 3m (three minutes, not months
-      * 3.5h
-      * 1y1w
-    
-    It may also be a ISO8601 duration
-
-    Returns the dt plus duration.
-
-    If no dt is given, return the duration.
-
-    TODO: months not supported yet
-    TODO: return of delta in years not supported yet
-    TODO: ISO8601 duration not supported yet
-    """
-    if dt and not (isinstance(dt, datetime.date)):
-        dt = parse_dt(dt)
-    time_units = {
-        's': 1, 'm': 60, 'h': 3600,
-        'd': 86400, 'w': 604800,
-        'y': 1314000
-    }
-    while dur:
-        rx = re.match(r'([+-]?\d+(?:\.\d+)?)([smhdwy])(.*)', dur)
-        if not rx:
-            if ts_allowed:
-                return parse_dt(dur)
-            else:
-                raise ValueError(f"A duration (like 3h for three hours) expected, but got: {dur}")
-        i = float(rx.group(1))
-        u = rx.group(2)
-        dur = rx.group(3)
-        if u=='y' and dt:
-            dt = datetime.datetime.combine(datetime.date(dt.year+int(i), dt.month, dt.day), dt.time(), tzinfo=dt.tzinfo)
-        else:
-            diff = datetime.timedelta(0, i*time_units[u])
-            if dt:
-                dt = dt + diff
-    if dt:
-        return dt.astimezone(tz.store_timezone) if for_storage else dt
-    else:
-        return diff
-   
-
-def parse_timespec(timespec, for_storage=False):
-    ret = _parse_timespec(timespec)
-    if for_storage:
-        ret = (x and x.astimezone(tz.store_timezone) for x in ret)
-    return ret
-
-def _parse_timespec(timespec):
-    """parses a timespec and return two timestamps
-
-    The ISO8601 interval format, format 1, 2 or 3 as described at
-    https://en.wikipedia.org/wiki/ISO_8601#Time_intervals should be
-    accepted, though it may be dependent on
-    https://github.com/gweis/isodate/issues/77 or perhaps
-    https://github.com/dateutil/dateutil/issues/1184 
-    
-    The calendar-cli format (i.e. 2021-01-08 15:00:00+1h) should be accepted
-
-    Two timestamps should be accepted.
-
-    One timestamp should be accepted, and the second return value will be None.
-    """
-    if isinstance(timespec, datetime.date):
-        return (timespec,timespec)
-
-    if (
-            isinstance(timespec, tuple) and
-            len(timespec)==2 and
-            isinstance(timespec[0], datetime.date) and
-            isinstance(timespec[1], datetime.date)):
-        return timespec
-    
-    ## calendar-cli format, 1998-10-03 15:00+2h
-    if '+' in timespec:
-        rx = re.match(r'(.*)\+((?:\d+(?:\.\d+)?[smhdwy])+)$', timespec)
-        if rx:
-            start = parse_dt(rx.group(1))
-            end = parse_add_dur(start, rx.group(2))
-            return (start, end)
-    try:
-        ## parse("2015-05-05 2015-05-05") does not throw the ParserError
-        if timespec.count('-')>3:
-            raise dateutil.parser.ParserError("Seems to be two dates here")
-        ret = parse_dt(timespec)
-        return (ret,None)
-    except dateutil.parser.ParserError:
-        split_by_space = timespec.split(' ')
-        if len(split_by_space) == 2:
-            return (parse_dt(split_by_space[0]), parse_dt(split_by_space[1]))
-        elif len(split_by_space) == 4:
-            return (parse_dt(f"{split_by_space[0]} {split_by_space[1]}"), parse_dt(f"{split_by_space[2]} {split_by_space[3]}"))
-        else:
-            raise ValueError(f"couldn't parse time interval {timespec}")
-
-    raise NotImplementedError("possibly a ISO time interval")
 
 def find_calendars(args, raise_errors):
     def list_(obj):
@@ -555,6 +376,107 @@ def command_edit(obj, command, interactive=True):
         return
     obj.save()
 
+def _interactive_ical_edit(objs):
+    ical = "\n".join([x.data for x in objs])
+    data = _editor(ical)
+    data = data.strip()
+    icals = _split_vcal(data)
+    assert len(icals) == len(objs)
+    for new,obj in zip(icals, objs):
+        ## Should probably assert that the UID is the same ...
+        ## ... or, leave it to the calendar server to handle changed UIDs
+        obj.data = new
+        obj.save()
+
+def _interactive_relation_edit(objs):
+    if not objs:
+        return
+    indented_family = "\n".join(_list(
+        objs, top_down=True, echo=False,
+        template="{UID}: {SUMMARY:?{DESCRIPTION:?(no summary given)?}?} (STATUS={STATUS:-})"))
+    edited = _editor(indented_family)
+    _set_relations_from_text_list(objs[0].parent, edited.split("\n"))
+
+def _set_relations_from_text_list(calendar, some_list, parent=None, indent=0):
+    """
+    Takes a list of indented strings identifying some relationships,
+    ensures parent and child is
+
+    Caveats:
+    * Currently it does not support RFC 9253 and enforces RELTYPE to be PARENT or CHILD
+    * Currently it also lacks support for multiple parents
+    * Relation type SIBLING is ignored
+    """
+    ## Logic:
+    ## * If a parent is not set and indent is 0, make sure the item has either no parents or multiple parents
+    ## * For all following lines where the indent is higher than the expected indent, recurse over the lines that are indented
+    ## * If a parent is set, collect all children (all lines with expected indent), then make sure all children has parent correctly set, and make sure the parent has those and no more children.
+    ## * Return a list of changes done.
+
+    ## Internal methods
+    def count_indent(line):
+        """count the left hand spaces on a line"""
+        j = 0
+        while j<len(line):
+            if line[j] == '\t':
+                j+=8
+            elif line[j] == ' ':
+                j+=1
+            else:
+                return j
+        return None
+    
+    def get_obj(line):
+        """Check the uuid on the line and return the caldav object"""
+        uid = line.lstrip().split(':')[0]
+        if not uid:
+            raise NotImplementedError("No uid - what now?")
+        return calendar.object_by_uid(uid)
+    
+    i=0
+    children = []
+    while i<len(some_list):
+        line = some_list[i]
+        line_indent = count_indent(line)
+
+        ## empty line
+        if line_indent is None:
+            i += 1
+            continue
+
+        ## unexpected - indentation going backwards
+        if line_indent < indent:
+            raise NotImplementedError("unexpected indentation 0")
+
+        ## indentation going forward - recurse over the indented section
+        #if line_indent > indent or (line_indent == indent and i>0): # TODO: think this more through?  The last is supposed to rip existing children from lines without a following indented sublist
+        if line_indent > indent:
+            if not i:
+                raise NotImplementedError("unexpected indentation 1")
+            j=i
+            while j<len(some_list):
+                new_indent = count_indent(some_list[j])
+                if new_indent is None or new_indent==indent:
+                    break
+                if new_indent < line_indent and new_indent != indent:
+                    raise NotImplementedError("unexpected indentation 2")
+                j+=1
+            _set_relations_from_text_list(calendar, some_list[i:j], parent=get_obj(some_list[i-1]), indent=line_indent)
+            i=j
+            continue
+
+        ## Unindented line.  Should be a direct child under parent
+        if line_indent == indent:
+            children.append(get_obj(some_list[i]))
+            i+=1
+            continue
+        
+        ## TODO: look through all the conditions above.  should we ever be here?
+        import pdb; pdb.set_trace()
+    for c in children:
+        c.load()
+    _adjust_relations(parent, children)
+    
 def _process_set_arg(arg, value):
     ret = {}
     if arg in attr_time and arg != 'duration':
@@ -585,3 +507,118 @@ def _set_something(obj, arg, value):
         if arg in comp:
             comp.pop(arg)
         comp.add(arg, value)
+
+def interactive_split_task(obj, partially_complete=False, too_big=True):
+    comp = obj.icalendar_component
+    summary = comp.get('summary') or comp.get('description') or comp.get('uid')
+    estimate = obj.get_duration()
+    tbm = ""
+    if too_big:
+        tbm = ", which is too big."
+    click.echo(f"{summary}: estimate is {estimate}{tbm}")
+    click.echo("Relationships:\n")
+    click.echo(_relationship_text(obj))
+    if partially_complete:
+        splitout_msg = "So you've been working on this?"
+    else:
+        splitout_msg = "Do you want to fork out some subtasks?"
+    if click.confirm(splitout_msg):
+        cnt = 1
+        if partially_complete:
+            default = f"Work on {summary}"
+        else:
+            default = f"Plan how to do {summary}"
+        while True:
+            summary = click.prompt("Name for the subtask", default=default)
+            default=""
+            if not summary:
+                break
+            cnt += 1
+            todo = obj.parent.save_todo(summary=summary, parent=[comp['uid']])
+            obj.load()
+            if partially_complete:
+                todo.complete()
+                break
+        new_estimate_suggestion = f"{estimate.total_seconds()//3600//cnt+1}h"
+        new_estimate = click.prompt("what is the remaining estimate for the parent task?", default=new_estimate_suggestion)
+        obj.set_duration(parse_add_dur(None, new_estimate), movable_attr='DTSTART') ## TODO: verify
+        new_summary = click.prompt("Summary of the parent task?", default=obj.icalendar_component['SUMMARY'])
+        obj.icalendar_component['SUMMARY'] = new_summary
+        postpone = click.prompt("Should we postpone the parent task?", default='0h')
+        if postpone in ('0h', '0'): ## TODO: regexp?
+            _procrastinate([obj], postpone, check_dependent='interactive', err_callback=click.echo, confirm_callback=click.confirm)
+        obj.save()
+        
+def _list(objs, ics=False, template="{DTSTART:?{DUE:?(date missing)?}?%F %H:%M:%S %Z}: {SUMMARY:?{DESCRIPTION:?(no summary given)?}?}", top_down=False, bottom_up=False, indent=0, echo=True, uids=None, filter=lambda obj: obj.icalendar_component.get('STATUS', '') not in ('CANCELLED', 'COMPLETED')):
+    """
+    Actual implementation of list
+
+    TODO: will crash if there are loops in the relationships
+    TODO: if there are parent/child-relationships that aren't bidrectionally linked, we may get problems
+    """
+    if indent>32:
+        import pdb; pdb.set_trace()
+    if ics:
+        if not objs:
+            return
+        icalendar = objs.pop(0).icalendar_instance
+        for obj in objs:
+            if not filter(obj):
+                continue
+            icalendar.subcomponents.extend(obj.icalendar_instance.subcomponents)
+        click.echo(icalendar.to_ical())
+        return
+    if isinstance(template, str):
+        template=Template(template)
+    output = []
+    if uids is None:
+        uids = set()
+
+    for obj in objs:
+        if isinstance(obj, str):
+            output.append(obj)
+            continue
+
+        if not filter(obj):
+            continue
+
+        uid = obj.icalendar_component['UID']
+        if uid in uids and not 'RECURRENCE-ID' in obj.icalendar_component:
+            continue
+        else:
+            uids.add(uid)
+
+        above = []
+        below = []
+        if top_down or bottom_up:
+            relations = _relships_by_type(obj)
+            parents = relations['PARENT']
+            children = relations['CHILD']
+            ## in a top-down view, the (grand)*parent should be shown as a top-level item rather than the object.
+            ## in a bottom-up view, the (grand)*child should be shown as a top-level item rather than the object.
+            if top_down:
+                above = parents
+                below = children
+            if bottom_up:
+                above = children
+                below = parents
+            if indent:
+                above = []
+        if not above:
+            ## This should be a top-level thing
+            output.append(" "*indent + template.format(**obj.icalendar_component))
+            ## Recursively add children in an indented way
+            output.extend(_list(below, template=template, top_down=top_down, bottom_up=bottom_up, indent=indent+2, echo=False, filter=filter))
+            if indent and top_down:
+                ## Include all siblings as same-level nodes
+                ## Use the top-level uids to avoid infinite recursion
+                ## TODO: siblings are probably not being handled correctly here.  Should write test code and investigate.
+                output.extend(_list(relations['SIBLING'], template=template, top_down=top_down, bottom_up=bottom_up, indent=indent, echo=False, uids=uids, filter=filter))
+        for p in above:
+            ## The item should be part of a sublist.  Find and add the top-level item, and the full indented list under there - recursively.
+            puid = p.icalendar_component['UID']
+            if not puid in uids:
+                output.extend(_list([p], template=template, top_down=top_down, bottom_up=bottom_up, indent=indent, echo=False, uids=uids, filter=filter))
+    if echo:
+        click.echo_via_pager("\n".join(output))
+    return output

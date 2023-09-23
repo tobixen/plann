@@ -33,10 +33,10 @@ import re
 import sys
 from plann.template import Template
 from plann.config import interactive_config, config_section, read_config, expand_config_section
-import tempfile
-import subprocess
 from plann.panic_planning import timeline_suggestion
-from plann.lib import _now, _ensure_ts, parse_dt, parse_add_dur, parse_timespec, find_calendars, _summary, _procrastinate, tz, _relships_by_type, _get_summary, _relationship_text, _adjust_relations, parentlike, childlike, _remove_reverse_relations, command_edit, _process_set_arg, attr_txt_one, attr_txt_many, attr_time, attr_int, _set_something, _command_line_edit
+from plann.timespec import _now, _ensure_ts, parse_dt, parse_add_dur, parse_timespec, tz
+from plann.lib import find_calendars, _summary, _procrastinate, _relships_by_type, _get_summary, _relationship_text, _adjust_relations, parentlike, childlike, _remove_reverse_relations, command_edit, _process_set_arg, attr_txt_one, attr_txt_many, attr_time, attr_int, _set_something, _command_line_edit, interactive_split_task, _set_relations_from_text_list, _interactive_relation_edit, _interactive_ical_edit, _list, _editor
+
 
 list_type = list
 
@@ -376,79 +376,6 @@ def list(ctx, ics, template, top_down=False, bottom_up=False):
     """
     return _list(ctx.obj['objs'], ics, template, top_down=top_down, bottom_up=bottom_up)
 
-def _list(objs, ics=False, template="{DTSTART:?{DUE:?(date missing)?}?%F %H:%M:%S %Z}: {SUMMARY:?{DESCRIPTION:?(no summary given)?}?}", top_down=False, bottom_up=False, indent=0, echo=True, uids=None, filter=lambda obj: True):
-    """
-    Actual implementation of list
-
-    TODO: will crash if there are loops in the relationships
-    TODO: if there are parent/child-relationships that aren't bidrectionally linked, we may get problems
-    """
-    if indent>32:
-        import pdb; pdb.set_trace()
-    if ics:
-        if not objs:
-            return
-        icalendar = objs.pop(0).icalendar_instance
-        for obj in objs:
-            if not filter(obj):
-                continue
-            icalendar.subcomponents.extend(obj.icalendar_instance.subcomponents)
-        click.echo(icalendar.to_ical())
-        return
-    if isinstance(template, str):
-        template=Template(template)
-    output = []
-    if uids is None:
-        uids = set()
-
-    for obj in objs:
-        if isinstance(obj, str):
-            output.append(obj)
-            continue
-
-        if not filter(obj):
-            continue
-
-        uid = obj.icalendar_component['UID']
-        if uid in uids and not 'RECURRENCE-ID' in obj.icalendar_component:
-            continue
-        else:
-            uids.add(uid)
-
-        above = []
-        below = []
-        if top_down or bottom_up:
-            relations = _relships_by_type(obj)
-            parents = relations['PARENT']
-            children = relations['CHILD']
-            ## in a top-down view, the (grand)*parent should be shown as a top-level item rather than the object.
-            ## in a bottom-up view, the (grand)*child should be shown as a top-level item rather than the object.
-            if top_down:
-                above = parents
-                below = children
-            if bottom_up:
-                above = children
-                below = parents
-            if indent:
-                above = []
-        if not above:
-            ## This should be a top-level thing
-            output.append(" "*indent + template.format(**obj.icalendar_component))
-            ## Recursively add children in an indented way
-            output.extend(_list(below, template=template, top_down=top_down, bottom_up=bottom_up, indent=indent+2, echo=False, filter=filter))
-            if indent and top_down:
-                ## Include all siblings as same-level nodes
-                ## Use the top-level uids to avoid infinite recursion
-                ## TODO: siblings are probably not being handled correctly here.  Should write test code and investigate.
-                output.extend(_list(relations['SIBLING'], template=template, top_down=top_down, bottom_up=bottom_up, indent=indent, echo=False, uids=uids, filter=filter))
-        for p in above:
-            ## The item should be part of a sublist.  Find and add the top-level item, and the full indented list under there - recursively.
-            puid = p.icalendar_component['UID']
-            if not puid in uids:
-                output.extend(_list([p], template=template, top_down=top_down, bottom_up=bottom_up, indent=indent, echo=False, uids=uids, filter=filter))
-    if echo:
-        click.echo_via_pager("\n".join(output))
-    return output
 
 @select.command()
 @click.pass_context
@@ -527,127 +454,6 @@ def _interactive_edit(obj):
     input = click.prompt("postpone <n>d / ignore / part(ially-complete) / complete / split / cancel / set foo=bar / edit / family / pdb?", default='ignore')
     command_edit(obj, input, interactive=True)
 
-def _editor(sometext):
-    with tempfile.NamedTemporaryFile(mode='w', encoding='UTF-8', delete=False) as tmpfile:
-        tmpfile.write(sometext)
-        fn = tmpfile.name
-    editor = os.environ.get("VISUAL") or os.environ.get("EDITOR") or ""
-    if not '/' in editor:
-        for path in os.environ.get("PATH", "").split(os.pathsep):
-            full_path = os.path.join(path, editor)
-            if os.path.exists(full_path) and os.access(full_path, os.X_OK):
-                editor = full_path
-                break
-    for ed in (editor, '/usr/bin/vim', '/usr/bin/vi', '/usr/bin/emacs', '/usr/bin/nano', '/usr/bin/pico', '/bin/vi'):
-        if os.path.isfile(ed) and os.access(ed, os.X_OK):
-            break
-    foo = subprocess.run([ed, fn])
-    with open(fn, "r") as tmpfile:
-        ret = tmpfile.read()
-    os.unlink(fn)
-    return ret
-
-def _interactive_ical_edit(objs):
-    ical = "\n".join([x.data for x in objs])
-    data = _editor(ical)
-    data = data.strip()
-    icals = _split_vcal(data)
-    assert len(icals) == len(objs)
-    for new,obj in zip(icals, objs):
-        ## Should probably assert that the UID is the same ...
-        ## ... or, leave it to the calendar server to handle changed UIDs
-        obj.data = new
-        obj.save()
-
-def _interactive_relation_edit(objs):
-    if not objs:
-        return
-    indented_family = "\n".join(_list(
-        objs, top_down=True, echo=False,
-        template="{UID}: {SUMMARY:?{DESCRIPTION:?(no summary given)?}?} (STATUS={STATUS:-})"))
-    edited = _editor(indented_family)
-    _set_relations_from_text_list(objs[0].parent, edited.split("\n"))
-
-def _set_relations_from_text_list(calendar, some_list, parent=None, indent=0):
-    """
-    Takes a list of indented strings identifying some relationships,
-    ensures parent and child is
-
-    Caveats:
-    * Currently it does not support RFC 9253 and enforces RELTYPE to be PARENT or CHILD
-    * Currently it also lacks support for multiple parents
-    * Relation type SIBLING is ignored
-    """
-    ## Logic:
-    ## * If a parent is not set and indent is 0, make sure the item has either no parents or multiple parents
-    ## * For all following lines where the indent is higher than the expected indent, recurse over the lines that are indented
-    ## * If a parent is set, collect all children (all lines with expected indent), then make sure all children has parent correctly set, and make sure the parent has those and no more children.
-    ## * Return a list of changes done.
-
-    ## Internal methods
-    def count_indent(line):
-        """count the left hand spaces on a line"""
-        j = 0
-        while j<len(line):
-            if line[j] == '\t':
-                j+=8
-            elif line[j] == ' ':
-                j+=1
-            else:
-                return j
-        return None
-    
-    def get_obj(line):
-        """Check the uuid on the line and return the caldav object"""
-        uid = line.lstrip().split(':')[0]
-        if not uid:
-            raise NotImplementedError("No uid - what now?")
-        return calendar.object_by_uid(uid)
-    
-    i=0
-    children = []
-    while i<len(some_list):
-        line = some_list[i]
-        line_indent = count_indent(line)
-
-        ## empty line
-        if line_indent is None:
-            i += 1
-            continue
-
-        ## unexpected - indentation going backwards
-        if line_indent < indent:
-            raise NotImplementedError("unexpected indentation 0")
-
-        ## indentation going forward - recurse over the indented section
-        #if line_indent > indent or (line_indent == indent and i>0): # TODO: think this more through?  The last is supposed to rip existing children from lines without a following indented sublist
-        if line_indent > indent:
-            if not i:
-                raise NotImplementedError("unexpected indentation 1")
-            j=i
-            while j<len(some_list):
-                new_indent = count_indent(some_list[j])
-                if new_indent is None or new_indent==indent:
-                    break
-                if new_indent < line_indent and new_indent != indent:
-                    raise NotImplementedError("unexpected indentation 2")
-                j+=1
-            _set_relations_from_text_list(calendar, some_list[i:j], parent=get_obj(some_list[i-1]), indent=line_indent)
-            i=j
-            continue
-
-        ## Unindented line.  Should be a direct child under parent
-        if line_indent == indent:
-            children.append(get_obj(some_list[i]))
-            i+=1
-            continue
-        
-        ## TODO: look through all the conditions above.  should we ever be here?
-        import pdb; pdb.set_trace()
-    for c in children:
-        c.load()
-    _adjust_relations(parent, children)
-
 def _edit(ctx, add_category=None, cancel=None, interactive_ical=False, interactive_relations=False, mass_interactive=False, interactive=False, complete=None, complete_recurrence_mode='safe', postpone=None, **kwargs):
     """
     Edits a task/event/journal
@@ -716,7 +522,7 @@ def _mass_interactive_edit(objs, default='ignore'):
         objs, top_down=True, echo=False,
         ## We only deal with tasks so far, and only tasks that needs action
         ## TODO: this is bad design
-        template=default + " {UID}: due={DUE} Pri={PRI:?0?} {SUMMARY:?{DESCRIPTION:?(no summary given)?}?} (STATUS={STATUS:-})", filter=lambda obj: obj.icalendar_component.get('STATUS', 'NEEDS-ACTION')=='NEEDS-ACTION'))
+        template=default + " {UID}: due={DUE} Pri={PRIORITY:?0?} {SUMMARY:?{DESCRIPTION:?(no summary given)?}?} (STATUS={STATUS:-})", filter=lambda obj: obj.icalendar_component.get('STATUS', 'NEEDS-ACTION')=='NEEDS-ACTION'))
     edited = _editor(text)
     for line in edited.split('\n'):
         ## BUG: does not work if the source data comes from multiple calendars!
@@ -1184,47 +990,6 @@ def _split_high_pri_tasks(ctx, threshold=2, max_lookahead='60d', limit_lookahead
             relations = obj.get_relatives(fetch_objects=False)
             if not 'CHILD' in relations:
                 interactive_split_task(obj, too_big=False)
-
-def interactive_split_task(obj, partially_complete=False, too_big=True):
-    comp = obj.icalendar_component
-    summary = comp.get('summary') or comp.get('description') or comp.get('uid')
-    estimate = obj.get_duration()
-    tbm = ""
-    if too_big:
-        tbm = ", which is too big."
-    click.echo(f"{summary}: estimate is {estimate}{tbm}")
-    click.echo("Relationships:\n")
-    click.echo(_relationship_text(obj))
-    if partially_complete:
-        splitout_msg = "So you've been working on this?"
-    else:
-        splitout_msg = "Do you want to fork out some subtasks?"
-    if click.confirm(splitout_msg):
-        cnt = 1
-        if partially_complete:
-            default = f"Work on {summary}"
-        else:
-            default = f"Plan how to do {summary}"
-        while True:
-            summary = click.prompt("Name for the subtask", default=default)
-            default=""
-            if not summary:
-                break
-            cnt += 1
-            todo = obj.parent.save_todo(summary=summary, parent=[comp['uid']])
-            obj.load()
-            if partially_complete:
-                todo.complete()
-                break
-        new_estimate_suggestion = f"{estimate.total_seconds()//3600//cnt+1}h"
-        new_estimate = click.prompt("what is the remaining estimate for the parent task?", default=new_estimate_suggestion)
-        obj.set_duration(parse_add_dur(None, new_estimate), movable_attr='DTSTART') ## TODO: verify
-        new_summary = click.prompt("Summary of the parent task?", default=obj.icalendar_component['SUMMARY'])
-        obj.icalendar_component['SUMMARY'] = new_summary
-        postpone = click.prompt("Should we postpone the parent task?", default='0h')
-        if postpone in ('0h', '0'): ## TODO: regexp?
-            _procrastinate([obj], postpone, check_dependent='interactive', err_callback=click.echo, confirm_callback=click.confirm)
-        obj.save()
 
 @interactive.command()
 @click.pass_context
