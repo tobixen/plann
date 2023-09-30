@@ -21,6 +21,7 @@ import tempfile
 import subprocess
 from plann.lib import _list, _adjust_relations, _summary, _procrastinate, _process_set_arg, _set_something, _icalendar_component, _relationship_text, _split_vcal
 from plann.timespec import _ensure_ts, parse_add_dur
+from icalendar.prop import vRecur
 
 def command_edit(obj, command, interactive=True):
     if command == 'ignore':
@@ -52,6 +53,9 @@ def command_edit(obj, command, interactive=True):
         obj.complete(handle_rrule=True)
     elif command == 'cancel':
         obj.icalendar_component['STATUS'] = 'CANCELLED'
+    elif command.lower().startswith('set rrule='):
+        rrule = vRecur.from_ical(command[10:])
+        _set_something(obj, 'RRULE', rrule)
     elif command.startswith('set '):
         command = command[4:].split('=')
         assert len(command) == 2
