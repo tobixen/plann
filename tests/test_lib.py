@@ -1,7 +1,7 @@
 import pytest
 from unittest.mock import patch
 from caldav import Todo
-from plann.lib import _summary,  _procrastinate, _adjust_ical_relations
+from plann.lib import _summary,  _procrastinate, _adjust_ical_relations, _add_category, _set_something
 from datetime import datetime, timedelta
 from datetime import timezone
 
@@ -33,6 +33,18 @@ def test_summary():
     assert(_summary(t) == "Buy some food and drinks, clean up the place, hang up some baloons")
     t.icalendar_component.pop('DESCRIPTION')
     assert(_summary(t) == "19970901T130000Z-123404@host.com")
+
+def test_add_set_category():
+    t = Todo()
+    t.data = todo
+    _add_category(t, 'foo')
+    assert 'CATEGORIES:foo' in t.data
+    _add_category(t, 'bar')
+    set(t.icalendar_component['CATEGORIES'].cats) == {'foo', 'bar'}
+    _set_something(t, 'category', 'zoo')
+    set(t.icalendar_component['CATEGORIES'].cats) == {'foo', 'bar', 'zoo'}
+    _set_something(t, 'categories', 'zoo,bar')
+    set(t.icalendar_component['CATEGORIES'].cats) == {'bar', 'zoo'}
 
 ## _hasreltype is skipped as for now (too small and only used in _procrastinate)
 
