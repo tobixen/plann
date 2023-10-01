@@ -294,17 +294,34 @@ def _editor(sometext):
     os.unlink(fn)
     return ret
 
-def _command_line_edit(line, calendar, interactive=True):
+def _strip_line(line):
     strip1 = re.compile("#.*$")
-    regexp = re.compile("((?:set [^ ]*=[^ ]*)|(?:postpone [0-9]+[smhdwy])|[^ ]*) (.*?)(: |$)")
     line = strip1.sub('', line)
     line = line.strip()
+    return line
+
+def _get_obj_from_line(line, calendar):
+    uid_re = re.compile("^(.+?)(: .*)?$")
+    line = _strip_line(line)
+    if not line:
+        return None
+    found = uid_re.match(line)
+    assert found
+    uid = found.group(1)
+    obj = calendar.object_by_uid(uid)
+    return obj
+
+def _command_line_edit(line, calendar, interactive=True):
+    regexp = re.compile("((?:set [^ ]*=[^ ]*)|(?:postpone [0-9]+[smhdwy])|[^ ]*) (.*)$")
+    line = _strip_line(line)
     if not line:
         return
     splitted = regexp.match(line)
     assert splitted
     command = splitted.group(1)
-    uid = splitted.group(2)
-    obj = calendar.object_by_uid(uid)
-    command_edit(obj, command, interactive)
-        
+    obj = _get_obj_from_line(splitted.group(2), calendar)
+    if obj:
+        command_edit(obj, command, interactive)
+    else:
+        import pdb; pdb.set_trace()
+

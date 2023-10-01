@@ -11,19 +11,32 @@ from plann.template import Template
 from plann.panic_planning import timeline_suggestion
 from plann.timespec import _now, _ensure_ts, parse_dt, parse_add_dur, parse_timespec, tz
 from plann.lib import _summary, _procrastinate, _relships_by_type, _summary, _relationship_text, _adjust_relations, parentlike, childlike, _remove_reverse_relations, _process_set_arg, attr_txt_one, attr_txt_many, attr_time, attr_int, _set_something, _list, _add_category
-from plann.interactive import command_edit, _interactive_ical_edit, _interactive_relation_edit, _set_relations_from_text_list, interactive_split_task, _editor, _command_line_edit, interactive_split_task, _mass_interactive_edit
+from plann.interactive import command_edit, _interactive_ical_edit, _interactive_relation_edit, _set_relations_from_text_list, interactive_split_task, _editor, _command_line_edit, interactive_split_task, _mass_interactive_edit, _get_obj_from_line
 
-def _select(ctx, interactive=False, **kwargs):
+def _select(ctx, interactive=False, mass_interactive=False, **kwargs):
     """
     wrapper function for __select.  Will honor the --interactive flag.
     """
     __select(ctx, **kwargs)
-    if interactive:
-        objs = ctx.obj['objs']
-        ctx.obj['objs'] = []
-        for obj in objs:
-            if click.confirm(f"select {_summary(obj)}?"):
-                ctx.obj['objs'].append(obj)
+    ## TODO: move the rest to interactive module?
+    if (interactive or mass_interactive) and ctx.obj['objs']:
+        if mass_interactive:
+            objs = ctx.obj['objs']
+            ctx.obj['objs'] = []
+            select_list = "\n".join(_list(
+                objs, echo=False,
+                template="{UID}: {SUMMARY:?{DESCRIPTION:?(no summary given)?}?} (STATUS={STATUS:-})"))
+            edited = _editor("## delete things that should not be selected:\n" + select_list)
+            for objectline in edited.split("\n"):
+                foo = objectline.split(': ')
+                obj = _get_obj_from_line(objectline, objs[0].parent)
+                if obj:
+                    ctx.obj['objs'].append(obj)
+
+        if interactive:
+            for obj in objs:
+                if click.confirm(f"select {_summary(obj)}?"):
+                    ctx.obj['objs'].append(obj)
 
 def __select(ctx, extend_objects=False, all=None, uid=[], abort_on_missing_uid=None, sort_key=[], skip_parents=None, skip_children=None, limit=None, offset=None, freebusyhack=None, pinned_tasks=None, **kwargs_):
     """

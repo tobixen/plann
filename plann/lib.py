@@ -305,10 +305,9 @@ def _process_set_arg(arg, value):
             k,v = split1.split('=')
             rrule[k] = v
         ret[arg] = rrule
-    elif arg == 'category':
-        ret['categories'] = [ value ]
-    elif arg == 'categories':
-        ret['categories'] = value.split(',')
+    elif arg in ('category', 'categories'):
+        if hasattr(value, 'split'):
+            ret['categories'] = value.split(',')
     else:
         ret[arg] = value
     return ret

@@ -137,7 +137,8 @@ def _set_attr_options(verb="", desc=""):
     return lambda func: _set_attr_options_(func, verb, desc)
 
 @cli.group()
-@click.option('--interactive/--no-interactive-select', help="interactive filtering")
+@click.option('--interactive/--no-interactive-select', help="line based interactive filtering")
+@click.option('--mass-interactive/--no-mass-interactive-select', help="editor based interactive filtering")
 @click.option('--all/--none', default=None, help='Select all (or none) of the objects.  Overrides all other selection options.')
 @click.option('--uid', multiple=True, help='select an object with a given uid (or select more object with given uids).  Overrides all other selection options')
 @click.option('--abort-on-missing-uid/--ignore-missing-uid', default=False, help='Abort if (one or more) uids are not found (default: silently ignore missing uids).  Only effective when used with --uid')

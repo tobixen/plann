@@ -173,9 +173,9 @@ def test_plann():
             return ret
 
         ## We create two tasks todo1 and todo2, todo2 being a child of todo1
-        todo1 = _add_todo(ctx, summary=['make plann good'], set_due='2012-12-20 23:15:00', set_dtstart='2012-12-20 22:15:00', set_uid='todo1')
+        todo1 = _add_todo(ctx, summary=['make plann good'], set_due='2012-12-20 23:15:00', set_dtstart='2012-12-20 22:15:00', set_uid='todo1', set_categories='plann,keyboard')
         uid1 = str(todo1.icalendar_component['uid'])
-        todo2 = _add_todo(ctx, summary=['fix some bugs in plann'], set_parent=[uid1], set_due='2012-12-21 23:15:00', set_dtstart='2012-12-21 22:15:00', set_uid='todo2')
+        todo2 = _add_todo(ctx, summary=['fix some bugs in plann'], set_parent=[uid1], set_due='2012-12-21 23:15:00', set_dtstart='2012-12-21 22:15:00', set_uid='todo2', set_categories=('plann', 'keyboard'))
         uid2 = str(todo2.icalendar_component['uid'])
 
         ## Selecting the tasks should yield ... 2 (but only one if skip_children or skip_parents is used)
@@ -290,7 +290,7 @@ def test_plann():
         assert cal_post_interactive_relation_edit == cal_pre_interactive_relation_edit
 
         ## Let's add some more tasks
-        todo3 = _add_todo(ctx, summary=['fix some more features in plann'], set_parent=[uid1], set_due='2012-12-21 23:15:00', set_dtstart='2012-12-21 22:15:00', set_uid='todo3')
+        todo3 = _add_todo(ctx, summary=['fix some more features in plann'], set_parent=[uid1], set_due='2012-12-21 23:15:00', set_dtstart='2012-12-21 22:15:00', set_uid='todo3', set_category='plann')
         todo4 = _add_todo(ctx, summary=['make plann even better'], set_parent=[uid1], set_due='2012-12-21 23:15:00', set_dtstart='2012-12-21 22:15:00', set_uid='todo4')
         todo5 = _add_todo(ctx, summary=['use plann on a daily basis to find more bugs and missing features'], set_parent=[uid1], set_due='2012-12-21 23:15:00', set_dtstart='2012-12-21 22:15:00', set_uid='todo5')
 
