@@ -312,14 +312,14 @@ def _check_for_panic(ctx, hours_per_day, output=True, print_timeline=True, fix_t
                         _add_event(ctx, summary=_summary(obj), timespec=(foo['begin'], next['begin']), set_status='TENTATIVE', first_calendar=True, set_parent=[comp['UID']])
     return possible_timeline
 
-def _process_set_args(ctx, kwargs):
+def _process_set_args(ctx, kwargs, keep_category=False):
     ctx.obj['set_args'] = {}
     for x in kwargs:
         if kwargs[x] is None or kwargs[x]==():
             continue
         if not x.startswith('set_'):
             continue
-        ctx.obj['set_args'].update(_process_set_arg(x[4:], kwargs[x]))
+        ctx.obj['set_args'].update(_process_set_arg(x[4:], kwargs[x], keep_category=keep_category))
     if 'summary' in kwargs:
         ctx.obj['set_args']['summary'] = ctx.obj['set_args'].get('summary', '') + kwargs['summary']
     if 'ical_fragment' in kwargs:
