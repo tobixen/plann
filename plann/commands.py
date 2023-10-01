@@ -11,7 +11,7 @@ from plann.template import Template
 from plann.panic_planning import timeline_suggestion
 from plann.timespec import _now, _ensure_ts, parse_dt, parse_add_dur, parse_timespec, tz
 from plann.lib import _summary, _procrastinate, _relships_by_type, _summary, _relationship_text, _adjust_relations, parentlike, childlike, _remove_reverse_relations, _process_set_arg, attr_txt_one, attr_txt_many, attr_time, attr_int, _set_something, _list, _add_category
-from plann.interactive import command_edit, _interactive_ical_edit, _interactive_relation_edit, _set_relations_from_text_list, interactive_split_task, _editor, _command_line_edit, interactive_split_task, _mass_interactive_edit, _get_obj_from_line
+from plann.interactive import command_edit, _interactive_ical_edit, _interactive_relation_edit, _set_relations_from_text_list, interactive_split_task, _editor, _command_line_edit, interactive_split_task, _mass_interactive_edit, _get_obj_from_line, _abort
 
 def _select(ctx, interactive=False, mass_interactive=False, **kwargs):
     """

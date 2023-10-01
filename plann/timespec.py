@@ -59,7 +59,7 @@ def _ensure_ts(dt):
 
 def parse_dt(input, return_type=None, for_storage=False):
     ret = _parse_dt(input, return_type)
-    if for_storage:
+    if for_storage and hasattr(ret, "astimezone"):
         ret = ret.astimezone(tz.store_timezone)
     return ret
     

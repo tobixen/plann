@@ -183,6 +183,10 @@ def _set_relations_from_text_list(calendar, some_list, parent=None, indent=0):
         c.load()
     _adjust_relations(parent, children)
 
+def _abort(message):
+    click.echo(message)
+    raise click.Abort(message)
+
 def _interactive_edit(obj):
     if 'BEGIN:VEVENT' in obj.data:
         objtype = 'event'

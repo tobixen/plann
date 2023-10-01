@@ -28,6 +28,7 @@ from plann.metadata import metadata
 from plann.commands import _select, _edit, _cats, _check_for_panic, _add_todo, _add_event, _agenda, _check_due, _dismiss_panic, _split_huge_tasks, _split_high_pri_tasks, _set_task_attribs
 from plann.lib import find_calendars, attr_txt_one, attr_txt_many, attr_time, attr_int, _list, _split_vcal
 from plann.timespec import tz
+from plann.interactive import _abort
 __version__ = metadata["version"]
 
 import click
@@ -128,10 +129,6 @@ def _set_attr_options_(func, verb, desc=""):
         for foo in attr_txt_many + ['categories']: ## TODO: category is the oddball, not categories
             func = click.option(f"--{verb}{foo}", help=f"{desc} ical attribute {foo}", multiple=True)(func)
     return func
-
-def _abort(message):
-    click.echo(message)
-    raise click.Abort(message)
 
 def _set_attr_options(verb="", desc=""):
     return lambda func: _set_attr_options_(func, verb, desc)

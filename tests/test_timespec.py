@@ -29,6 +29,8 @@ class TestParseTimestamp:
         else:
             assert ts in (
                 date(2011, 11, 11), date(2012, 12, 12))
+        ts = parse_dt(input, for_storage=True)
+        ## TODO: asserts
 
     @pytest.mark.parametrize("dt,dur,expected", [
         (date(2020,2,20),'1d',date(2020,2,21)),
