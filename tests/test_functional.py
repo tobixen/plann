@@ -294,6 +294,11 @@ def test_plann():
         todo4 = _add_todo(ctx, summary=['make plann even better'], set_parent=[uid1], set_due='2012-12-21 23:15:00', set_dtstart='2012-12-21 22:15:00', set_uid='todo4')
         todo5 = _add_todo(ctx, summary=['use plann on a daily basis to find more bugs and missing features'], set_parent=[uid1], set_due='2012-12-21 23:15:00', set_dtstart='2012-12-21 22:15:00', set_uid='todo5')
 
+        ## TODO: testing of set_category / set_categories should be moved to a separate test in test_lib / test_command / test_cli
+        assert(set([str(x) for x in todo1.icalendar_component['CATEGORIES'].cats]) == {'plann', 'keyboard'})
+        assert(set([str(x) for x in todo2.icalendar_component['CATEGORIES'].cats]) == {'plann', 'keyboard'})
+        assert(set([str(x) for x in todo3.icalendar_component['CATEGORIES'].cats]) == {'plann'})
+
         uid3 = str(todo3.icalendar_component['uid'])
         uid4 = str(todo4.icalendar_component['uid'])
         uid5 = str(todo5.icalendar_component['uid'])
@@ -357,10 +362,14 @@ def test_plann():
                 _interactive_edit(todo1)
                 todo1.load()
                 assert(todo1.icalendar_component['DUE'].dt > datetime_(year=2023, month=9, day=19, hour=15))
-            with patch('click.prompt', new=gen_prompt('set category=foo')):
+            with patch('click.prompt', new=gen_prompt('set categories=foo')):
                 _interactive_edit(todo1)
                 todo1.load()
-                assert([str(x) for x in todo1.icalendar_component['CATEGORIES'].cats] == ['foo'])
+                assert(set([str(x) for x in todo1.icalendar_component['CATEGORIES'].cats]) == {'foo'})
+            with patch('click.prompt', new=gen_prompt('set category=bar')):
+                _interactive_edit(todo1)
+                todo1.load()
+                assert(set([str(x) for x in todo1.icalendar_component['CATEGORIES'].cats]) == {'foo', 'bar'})
             ## TODO: part, split, family
             ## TODO: cancel,
 

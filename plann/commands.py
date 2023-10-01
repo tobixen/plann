@@ -228,7 +228,7 @@ def _edit(ctx, add_category=None, cancel=None, interactive_ical=False, interacti
     ## TODO: consolidate with command_edit
     if 'recurrence_mode' in kwargs:
         complete_recurrence_mode = kwargs.pop('recurrence_mode')
-    _process_set_args(ctx, kwargs)
+    _process_set_args(ctx, kwargs, keep_category=True)
     if interactive_ical:
         _interactive_ical_edit(ctx.obj['objs'])
     if interactive_relations:

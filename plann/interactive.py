@@ -59,7 +59,7 @@ def command_edit(obj, command, interactive=True):
     elif command.startswith('set '):
         command = command[4:].split('=')
         assert len(command) == 2
-        parsed = _process_set_arg(*command)
+        parsed = _process_set_arg(*command, keep_category=True)
         for x in parsed:
             _set_something(obj, x, parsed[x])
     elif command == 'edit':

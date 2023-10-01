@@ -241,7 +241,7 @@ def delete(ctx, multi_delete, **kwargs):
 
 @select.command()
 @click.option('--pdb/--no-pdb', default=None, help="Interactive edit through pdb (experts only)")
-@click.option('--add-category', default=None, help="Delete multiple things without confirmation prompt", multiple=True)
+@click.option('--add-category', default=None, help="Add a category (equivalent with --set-category, while --set-categories will overwrite existing categories))", multiple=True)
 @click.option('--postpone', help="Add something to the DTSTART and DTEND/DUE")
 @click.option('--interactive-ical/--no-interactive-ical', help="Edit the ical interactively")
 @click.option('--interactive-relations/--no-interactive-relations', help="Edit the relationships")

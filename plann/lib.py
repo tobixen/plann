@@ -101,7 +101,9 @@ def _add_category(obj, category):
         cats = comp.pop('categories').cats
     else:
         cats = []
-    cats.append(category)
+    if hasattr(category, 'split'):
+        category = category.split(',')
+    cats.extend(category)
     comp.add('categories', cats)
 
 def _summary(obj):
@@ -295,7 +297,7 @@ def _relationship_text(obj, reltype_wanted=None):
         ret.append(reltype + "\n" + "\n".join(objs) + "\n")
         return "\n".join(ret)
 
-def _process_set_arg(arg, value):
+def _process_set_arg(arg, value, keep_category=False):
     ret = {}
     if arg in attr_time and arg != 'duration':
         ret[arg] = parse_dt(value, for_storage=True)
@@ -307,7 +309,10 @@ def _process_set_arg(arg, value):
         ret[arg] = rrule
     elif arg in ('category', 'categories'):
         if hasattr(value, 'split'):
-            ret['categories'] = value.split(',')
+            value = value.split(',')
+        if not keep_category:
+            arg = 'categories'
+        ret[arg] = value
     else:
         ret[arg] = value
     return ret
