@@ -18,7 +18,7 @@ import click ## TODO - this should be removed, eventually
 
 ## TODO: maybe find those attributes through the icalendar library? icalendar.cal.singletons, icalendar.cal.multiple, etc
 attr_txt_one = ['location', 'description', 'geo', 'organizer', 'summary', 'class', 'rrule', 'status']
-attr_txt_many = ['category', 'comment', 'contact', 'resources', 'parent', 'child']
+attr_txt_many = ['category', 'comment', 'contact', 'resources', 'parent', 'child'] ## category is an odd-ball, it should be categories - but we need a lot more test code before we can change that.
 attr_time = ['dtstamp', 'dtstart', 'due', 'dtend', 'duration']
 attr_int = ['priority']
 
@@ -310,6 +310,8 @@ def _process_set_arg(arg, value, keep_category=False):
     elif arg in ('category', 'categories'):
         if hasattr(value, 'split'):
             value = value.split(',')
+        elif len(value) == 1 and arg == 'categories' and ',' in value[0]:
+            value = value[0].split(',')
         if not keep_category:
             arg = 'categories'
         ret[arg] = value

@@ -125,7 +125,7 @@ def _set_attr_options_(func, verb, desc=""):
             attr__one = attr_txt_one
         for foo in attr__one:
             func = click.option(f"--{verb}{foo}", help=f"{desc} ical attribute {foo}")(func)
-        for foo in attr_txt_many:
+        for foo in attr_txt_many + ['categories']: ## TODO: category is the oddball, not categories
             func = click.option(f"--{verb}{foo}", help=f"{desc} ical attribute {foo}", multiple=True)(func)
     return func
 
