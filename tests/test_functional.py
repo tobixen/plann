@@ -8,7 +8,7 @@ from xandikos.web import XandikosBackend, XandikosApp
 import plann.lib
 from plann.lib import find_calendars, _adjust_relations, _adjust_ical_relations
 from plann.cli import _add_todo, _select, _list, _check_for_panic
-from plann.interactive import _interactive_relation_edit, _interactive_edit, _mass_interactive_edit
+from plann.interactive import _interactive_relation_edit, _interactive_edit, _mass_interactive_edit, command_edit
 from plann.panic_planning import timeline_suggestion
 from caldav import Todo
 import aiohttp
@@ -385,6 +385,11 @@ def test_plann():
         for todo in (todo1, todo2, todo3, todo4, todo5):
             todo.load()
             assert todo.icalendar_component['STATUS'] == 'COMPLETED'
+
+        ## check that duration won't change if due is moved
+        ## TODO: run this for dtend and dtstart on an event as well
+        command_edit(todo1, 'set due=2012-12-19 19:15:00', interactive=False)
+        assert todo1.icalendar_component['DUE'].dt > todo1.icalendar_component['DTSTART'].dt
 
     finally:
         stop_xandikos_server(conn_details)

@@ -332,6 +332,8 @@ def _set_something(obj, arg, value):
     elif arg == 'duration':
         duration = parse_add_dur(dt=None, dur=value)
         obj.set_duration(duration)
+    elif arg in ('due', 'dtend'): ## TODO: dtstart!
+        getattr(obj, f"set_{arg}")(value, move_dtstart=True, check_dependent=True)
     elif arg == 'category':
         _add_category(obj, value)
     else:

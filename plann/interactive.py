@@ -54,6 +54,7 @@ def command_edit(obj, command, interactive=True):
     elif command == 'cancel':
         obj.icalendar_component['STATUS'] = 'CANCELLED'
     elif command.lower().startswith('set rrule='):
+        ## TODO: does this work from the cli?  (...) edit --set-rrule=FREQ=YEARLY as well as add (...) --set-rrule=FREQ=YEARLY ?  Write test code and check!
         rrule = vRecur.from_ical(command[10:])
         _set_something(obj, 'RRULE', rrule)
     elif command.startswith('set '):
