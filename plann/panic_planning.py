@@ -34,11 +34,17 @@ class TimeLine(SortedKeyList):
         assert(begin.tzinfo)
         assert(end.tzinfo)
         obj_ = {'begin': begin, 'obj': obj}
-        assert end > begin
+        if end <= begin:
+            ## TODO: error message (but how?  print?  click.echo?  logging?  callback?)
+            ## this doesn't work?
+            #end = begin + timedelta(minutes=1)
+            return
         i = self.bisect_right(obj_)
         if i<len(self):
-            ## No overlapping accepted
-            assert self[i]['begin'] >= end
+            if self[i]['begin'] < end:
+                ## Possibly overlapping events.
+                ## TODO: error message - but how?  raise an error and catch it further up?
+                return
         if i>0:
             assert not any(key != 'begin' for key in self[i-1])
         if i>0 and i<len(self):

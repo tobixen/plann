@@ -227,6 +227,9 @@ def _mass_interactive_edit(objs, default='ignore'):
 # pdb
 
 """
+    if not objs:
+        click.echo("Nothing to edit!")
+        return
     text = instructions + "\n".join(_list(
         objs, top_down=True, echo=False,
         ## We only deal with tasks so far, and only tasks that needs action
@@ -234,7 +237,8 @@ def _mass_interactive_edit(objs, default='ignore'):
         template=default + " {UID}: due={DUE} Pri={PRIORITY:?0?} {SUMMARY:?{DESCRIPTION:?(no summary given)?}?} (STATUS={STATUS:-})", filter=lambda obj: obj.icalendar_component.get('STATUS', 'NEEDS-ACTION')=='NEEDS-ACTION'))
     edited = _editor(text)
     for line in edited.split('\n'):
-        ## BUG: does not work if the source data comes from multiple calendars!
+        ## TODO: BUG: does not work if the source data comes from multiple calendars!
+        ## (possible fix: make a dict from uid to calendar(s))
         _command_line_edit(line, interactive=True, calendar=objs[0].parent)
     
 def interactive_split_task(obj, partially_complete=False, too_big=True):

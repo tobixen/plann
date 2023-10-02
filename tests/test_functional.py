@@ -374,6 +374,12 @@ def test_plann():
             ## TODO: cancel,
 
         ## testing mass interactive edit
+        ## with 0 objects, it would earlier raise an error.
+        with patch('plann.interactive._editor', new=passthrough) as _editor:
+            _mass_interactive_edit([], default='complete')
+        for todo in (todo1, todo2, todo3, todo4, todo5):
+            todo.load()
+            assert todo.icalendar_component['STATUS'] == 'NEEDS-ACTION'
         with patch('plann.interactive._editor', new=passthrough) as _editor:
             _mass_interactive_edit([todo1, todo2, todo3], default='complete')
         for todo in (todo1, todo2, todo3, todo4, todo5):
