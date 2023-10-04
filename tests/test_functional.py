@@ -143,6 +143,7 @@ def stop_xandikos_server(server_params):
 
     server_params['serverdir'].__exit__(None, None, None)
 
+passthrough = lambda x: x
 
 ## TODO: Rather than one monolithic test going through various aspects,
 ## we should make many small tests and reset the calendar server to some known
@@ -231,18 +232,21 @@ def test_plann():
         ## This will create events that are children of the tasks.
         ## (Those events contains a suggested timeslot for doing the task
         ## Task contains due date (may be a hard limit) and duration
-        _check_for_panic(ctx, timeline_start='2010-10-10', timeline_end=datetime_(year=2011, month=11, day=11, hour=11, minute=11), hours_per_day=24, fix_timeline=True, include_all_events=True)
+        with patch('plann.panic_planning._now', new=lambda: datetime_(2010,10,9,23,33,33)) as _now:
+            _check_for_panic(ctx, timeline_start='2010-10-10', timeline_end=datetime_(year=2010, month=11, day=11, hour=11, minute=11), hours_per_day=24, fix_timeline=True, include_all_events=True)
 
         ## Two events should be created by now
         _select(ctx, event=True)
         assert len(ctx.obj['objs'])==2
 
         ## Re-running it should be a noop
-        _check_for_panic(ctx, timeline_start='2010-10-10', timeline_end=datetime_(year=2011, month=11, day=11, hour=11, minute=11), hours_per_day=24, fix_timeline=True, include_all_events=True)
+        _select(ctx, todo=True)
+        with patch('plann.panic_planning._now', new=lambda: datetime_(2010,10,9,23,33,33)) as _now:
+            _check_for_panic(ctx, timeline_start='2010-10-10', timeline_end=datetime_(year=2010, month=11, day=11, hour=11, minute=11), hours_per_day=24, fix_timeline=True, include_all_events=True)
         _select(ctx, event=True)
         assert len(ctx.obj['objs'])==2
 
-        ## We now have one task with one subtask, and both tasks have children
+        ## We now have one task with one subtask, and both tasks have two children
         ## events.  Let's find the uids
         e1 = [x for x in ctx.obj['objs'] if x.icalendar_component['summary'] == 'make plann good'][0]
         e2 = [x for x in ctx.obj['objs'] if x.icalendar_component['summary'] == 'fix some bugs in plann'][0]
@@ -268,6 +272,16 @@ def test_plann():
         assert(not _adjust_ical_relations(todo1, {'CHILD': {uide1}}))
         assert(not _adjust_ical_relations(todo2, {'PARENT': set()}))
 
+        ## Testing interactive fix timeline, and checking that past events are ignored in the
+        ## panic planning.
+        ## We were busy with other things at the scheduled time.  Let's try to reschedule ...
+        with patch('plann.commands._editor', new=passthrough) as _editor:
+            with patch('plann.panic_planning._now', new=lambda: datetime_(2010,12,9,23,33,33)) as _now:
+                _select(ctx, todo=True)
+                _check_for_panic(ctx, timeline_start='2010-10-10', timeline_end=datetime_(year=2011, month=11, day=11, hour=11, minute=11), hours_per_day=24, print_timeline=False, interactive_fix_timeline=True, include_all_events=True)
+        _select(ctx, event=True)
+        assert len(ctx.obj['objs'])==4
+
         ## Reset ... let's connect todo1 and todo2 again, and remove events
         _adjust_relations(todo1, {todo2})
         _adjust_relations(todo2, set())
@@ -280,7 +294,6 @@ def test_plann():
         ## editor, the algorithm should change nothing.
         _select(ctx, todo=True)
         cal_pre_interactive_relation_edit = "\n".join([x.data for x in ctx.obj['objs']])
-        passthrough = lambda x: x
         with patch('plann.interactive._editor', new=passthrough) as _editor:
             _interactive_relation_edit((ctx.obj['objs']))
 

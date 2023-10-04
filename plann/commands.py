@@ -11,7 +11,7 @@ from plann.template import Template
 from plann.panic_planning import timeline_suggestion
 from plann.timespec import _now, _ensure_ts, parse_dt, parse_add_dur, parse_timespec, tz
 from plann.lib import _summary, _procrastinate, _relships_by_type, _summary, _relationship_text, _adjust_relations, parentlike, childlike, _remove_reverse_relations, _process_set_arg, attr_txt_one, attr_txt_many, attr_time, attr_int, _set_something, _list, _add_category
-from plann.interactive import command_edit, _interactive_ical_edit, _interactive_relation_edit, _set_relations_from_text_list, interactive_split_task, _editor, _command_line_edit, interactive_split_task, _mass_interactive_edit, _get_obj_from_line, _abort
+from plann.interactive import command_edit, _interactive_ical_edit, _interactive_relation_edit, _set_relations_from_text_list, interactive_split_task, _editor, _command_line_edit, interactive_split_task, _mass_interactive_edit, _get_obj_from_line, _abort, _strip_line
 
 def _select(ctx, interactive=False, mass_interactive=False, **kwargs):
     """
@@ -266,7 +266,7 @@ def _edit(ctx, add_category=None, cancel=None, interactive_ical=False, interacti
                     comp[attrib].dt = parse_add_dur(comp[attrib].dt, postpone, for_storage=True)
         obj.save()
 
-def _check_for_panic(ctx, hours_per_day, output=True, print_timeline=True, fix_timeline=False, timeline_start=None, timeline_end=None, include_all_events=False):
+def _check_for_panic(ctx, hours_per_day, output=True, print_timeline=True, fix_timeline=False, interactive_fix_timeline=False, timeline_start=None, timeline_end=None, include_all_events=False):
     if not timeline_start:
         timeline_start = _now()
     else:
@@ -275,7 +275,9 @@ def _check_for_panic(ctx, hours_per_day, output=True, print_timeline=True, fix_t
         timeline_end = parse_add_dur(timeline_start, '+1y')
     timeline_end = parse_dt(timeline_end, datetime.datetime)
     if include_all_events:
+        ## Remove events from the list to prevent duplicates ...
         ctx.obj['objs'] = [x for x in ctx.obj['objs'] if not 'BEGIN:VEVENT' in x.data]
+        ## ... and then add all events
         _select(ctx, event=True, start=timeline_start, end=timeline_end, extend_objects=True)
     possible_timeline = timeline_suggestion(ctx, hours_per_day=hours_per_day, timeline_end=timeline_end)
     def summary(obj):
@@ -299,7 +301,8 @@ def _check_for_panic(ctx, hours_per_day, output=True, print_timeline=True, fix_t
                 if _ensure_ts(foo['begin'])<timeline_start:
                     click.echo(f"{foo['obj'].get_due():%FT%H%M %Z} {foo['obj'].icalendar_component.get('PRIORITY', 0)} {_summary(foo['obj'])}")
 
-    if fix_timeline:
+    if fix_timeline or interactive_fix_timeline:
+        output = [] ## for interactive
         for i in range(len(possible_timeline)-1):
             foo = possible_timeline[i]
             next = possible_timeline[i+1]
@@ -308,8 +311,32 @@ def _check_for_panic(ctx, hours_per_day, output=True, print_timeline=True, fix_t
                     obj = foo['obj']
                     if isinstance(obj, caldav.Todo):
                         comp = obj.icalendar_component
-                        ## TODO: copy other attributes?
-                        _add_event(ctx, summary=_summary(obj), timespec=(foo['begin'], next['begin']), set_status='TENTATIVE', first_calendar=True, set_parent=[comp['UID']])
+                        if fix_timeline:
+                            ## TODO: copy other attributes?
+                            _add_event(ctx, summary=_summary(obj), timespec=(foo['begin'], next['begin']), set_status='TENTATIVE', first_calendar=True, set_parent=[comp['UID']])
+                        elif interactive_fix_timeline:
+                            output.append(f"{comp['UID']:37} {foo['begin']} - {next['begin']}: {_summary(obj)}")
+                    elif interactive_fix_timeline:
+                        output.append(f"{' '*37} {foo['begin']} - {next['begin']}: {_summary(obj)}")
+    if interactive_fix_timeline:
+        pinned_re = re.compile("^(.+?) +(.+?) - (.+?): (.+)$")
+        fixed_timeline = _editor("""\
+# Lines not starting with UID are already events and cannot be changed as for now
+# Delete things you don't want on the calendar
+# You may also change the suggested times and even the summary
+# There are no collision control if you change the suggested times
+""" + "\n".join(output))
+        for line in fixed_timeline.split('\n'):
+            if line.startswith(' '*16):
+                continue
+            line = _strip_line(line)
+            if not line:
+                continue
+            parsed = pinned_re.match(line)
+            assert parsed ## TODO: print a friendly error message and probably even continue execution
+            (uid, begin, end, summary) = parsed.groups()
+            _add_event(ctx, summary=summary, timespec=f"{begin} {end}", set_status='TENTATIVE', first_calendar=True, set_parent=[uid])
+
     return possible_timeline
 
 def _process_set_args(ctx, kwargs, keep_category=False):
