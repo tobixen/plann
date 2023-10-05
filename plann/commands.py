@@ -221,7 +221,7 @@ def _interactive_edit(obj):
     input = click.prompt("postpone <n>d / ignore / part(ially-complete) / complete / split / cancel / set foo=bar / edit / family / pdb?", default='ignore')
     command_edit(obj, input, interactive=True)
 
-def _edit(ctx, add_category=None, cancel=None, interactive_ical=False, interactive_relations=False, mass_interactive=False, interactive=False, complete=None, complete_recurrence_mode='safe', postpone=None, **kwargs):
+def _edit(ctx, add_category=None, cancel=None, interactive_ical=False, interactive_relations=False, mass_interactive_default='ignore', mass_interactive=False, interactive=False, complete=None, complete_recurrence_mode='safe', postpone=None, **kwargs):
     """
     Edits a task/event/journal
     """
@@ -235,7 +235,7 @@ def _edit(ctx, add_category=None, cancel=None, interactive_ical=False, interacti
         _interactive_relation_edit(ctx.obj['objs'])
 
     if mass_interactive:
-        _mass_interactive_edit(ctx.obj['objs'])
+        _mass_interactive_edit(ctx.obj['objs'], default=mass_interactive_default)
 
     for obj in ctx.obj['objs']:
         if interactive:

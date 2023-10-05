@@ -244,6 +244,7 @@ def delete(ctx, multi_delete, **kwargs):
 @click.option('--interactive-relations/--no-interactive-relations', help="Edit the relationships")
 @click.option('--interactive/--no-interactive', help="Interactive edit")
 @click.option('--mass-interactive/--no-mass-interactive', help="Interactive edit through editor")
+@click.option('--mass-interactive-default', default='ignore', help="default command for interactive mass-edit")
 @click.option('--cancel/--uncancel', default=None, help="Mark task(s) as cancelled")
 @click.option('--complete/--uncomplete', default=None, help="Mark task(s) as completed")
 @click.option('--complete-recurrence-mode', default='safe', help="Completion of recurrent tasks, mode to use - can be 'safe', 'thisandfuture' or '' (see caldav library for details)")
