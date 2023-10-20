@@ -104,3 +104,6 @@ def test_adjust_ical_relations():
     ## parent list should be unchanged
     assert(rels['PARENT'] == {'PARENT-A0', 'PARENT-A2', 'PARENT-B0', 'PARENT-B2'})
     assert(rels['CHILD'] == {'CHILD-A0', 'CHILD-A1', 'CHILD-A2'})
+
+#def test_split_vcal():
+## TODO    

@@ -162,10 +162,13 @@ def _procrastinate(objs, delay, check_dependent="error", with_children=False, wi
                 i = x.icalendar_component
                 summary = _summary(i)
                 p = parent.icalendar_component
-                err_callback(f"{summary} could not be postponed due to parent {_summary(p)} with due {_ensure_ts(p['DUE'])} and priority {p.get('priority', 0)}")
-                if check_dependent == "interactive" and p.get('priority', 9)>2 and confirm_callback("procrastinate parent?"):
-                    _procrastinate([parent], new_due+max(parent.get_duration(), datetime.timedelta(1)), check_dependent=check_dependent, err_callback=err_callback, confirm_callback=confirm_callback, recursivity=recursivity+1)
-                    _procrastinate([x], new_due, check_dependent=check_dependent, err_callback=err_callback, confirm_callback=confirm_callback, recursivity=recursivity+1)
+                if p.get('STATUS') == 'COMPLETED':
+                    _procrastinate([x], new_due, check_dependent=False, err_callback=err_callback, confirm_callback=confirm_callback, recursivity=recursivity+1)
+                else:
+                    err_callback(f"{summary} could not be postponed due to parent {_summary(p)} with due {_ensure_ts(p['DUE'])} and priority {p.get('priority', 0)}")
+                    if check_dependent == "interactive" and p.get('priority', 9)>2 and confirm_callback("procrastinate parent?"):
+                        _procrastinate([parent], new_due+max(parent.get_duration()+x.get_duration()+datetime.timedelta(minutes=1), datetime.timedelta(minutes=1)), check_dependent=check_dependent, err_callback=err_callback, confirm_callback=confirm_callback, recursivity=recursivity+1)
+                        _procrastinate([x], new_due, check_dependent=check_dependent, err_callback=err_callback, confirm_callback=confirm_callback, recursivity=recursivity+1)
             elif check_dependent == "return":
                 return parent
         else:

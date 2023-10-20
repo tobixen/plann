@@ -146,6 +146,7 @@ def _set_attr_options(verb="", desc=""):
 @_set_attr_options('no', desc="select objects without")
 @click.option('--start', help='do a time search, with this start timestamp')
 @click.option('--begin', 'start', help='alias for start')
+@click.option('--since', 'start', help='alias for start')
 @click.option('--from', 'start', help='alias for start')
 @click.option('--end', help='do a time search, with this end timestamp (or duration)')
 @click.option('--to', 'end', help='alias for end')
