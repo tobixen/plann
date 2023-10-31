@@ -304,10 +304,13 @@ def _relationship_text(obj, reltype_wanted=None):
         ret.append(reltype + "\n" + "\n".join(objs) + "\n")
         return "\n".join(ret)
 
+## TODO - this needs to be better documented.  What's the difference between _process_set_arg and _set_something?  Do they overlap?  Are they intended to be used together?
 def _process_set_arg(arg, value, keep_category=False):
     ret = {}
     if arg in attr_time and arg != 'duration':
         ret[arg] = parse_dt(value, for_storage=True)
+    elif arg == 'duration':
+        ret[arg] = parse_add_dur(dt=None, dur=value)
     elif arg == 'rrule':
         rrule = {}
         for split1 in value.split(';'):
@@ -327,13 +330,16 @@ def _process_set_arg(arg, value, keep_category=False):
     return ret
 
 def _set_something(obj, arg, value):
+    """
+    set_something is used when editing objects.
+    The arg and value is already processed through _process_set_arg
+    """
     arg = arg.lower()
     comp = obj.icalendar_component
     if arg in ('child', 'parent'):
         for val in value:
             obj.set_relation(reltype=arg, other=val)
     elif arg == 'duration':
-        duration = parse_add_dur(dt=None, dur=value)
         obj.set_duration(duration)
     elif arg in ('due', 'dtend'): ## TODO: dtstart!
         getattr(obj, f"set_{arg}")(value, move_dtstart=True, check_dependent=True)

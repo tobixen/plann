@@ -173,7 +173,9 @@ def __select(ctx, extend_objects=False, all=None, uid=[], abort_on_missing_uid=N
         comp = obj.icalendar_component
         dtstart = comp.get('dtstart')
         dtend = comp.get('dtend') or comp.get('due')
-        if dtstart and dtend and dtstart.dt > dtend.dt:
+        if dtstart and dtend and isinstance(dtstart.dt, datetime.datetime) != isinstance(dtend.dt, datetime.datetime):
+            logging.error(f"task with uuid {comp['uid']} has non-matching types on dtstart and dtend/due, which is against the RFC")
+        elif dtstart and dtend and dtstart.dt > dtend.dt:
             logging.error(f"task with uuid {comp['uid']} as dtstart after dtend/due")
 
     ## I need a way to copy time information from one calendar to another
@@ -368,8 +370,17 @@ def _add_todo(ctx, **kwargs):
     if not ctx.obj['set_args']['summary']:
         _abort("denying to add a TODO with no summary given")
         return
+
+    ## If we just pass duration, we risk to set both due and duration on the object,
+    ## which is not allowed according to the rfc
+    duration = None
+    if ctx.obj['set_args']['duration']:
+        duration = ctx.obj['set_args'].pop('duration')
+
     for cal in ctx.obj['calendars']:
         todo = cal.save_todo(ical=ctx.obj.get('ical_fragment', ""), **ctx.obj['set_args'], no_overwrite=True)
+        if duration:
+            todo.set_duration(duration)
         click.echo(f"uid={todo.id}")
     return todo
 
