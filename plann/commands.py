@@ -375,7 +375,6 @@ def _add_todo(ctx, **kwargs):
     ## which is not allowed according to the rfc
     duration = None
     if ctx.obj['set_args']['duration']:
-        import pdb; pdb.set_trace()
         duration = ctx.obj['set_args'].pop('duration')
 
     for cal in ctx.obj['calendars']:
