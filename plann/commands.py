@@ -375,12 +375,14 @@ def _add_todo(ctx, **kwargs):
     ## which is not allowed according to the rfc
     duration = None
     if ctx.obj['set_args']['duration']:
+        import pdb; pdb.set_trace()
         duration = ctx.obj['set_args'].pop('duration')
 
     for cal in ctx.obj['calendars']:
         todo = cal.save_todo(ical=ctx.obj.get('ical_fragment', ""), **ctx.obj['set_args'], no_overwrite=True)
         if duration:
             todo.set_duration(duration)
+            todo.save()
         click.echo(f"uid={todo.id}")
     return todo
 
