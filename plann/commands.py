@@ -374,7 +374,7 @@ def _add_todo(ctx, **kwargs):
     ## If we just pass duration, we risk to set both due and duration on the object,
     ## which is not allowed according to the rfc
     duration = None
-    if ctx.obj['set_args']['duration']:
+    if ctx.obj['set_args'].get('duration'):
         duration = ctx.obj['set_args'].pop('duration')
 
     for cal in ctx.obj['calendars']:
