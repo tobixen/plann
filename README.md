@@ -20,7 +20,7 @@ The commands and options will be described further down, however examples often 
 
 ## Installation
 
-`plann` depends on quite some python libraries, i.e. icalendar, caldav, etc.  "sudo ./setup.py install" should take care of all those eventually.
+`plann` depends on quite some python libraries, i.e. icalendar, caldav, etc.  If you want to install plann system-wide, then use "sudo ./setup.py install".  You may also consider to use the venv module to create a virtual environment.
 
 ## Support
 
