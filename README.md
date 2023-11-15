@@ -20,7 +20,24 @@ The commands and options will be described further down, however examples often 
 
 ## Installation
 
-`plann` depends on quite some python libraries, i.e. icalendar, caldav, etc.  If you want to install plann system-wide, then use "sudo ./setup.py install".  You may also consider to use the venv module to create a virtual environment.
+`plann` depends on several python libraries, e.g. [icalendar](https://pypi.org/project/icalendar/), [caldav](https://pypi.org/project/caldav/), etc. 
+
+### Virtual Environment Install
+
+This installs `plann` in the virtual environment you create. To run it, you have to activate this
+virtual environment in your current shell.
+
+1. Clone this repo, cd to `plann`
+2. `python3 -m venv .venv`
+3. `source .venv/bin/activate` (See [venv documentation](https://docs.python.org/3/library/venv.html)
+4. `python3 setup.py install`
+
+### Systemwide Install
+
+This installs `plann` and all its dependencies system-wide.
+
+1. Clone this repo, cd to `plann`
+2. `sudo ./setup.py install`
 
 ## Support
 
