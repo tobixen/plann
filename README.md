@@ -29,7 +29,7 @@ virtual environment in your current shell.
 
 1. Clone this repo, cd to `plann`
 2. `python3 -m venv .venv`
-3. `source .venv/bin/activate` (See [venv documentation](https://docs.python.org/3/library/venv.html)
+3. `source .venv/bin/activate` (See [venv documentation](https://docs.python.org/3/library/venv.html))
 4. `python3 setup.py install`
 
 ### Systemwide Install
