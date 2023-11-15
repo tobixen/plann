@@ -24,8 +24,8 @@ The commands and options will be described further down, however examples often 
 
 ### Virtual Environment Install
 
-This installs `plann` in the virtual environment you create. To run it, you have to activate this
-virtual environment in your current shell.
+This installs `plann` and all its dependencies in the virtual environment you create.
+To run it, you have to activate this virtual environment in your current shell.
 
 1. Clone this repo, cd to `plann`
 2. `python3 -m venv .venv`
