@@ -237,6 +237,7 @@ def delete(ctx, multi_delete, **kwargs):
     for obj in objs:
         obj.delete()
 
+## TODO: reconsider the naming of the attributes and functions - --mass-interactive should probably be --interactive-editor - and the interactive reprioritization function needs to be renamed
 @select.command()
 @click.option('--pdb/--no-pdb', default=None, help="Interactive edit through pdb (experts only)")
 @click.option('--add-category', default=None, help="Add a category (equivalent with --set-category, while --set-categories will overwrite existing categories))", multiple=True)
@@ -244,6 +245,7 @@ def delete(ctx, multi_delete, **kwargs):
 @click.option('--interactive-ical/--no-interactive-ical', help="Edit the ical interactively")
 @click.option('--interactive-relations/--no-interactive-relations', help="Edit the relationships")
 @click.option('--interactive/--no-interactive', help="Interactive edit")
+@click.option('--interactive-reprioritize/--no-interactive-reprioritize', help="Interactively reprioritize tasks")
 @click.option('--mass-interactive/--no-mass-interactive', help="Interactive edit through editor")
 @click.option('--mass-interactive-default', default='ignore', help="default command for interactive mass-edit")
 @click.option('--cancel/--uncancel', default=None, help="Mark task(s) as cancelled")

@@ -19,7 +19,8 @@ import re
 import os
 import tempfile
 import subprocess
-from plann.lib import _list, _adjust_relations, _summary, _procrastinate, _process_set_arg, _set_something, _icalendar_component, _relationship_text, _split_vcal
+from plann.template import Template
+from plann.lib import _list, _adjust_relations, _summary, _procrastinate, _process_set_arg, _set_something, _icalendar_component, _relationship_text, _split_vcal, _now
 from plann.timespec import _ensure_ts, parse_add_dur
 from icalendar.prop import vRecur
 
@@ -212,6 +213,40 @@ def _interactive_edit(obj):
     input = click.prompt("postpone <n>d / ignore / part(ially-complete) / complete / split / cancel / set foo=bar / edit / family / pdb?", default='ignore')
     command_edit(obj, input, interactive=True)
 
+def _mass_reprioritize(objs):
+    text = """\
+## Keep the section headers.
+## Lines may be moved up or down to the relevant section.
+## Tasks with correct priority set may be deleted.
+## Higher numbers means lower priority, lowest possible is 9
+## Priority 0 means undefined priority.
+
+"""
+    if not objs:
+        click.echo("Nothing to reprioritize!")
+        return
+    objs.sort(key=lambda x: (x.icalendar_component.get('PRIORITY',0), _now()-_ensure_ts(x.get_due())))
+    current_pri = -1
+    template = Template(" {UID}: due={DUE} Pri={PRIORITY:?0?} {SUMMARY:?{DESCRIPTION:?(no summary given)?}?} (STATUS={STATUS:-})")
+    for obj in objs:
+        while obj.icalendar_component.get('PRIORITY', 0)>current_pri:
+            current_pri += 1
+            text += f"\n=== PRIORITY {current_pri}\n"
+        text += template.format(**obj.icalendar_component) + "\n"
+    edited = _editor(text)
+    current_pri = 0
+    for line in edited.split('\n'):
+        line = line.strip()
+        if line.startswith('#'):
+            continue
+        if not line:
+            continue
+        if line.startswith('=== PRIORITY '):
+            current_pri=int(line[13:])
+            continue
+        ## TODO: need to make some efforts to fix multi-calendar support.  Keep a uid -> obj dict.  Fix in the other mass editing functions.
+        _command_line_edit(f"set priority={current_pri} " + line, interactive=True, calendar=objs[0].parent)
+
 def _mass_interactive_edit(objs, default='ignore'):
     """send things through the editor, and expect commands back"""
     instructions = """\
@@ -310,6 +345,9 @@ def _strip_line(line):
     return line
 
 def _get_obj_from_line(line, calendar):
+    ## TODO: the calendar we get here may be invalid.
+    ## We need to map uids to objects when fetching events
+    ## this should be done globally to reduce code duplication
     uid_re = re.compile("^(.+?)(: .*)?$")
     line = _strip_line(line)
     if not line:

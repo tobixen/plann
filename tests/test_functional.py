@@ -8,7 +8,7 @@ from xandikos.web import XandikosBackend, XandikosApp
 import plann.lib
 from plann.lib import find_calendars, _adjust_relations, _adjust_ical_relations
 from plann.cli import _add_todo, _select, _list, _check_for_panic
-from plann.interactive import _interactive_relation_edit, _interactive_edit, _mass_interactive_edit, command_edit
+from plann.interactive import _interactive_relation_edit, _interactive_edit, _mass_interactive_edit, command_edit, _mass_reprioritize
 from plann.panic_planning import timeline_suggestion
 from caldav import Todo
 import aiohttp
@@ -386,13 +386,15 @@ def test_plann():
             ## TODO: part, split, family
             ## TODO: cancel,
 
-        ## testing mass interactive edit
+        ## testing mass interactive edit and mass interactive reprioritize
         ## with 0 objects, it would earlier raise an error.
         with patch('plann.interactive._editor', new=passthrough) as _editor:
             _mass_interactive_edit([], default='complete')
         for todo in (todo1, todo2, todo3, todo4, todo5):
             todo.load()
             assert todo.icalendar_component['STATUS'] == 'NEEDS-ACTION'
+        with patch('plann.interactive._editor', new=passthrough) as _editor:
+            _mass_reprioritize([todo1, todo2, todo3])
         with patch('plann.interactive._editor', new=passthrough) as _editor:
             _mass_interactive_edit([todo1, todo2, todo3], default='complete')
         for todo in (todo1, todo2, todo3, todo4, todo5):

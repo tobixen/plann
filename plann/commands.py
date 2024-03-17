@@ -11,7 +11,7 @@ from plann.template import Template
 from plann.panic_planning import timeline_suggestion
 from plann.timespec import _now, _ensure_ts, parse_dt, parse_add_dur, parse_timespec, tz
 from plann.lib import _summary, _procrastinate, _relships_by_type, _summary, _relationship_text, _adjust_relations, parentlike, childlike, _remove_reverse_relations, _process_set_arg, attr_txt_one, attr_txt_many, attr_time, attr_int, _set_something, _list, _add_category
-from plann.interactive import command_edit, _interactive_ical_edit, _interactive_relation_edit, _set_relations_from_text_list, interactive_split_task, _editor, _command_line_edit, interactive_split_task, _mass_interactive_edit, _get_obj_from_line, _abort, _strip_line
+from plann.interactive import command_edit, _interactive_ical_edit, _interactive_relation_edit, _set_relations_from_text_list, interactive_split_task, _editor, _command_line_edit, interactive_split_task, _mass_interactive_edit, _mass_reprioritize, _get_obj_from_line, _abort, _strip_line
 
 def _select(ctx, interactive=False, mass_interactive=False, **kwargs):
     """
@@ -174,7 +174,9 @@ def __select(ctx, extend_objects=False, all=None, uid=[], abort_on_missing_uid=N
         dtstart = comp.get('dtstart')
         dtend = comp.get('dtend') or comp.get('due')
         if dtstart and dtend and isinstance(dtstart.dt, datetime.datetime) != isinstance(dtend.dt, datetime.datetime):
-            logging.error(f"task with uuid {comp['uid']} has non-matching types on dtstart and dtend/due, which is against the RFC")
+            logging.error(f"task with uuid {comp['uid']} has non-matching types on dtstart and dtend/due, setting both to timestamps")
+            comp['dtstart'].dt = datetime.datetime(dtstart.dt.year, dtstart.dt.month, dtstart.dt.day)
+            comp['dtend'].dt = datetime.datetime(dtend.dt.year, dtend.dt.month, dtend.dt.day) 
         elif dtstart and dtend and dtstart.dt > dtend.dt:
             logging.error(f"task with uuid {comp['uid']} as dtstart after dtend/due")
 
@@ -223,7 +225,7 @@ def _interactive_edit(obj):
     input = click.prompt("postpone <n>d / ignore / part(ially-complete) / complete / split / cancel / set foo=bar / edit / family / pdb?", default='ignore')
     command_edit(obj, input, interactive=True)
 
-def _edit(ctx, add_category=None, cancel=None, interactive_ical=False, interactive_relations=False, mass_interactive_default='ignore', mass_interactive=False, interactive=False, complete=None, complete_recurrence_mode='safe', postpone=None, **kwargs):
+def _edit(ctx, add_category=None, cancel=None, interactive_ical=False, interactive_relations=False, mass_interactive_default='ignore', mass_interactive=False, interactive=False, complete=None, complete_recurrence_mode='safe', postpone=None, interactive_reprioritize=False, **kwargs):
     """
     Edits a task/event/journal
     """
@@ -238,6 +240,9 @@ def _edit(ctx, add_category=None, cancel=None, interactive_ical=False, interacti
 
     if mass_interactive:
         _mass_interactive_edit(ctx.obj['objs'], default=mass_interactive_default)
+
+    if interactive_reprioritize:
+        _mass_reprioritize(ctx.obj['objs'])
 
     for obj in ctx.obj['objs']:
         if interactive:
@@ -463,11 +468,15 @@ def _dismiss_panic(ctx, hours_per_day, lookahead='60d'):
         else:
             procrastination_time = f"{procrastination_time.seconds//3600+1}h"
         default_procrastination_time = procrastination_time
-        procrastination_time = click.prompt(f"Push the due-date with ... (press O for one-by-one, E for edit all)", default=procrastination_time)
+        procrastination_time = click.prompt(f"Push the due-date with ... (press O for one-by-one, E for edit all, P for reprioritize)", default=procrastination_time)
         if procrastination_time == 'O':
             for item in first_low_pri_tasks:
                 _interactive_edit(item['obj'])
+        elif procrastination_time == 'P':
+            _mass_reprioritize([x['obj'] for x in first_low_pri_tasks])
+            ## TODO: after reprioritation, the whole algorithm needs to be restarted
         elif procrastination_time == 'E':
+            ## TODO: since tasks with different priority may be affected, it's needed to restart the algorithm
             _mass_interactive_edit([x['obj'] for x in first_low_pri_tasks], default=f"postpone {default_procrastination_time}")
         else:
             _procrastinate([x['obj'] for x in first_low_pri_tasks], procrastination_time,  check_dependent='interactive', err_callback=click.echo, confirm_callback=click.confirm)

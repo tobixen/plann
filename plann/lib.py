@@ -156,6 +156,9 @@ def _procrastinate(objs, delay, check_dependent="error", with_children=False, wi
             if old_due:
                 new_due = max(new_due, old_due)
             new_due = parse_add_dur(new_due, delay, ts_allowed=True, for_storage=True)
+            ## Let's force the due to be a timestamp
+            if not isinstance(new_due, datetime.datetime):
+                new_due = datetime.datetime(ts.year, ts.month, ts.day)
         parent = x.set_due(new_due, move_dtstart=True, check_dependent=chk_parent)
         if parent:
             if check_dependent in ("error", "interactive"):
