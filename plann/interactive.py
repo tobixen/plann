@@ -359,7 +359,7 @@ def _get_obj_from_line(line, calendar):
     return obj
 
 def _command_line_edit(line, calendar, interactive=True):
-    regexp = re.compile("((?:set [^ ]*=[^ ]*)|(?:postpone [0-9]+[smhdwy])|[^ ]*) (.*)$")
+    regexp = re.compile("((?:set [^ ]*=[^ ]*)|(?:postpone (?:[0-9]+[smhdwy]|20[0-9][0-9]-[0-9][0-9]-[0-9][0-9]))|[^ ]*) (.*)$")
     line = _strip_line(line)
     if not line:
         return

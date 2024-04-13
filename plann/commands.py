@@ -225,7 +225,7 @@ def _interactive_edit(obj):
     input = click.prompt("postpone <n>d / ignore / part(ially-complete) / complete / split / cancel / set foo=bar / edit / family / pdb?", default='ignore')
     command_edit(obj, input, interactive=True)
 
-def _edit(ctx, add_category=None, cancel=None, interactive_ical=False, interactive_relations=False, mass_interactive_default='ignore', mass_interactive=False, interactive=False, complete=None, complete_recurrence_mode='safe', postpone=None, interactive_reprioritize=False, **kwargs):
+def _edit(ctx, add_category=None, cancel=None, interactive_ical=False, interactive_relations=False, mass_interactive_default='ignore', mass_interactive=False, interactive=False, complete=None, complete_recurrence_mode='safe', postpone=None, postpone_with_children=None, interactive_reprioritize=False, **kwargs):
     """
     Edits a task/event/journal
     """
@@ -235,14 +235,23 @@ def _edit(ctx, add_category=None, cancel=None, interactive_ical=False, interacti
     _process_set_args(ctx, kwargs, keep_category=True)
     if interactive_ical:
         _interactive_ical_edit(ctx.obj['objs'])
+        ## TODO: should be possible to combine this with other opitions
+        return
+
     if interactive_relations:
         _interactive_relation_edit(ctx.obj['objs'])
+        ## TODO: should be possible to combine this with other opitions
+        return
 
     if mass_interactive:
         _mass_interactive_edit(ctx.obj['objs'], default=mass_interactive_default)
+        ## TODO: should be possible to combine this with other opitions
+        return
 
     if interactive_reprioritize:
         _mass_reprioritize(ctx.obj['objs'])
+        ## TODO: should be possible to combine this with other opitions
+        return
 
     for obj in ctx.obj['objs']:
         if interactive:
@@ -266,11 +275,10 @@ def _edit(ctx, add_category=None, cancel=None, interactive_ical=False, interacti
             comp.status='CANCELLED'
         elif cancel is False:
             comp.status='NEEDS-ACTION'
-        if postpone:
-            ## TODO: why do we have a completely different code here compared to in the interactive edit?
-            for attrib in ('DTSTART', 'DTEND', 'DUE'):
-                if comp.get(attrib):
-                    comp[attrib].dt = parse_add_dur(comp[attrib].dt, postpone, for_storage=True)
+        if postpone or postpone_with_children:
+            _procrastinate([obj], postpone or postpone_with_children, with_children=postpone_with_children and True)
+
+        ## OPTIMIZE TODO: only save objects that actually have been edited
         obj.save()
 
 def _check_for_panic(ctx, hours_per_day, output=True, print_timeline=True, fix_timeline=False, interactive_fix_timeline=False, timeline_start=None, timeline_end=None, include_all_events=False):

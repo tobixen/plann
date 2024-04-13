@@ -242,6 +242,7 @@ def delete(ctx, multi_delete, **kwargs):
 @click.option('--pdb/--no-pdb', default=None, help="Interactive edit through pdb (experts only)")
 @click.option('--add-category', default=None, help="Add a category (equivalent with --set-category, while --set-categories will overwrite existing categories))", multiple=True)
 @click.option('--postpone', help="Add something to the DTSTART and DTEND/DUE")
+@click.option('--postpone-with-children', help="Add something to the DTSTART and DTEND/DUE for this and children")
 @click.option('--interactive-ical/--no-interactive-ical', help="Edit the ical interactively")
 @click.option('--interactive-relations/--no-interactive-relations', help="Edit the relationships")
 @click.option('--interactive/--no-interactive', help="Interactive edit")
