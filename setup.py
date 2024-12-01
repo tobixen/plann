@@ -27,7 +27,7 @@ setup(
     ],
     py_modules=['plann'],
     install_requires=[
-        'caldav>=1.4.0'
+        'caldav>=1.4.0',
         'tzlocal',
         'Click',
         'PyYAML',
