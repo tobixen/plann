@@ -1,16 +1,30 @@
 # Copy everything from one calendar to another
 
-I was migrating from one calendar server to another, and needed an easy way to copy all events over.  The method described here does involve quite some CPU overhead ... but for normal-sized calendars, on almost any device or VM in 2023, this should be insignificant.
+## Use cases
 
-I've done this some few times, and I discovered that Zimbra will export objects as scheduling objects, without including status on weather emails are sent or not.  So copying things from one calendar in Zimbra and over to another will cause Zimbra to send out emails!  Oups!
+* Migrating from one calendar server to another
+* Copy "freebusy"-information from one calendar to another: Your family is not allowed to know all the details about your agenda at work, but they need to know when you will be busy with meetings etc.  Your colleagues does not need to know weather you have an appointment at the doctor, a job interview with a potential new employer or a meeting with your childrens teacher, but they do need to know that you're not avaiable for work in that period.
 
-It's also possible to take out events in a freebusy-like format (removing all privacy-relevant parameters and replacing the summary with "event from work calendar" or something like that) and then reexport it into another calendar.  Useful for having personal calendar items embedded in the work calendar and vice versa.  TODO: find the command I used back in .bash_history and add it here.
+## Full commands
 
-## Full command
+Copy from your default calendar to a calendar marked up as "new calendar" in the config:
 
 ```bash
 plann select print-ical | plann --config-section new-calendar add ical
 ```
+
+**Caveat**: If exporting calendar data from Zimbra, and then importing it into another Zimbra calendar (probably any calendar that supports scheduling, the bug is at the export side of things), then there is a risk that meeting invitations and RSVP-replies are resent by email to participants and organizers of events.
+
+Take the events from the work calendar and mark up in your default calendar that you will be busy with work events at those times:
+
+```
+ plann --config-section work select --event --begin 2023-10-01 --freebusyhack 'event from work calendar' print-ical | plann add ical
+```
+
+**Caveats**:
+
+* The `--freebusyhack` option may be replaced with something different in a future version of `plann`.
+* You probably should not do this if you work at some very secret military facility or as an undercover police agent or anything like that - even the start- and end times of your events may be confidential information, and there may potentially be other confidential information leaking over.
 
 ## Sub-task: take out all data in raw ical from the calendar
 
