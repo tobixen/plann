@@ -1,15 +1,12 @@
 #!/usr/bin/env python
 
-"""https://github.com/tobixen/plann/ - high-level cli against caldav servers.
+"""https://plann.no/ - high-level cli against caldav servers.
 
 Copyright (C) 2013-2024 Tobias Brox and other contributors.
 
 See https://www.gnu.org/licenses/gpl-3.0.en.html for license information.
 
-This is a new cli to be fully released in version 1.0, until then
-quite much functionality will only be available through the legacy
-calendar-cli.  For discussions on the directions, see
-https://github.com/tobixen/calendar-cli/issues/88
+plann is a "next generation" reimplementation of calendar-cli
 """
 
 ## This file should preferably just be a thin interface between public
@@ -67,10 +64,9 @@ list_type = list
 @click.pass_context
 def cli(ctx, **kwargs):
     """
-    CalDAV Command Line Interface, in development.
+    CalDAV Command Line Interface
 
-    This command will eventually replace calendar-cli.
-    It's not ready for consumption.  Only use if you want to contribute/test.
+    https://plann.no
     """
     ## The cli function will prepare a context object, a dict containing the
     ## caldav_client, principal and calendar
@@ -389,8 +385,8 @@ def event(ctx, timespec, **kwargs):
 .
     Examples:
 
-    kal add event "final bughunting session" 2004-11-25+5d
-    kal add event "release party" 2004-11-30T19:00+2h
+    plann add event "final bughunting session" 2004-11-25+5d
+    plann add event "release party" 2004-11-30T19:00+2h
     """
     _add_event(ctx, timespec, **kwargs)
 

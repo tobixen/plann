@@ -1,21 +1,21 @@
-# User guide for calendar-cli v1.0
+# User guide for plann v1.0
 
-The `kal` command is under heavy development, this document may not always be up-to-date.  As of 2022-11, `kal` can do nearly all the things the old command `calendar-cli` can do.  In the upcoming release 1.0 one is supposed to use `kal`, with `calendar-cli` being a deprecated legacy interface retained only for backward-compatibility.
+NB!  Commands here are not very well tested, and it was written before the 1.0-release, so the actual interface may have changed a bit.  It's needed with automated tests verifying that all the commands here work.  And it's needed with YOUR help to test out things and report bugs!
 
 ## Command structure
 
 Commands are on this format:
 
 ```bash
-kal --global-options command --command-options subcommand --subcommand-options
+plann --global-options command --command-options subcommand --subcommand-options
 ```
 
 The most up-to-date documentation can always be found through `--help`, and it's outside the scope of this document to list all the options.
 
 ```bash
-kal --help
-kal command --help
-kal command subcommand --help
+plann --help
+plann command --help
+plann command subcommand --help
 ```
 
 ## Main commands
@@ -26,11 +26,14 @@ kal command subcommand --help
 
 ## Convenience commands
 
-Those commands are made mostly for making `kal` more convenient to use.  Many of the commands are optimized for the work flows of the primary author.  I may eventually decide to "hide" the more obscure commands from the `--help` overview.  (TODO: figure out if subcommands can be grouped in the help printed by click)
+Those commands are made mostly for making `plann` more convenient to use for the primary author of the tool.  They may perhaps not be useful at all for you, YMMV.  I may eventually decide to "hide" the more obscure commands from the `--help` overview.  (TODO: figure out if subcommands can be grouped in the help printed by click)
 
-* interactive set-task-attribs - go through all tasks that are missing categories, due date, priority, duration (technically, DTSTART) and ask interactively for values.
-* interactive update-config - (TODO: NOT IMPLEMENTED YET).  This one is not used by the primary author and is probably under-tested.  Its primary intention is to make it easy for others to use the tool.
 * agenda - list up some of the upcoming events plus some of the upcoming tasks
+* interactive manage-tasks - go through your tasks and make suggestions
+* interactive update-config - (TODO: NOT IMPLEMENTED YET).  This one is not used by the primary author and is probably under-tested.  Its primary intention is to make it easy for others to use the tool.
+
+Note that many of those commands have only been tested on DAViCal (see the [`CALENDAR_SERVER_RECOMMENDATIONS.md`](CALENDAR_SERVER_RECOMMENDATIONS.md) file)
+
 
 ## Global options
 
@@ -39,7 +42,7 @@ The global options are for setting the connection parameters to the server and c
 * `--caldav-*` to set the server connection parameters
 * `--calendar-*` to choose a calendar.  If nothing is specified, the first calendar found will be utilized (on some calendar servers, this will be the default calendar).  It's possible to specify those parameters multiple times.
 
-It's recommended to rather use a config file (though not yet supported as of 2022-10-09).  Those options can be used for specifying a config file:
+It's recommended to rather use a config file.  Those options can be used for specifying a config file:
 
 * `--config-file`
 * `--config-section`
@@ -58,7 +61,7 @@ work-appointments:
   calendar_url: mypatients
 private-calendar:
   caldav_url: "https://ecloud.global/remote.php/dav/"
-  caldav_user: myhyde
+  caldav_user: mrhyde
   caldav_pass: hunter2
   calendar_name: goodgames
 sinuous-deeds:
@@ -67,7 +70,7 @@ sinuous-deeds:
 work:
   contains: [ 'work-calendar', 'work-appointments' ]
 private:
-  contains: [ 'privat-calendar', 'sinous-deeds' ]
+  contains: [ 'private-calendar', 'sinous-deeds' ]
 ```
 
 (TODO: the example above haven't been tested)
@@ -79,13 +82,11 @@ Multiple config sections can be specified, which may be useful for selecting thi
 Generally it should be done like this:
 
 ```
-kal add ical --ical-file=some_calendar_data.ics
-kal add event --event-options 'New years party' '2022-12-31T17:00+8h'
-kal add todo --todo-options 'Prepare for the new years party'
-kal add journal --journal-options "Resume from the new years party" 2022-12-31 "It was awesome.  Lots of delicous food and drinks.  Lots of firework."
+plann add ical --ical-file=some_calendar_data.ics
+plann add event --event-options 'New years party' '2022-12-31T17:00+8h'
+plan add todo --todo-options 'Prepare for the new years party'
+plann add journal --journal-options "Resume from the new years party" 2022-12-31 "It was awesome.  Lots of delicous food and drinks.  Lots of firework."
 ```
-
-(journals not supported yet as of 2022-10-09)
 
 Most often, no options should be given to the command `add` - with the exception if one wants to add things to multiple calendars in one command.
 
@@ -94,13 +95,13 @@ Most of the options given after the subcommand are for populating object propert
 ## Selecting things from the calendar
 
 ```
-kal select --selection-parameters select-command
+plann select --selection-parameters select-command
 ```
 
 It's usually a good idea to start with the select-command `list`, for instance:
 
 ```
-kal select --todo --category computer-work list
+plann select --todo --category computer-work list
 ```
 
 Some calendar server implementations require  `--todo` or `--event` to always be given when doing selects, others not.
@@ -114,31 +115,31 @@ The templating engine is built on top of the python `string.format()`.  To learn
 Text fields can be accessed directly i.e. like this:
 
 ```
-kal select --todo list --template='{SUMMARY} {DESCRIPTION} {LOCATION}'
+plann select --todo list --template='{SUMMARY} {DESCRIPTION} {LOCATION}'
 ```
 
 Dates can be accessed through the dt property, and can be formatted using strftime format, like this:
 
 ```
-kal select --event list --template='{DTSTART.dt:%F %H:%M:%S}: {SUMMARY}'
+plann select --event list --template='{DTSTART.dt:%F %H:%M:%S}: {SUMMARY}'
 ```
 
 If a property is missing, the default is to insert an empty string - but it's also possible to put a default value like this:
 
 ```
-kal select --event list --template='{DTSTART.dt:%F %H:%M:%S}: {SUMMARY:?(no summary given)?}'
+plann select --event list --template='{DTSTART.dt:%F %H:%M:%S}: {SUMMARY:?(no summary given)?}'
 ```
 
 It's even possible to make compounded defaults, like this:
 
 ```
-kal select --todo list --template='{DUE:?{DTSTART.dt:?(Best effort)?}?:%F %H:%M:%S}: {SUMMARY:?(no summary given)?}'
+plann select --todo list --template='{DUE:?{DTSTART.dt:?(Best effort)?}?:%F %H:%M:%S}: {SUMMARY:?(no summary given)?}'
 ```
 
 One thing that may be particularly useful is to take out the UID fields.  With UID one can be sure to delete exactly the right row:
 
 ```
-kal select --todo list --template='{UID} {SUMMARY}'
+plann select --todo list --template='{UID} {SUMMARY}'
 ```
 
 ### Printing a UID
@@ -148,11 +149,12 @@ The subcommand `print-uid` will print out an UID.  It's for convenience, the sam
 ### Editing and deleting objects
 
 ```
-kal select --todo --uid=1234-5678-9abc delete
-kal select --todo --category computer-work --start=2022-04-04 --end=2022-05-05 edit --complete ## not supported yet
-kal select --todo --category computer-work --overdue edit --postpone=5d ## not supported yet
+plann select --todo --uid=1234-5678-9abc delete
+plann select --todo --category computer-work --start=2022-04-04 --end=2022-05-05 edit --complete
+plann select --todo --category computer-work --overdue edit --postpone=5d
+```
 
 ## See also
 
-[NEW_CLI.md](NEW_CLI.md) is a longer, but possibly less up-to-date document containing some visions of the new `kal`-command.
+[NEW_CLI.md](NEW_CLI.md) is a longer, but possibly less up-to-date document containing some visions of the new `plann`-command.
 [NEXT_LEVEL.md](NEXT_LEVEL.md) describes some of my visions on what a good calendaring system should be capable of, and does an attempt on mapping this down to the icalendar standard.

@@ -373,8 +373,8 @@ def _add_todo(ctx, **kwargs):
 
     Examples: 
 
-    kal add todo "fix all known bugs in plann"
-    kal add todo --set-due=2050-12-10 "release plann version 42.0.0"
+    plann add todo "fix all known bugs in plann"
+    plann add todo --set-due=2050-12-10 "release plann version 42.0.0"
     """
     if not 'status' in kwargs:
         kwargs['status'] = 'NEEDS-ACTION'

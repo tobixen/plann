@@ -12,7 +12,7 @@ def interactive_config(args, config, remaining_argv):
     modified = False
 
     print("Welcome to the interactive calendar configuration mode")
-    print("Warning - untested code ahead, raise issues at t-calendar-cli@tobixen.no or the github issue tracker")
+    print("Warning - untested code ahead, raise issues at config-issues@plann.no or the github issue tracker")
     print("It might be a good idea to read the documentation in parallel if running this for your first time")
     if not config or not hasattr(config, 'keys'):
         config = {}

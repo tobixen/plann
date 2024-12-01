@@ -1,5 +1,9 @@
 # What CalDAV-server to choose?
 
+NOTE: this was written in February 2023, and may not be completely up-to-date.  At some point I should consider to go through it and check if I can come up with new recommendations.
+
+In November 2024 I started writing a tool for testing caldav server compatibility and checking how the servers handles various corner cases (curerntly it's living in a git branch in the caldav project).  I'm intending to bug at least some of the server maintainers with my findings.
+
 **TLDR-summary**:
 
 To use plann heavily both to manage calendars and do heavy task management, none of the calendar servers out there seems to be good enough.

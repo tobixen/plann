@@ -1,10 +1,10 @@
 # plann
 
-Simple command-line CalDAV client, making it possible to add calendar events, browse an agenda and do task management.
+Plann is a command-line CalDAV client, making it possible to add calendar events, browse an agenda and do task management.
 
-This is the experimental new version of my old [calendar-cli project](https://github.com/tobixen/calendar-cli/).
+This is the "next generation" version of my old [calendar-cli project](https://github.com/tobixen/calendar-cli/).
 
-Perhaps this work is moot ... or perhaps just 20 years too late.  Considering the recent progress of chatbots, probably soon all calendar queries can be done in natural language.
+Perhaps this work is moot ... or perhaps just 20 years too late.  Considering the recent progress of AI and chatbots, probably soon all calendar queries can be done in natural language.
 
 ## Other tools
 
@@ -12,7 +12,7 @@ There is a "competing" project at https://github.com/geier/khal - you may want t
 
 ## New vs old interface
 
-Based on user feedback I decided to fork `calendar-cli` into `plann`.  calendar-cli is the old, mature, production-ready, stable API interface, it will hang around and be supported for some time to come.  plann is the new interface, but until version 1.0 is ready, there will still be functionality in calendar-cli that isn't mirrored to cal.py.
+Based on user feedback I decided to fork `calendar-cli` into `plann`.  The discussion was held in a github issue in the calendar-cli project.  calendar-cli is the old, mature, production-ready, stable API interface, it will hang around for some time to come, maybe I will spend some time bugfixing it, and I will for sure be accepting pull requests in a long time to come - at least if they primarily address bugfixes.  plann is the new interface, I believe it can do all that calendar-cli is doing as of version 1.0.
 
 ## Usage examples
 
@@ -41,7 +41,7 @@ This installs `plann` and all its dependencies system-wide.
 
 ## Support
 
-\#calendar-cli at irc.oftc.net (I'm not available 24/7 there), eventually t-plann@tobixen.no, eventually the issue tracker at https://github.com/tobixen/plann/issues
+\#calendar-cli at irc.oftc.net (I'm not available 24/7 there), eventually support@plann.no, eventually the issue tracker at https://github.com/tobixen/plann/issues
 
 Before reaching out, please make sure all the dependencies are installed, and that you've installed the latest version of the caldav python library.  If you're using the master branch of plann, you should also be using the master branch of the caldav python library.
 
@@ -49,12 +49,14 @@ Before reaching out, please make sure all the dependencies are installed, and th
 
 GUIs and Web-UIs are nice for some purposes, but I really find the command line unbeatable when it comes to:
 
-* Minor stuff that is repeated often.  Writing something like "todo add make a calendar-cli system" or "calendar add 'tomorrow 15:40+2h' doctor appointment" is (for me) faster than navigating into some web calendar interface and add an item there.
+* Minor stuff that is repeated often.  Writing something like "todo add make a calendar-cli system" or "calendar add 'tomorrow 15:40+2h' doctor appointment" is (for me) faster than navigating into some web calendar interface and add an item there.  At least when I'm sitting by the laptop.
 * Things that are outside the scope of the UI.  Here is one of many tasks I'd like to do: "go through the work calendar, find all new calendar events that are outside office hours, check up with the personal calendar if there are potential conflicts, add some information at the personal calendar if appropriate", and vice versa - it has to be handled very manually if doing it through any normal calendar application as far as I know, but if having some simple CLI or python library I could easily make some interactive script that would help me doing the operation above.
 
 When I started writing `calendar-cli`, the predecessor to `plann`, all I could find was cadaver and the CalDAVClientLibrary.  Both of those seems to be a bit shortcoming; they seem to miss the iCalendar parsing/generation, and there are things that simply cannot be done through those tools.
 
 ## Synopsis
+
+See also [`USER_GUIDE.md`](USER_GUIDE.md)
 
     plann [global options] [command] [command options] [subcommand] [subcommand options] [subcommand arguments] ...
 

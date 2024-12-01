@@ -1,4 +1,6 @@
-# On the "next level" calendar-cli - a full-featured tool for calendar management, project management and time tracking
+# plann - the "next level" calendar-cli
+
+plann should be a full-featured tool for calendar management, project management and time tracking
 
 This document is dedicated to my rubber ducky - but if anyone else has the patience to read through it, feedback is appreciated.
 
@@ -8,7 +10,7 @@ In my paradigm, a task is a planned activity that should be done, but not at a s
 
 It's not always black and white - events may be task-alike (like an appointment that will have to be rescheduled if you miss it) and tasks may be event-alike (i.e. with a very hard due-time and that cannot be done long time before the due date).
 
-Both events and tasks generally contain infomration about future plans, journals contain information about the past.
+Both events and tasks generally contain information about future plans, journals contain information about the past.
 
 ## Some potential requirements from a good calendaring system:
 
@@ -125,7 +127,7 @@ Those two ways of striking out things have fundamentally different meanings - th
 
 * Recurring tasks is still a potential problem.
 
-## New calendar-cli interface
+## The new plann interface
 
-This section has been moved to a separate document, [NEW_CLI.md](NEW_CLI.md)
+This section has been moved to a separate document, [`NEW_CLI.md`](NEW_CLI.md)
 

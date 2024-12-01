@@ -2,6 +2,10 @@
 
 I was migrating from one calendar server to another, and needed an easy way to copy all events over.  The method described here does involve quite some CPU overhead ... but for normal-sized calendars, on almost any device or VM in 2023, this should be insignificant.
 
+I've done this some few times, and I discovered that Zimbra will export objects as scheduling objects, without including status on weather emails are sent or not.  So copying things from one calendar in Zimbra and over to another will cause Zimbra to send out emails!  Oups!
+
+It's also possible to take out events in a freebusy-like format (removing all privacy-relevant parameters and replacing the summary with "event from work calendar" or something like that) and then reexport it into another calendar.  Useful for having personal calendar items embedded in the work calendar and vice versa.  TODO: find the command I used back in .bash_history and add it here.
+
 ## Full command
 
 ```bash

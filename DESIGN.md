@@ -1,10 +1,10 @@
-I'm currently working on a cal.py aka kal that eventually will replace calendar-cli.py.  This is the long document with design thoughts, and it may not be completely in sync with what I'm actually implementing.  You may want to read the shorter [USER_GUIDE](USER_GUIDE.md) for a more up-to-date and shorter document.
+This is the long document with design thoughts that was written up before I started seriously hacking on `plann`, and it may not be completely in sync with what I'm actually implementing.  You may want to read the shorter [USER_GUIDE](USER_GUIDE.md) for a more up-to-date and shorter document.
 
 ## General thoughts
 
-* calendar-cli should be a simple command line wrapper over existing python libraries.  It should not contain a lot of logic besides parsing command line options and arguments.  Logic that may be useful for python programmers should be pushed to other libraries, like the caldav-library, or be split into a new library.
+* `plann` should be a simple command line wrapper over existing python libraries.  It should not contain a lot of logic besides parsing command line options and arguments.  Logic that may be useful for python programmers should be pushed to other libraries, like the caldav-library, or be split into a new library (after writing that, lots of features have been introduced in `plann`, some of them should probably be moved out from there).
 * Old calendar-cli stays for quite some time, for backward compatibility
-* We'll split out a new command for the new interface, probably it will be `kal`. I considered a lot of different name options:
+* We'll split out a new command for the new interface, probably it will be `kal` (eventually, we landed on `plann`). I considered a lot of different name options:
   * cal ... but `cal(1)` - is a well-established command, so it's out of the question (unless we overload the command by making a wrapper calling `cal` if no subcommand is given ... that could be an idea).
   * `calcli`, `cal-cli` and different variants of it.  The dash already hurt me with calendar-cli, don't want to repeat that.  And "cli" is a bit redundant, when typing a command on the command line it's reasonable to assume it's a cli.
   * `cal-add`, or even `cal-add-todo` ... but modern cli frameworks are more often than not built over different variants of `command subcommand subsubcommand`.
@@ -20,10 +20,10 @@ I'm currently working on a cal.py aka kal that eventually will replace calendar-
 ### Add an event, task or journal entry:
 
 ```
-kal --config-section=private_calendar add --set-location="Aker Brygge marina" event "new years party" 2032-12-31T20:00+5h 
-kal add todo "Buy food for the new years party" --set-due=2032-12-30T20:00 --set-duration=1h
+plann --config-section=private_calendar add --set-location="Aker Brygge marina" event "new years party" 2032-12-31T20:00+5h 
+plann add todo "Buy food for the new years party" --set-due=2032-12-30T20:00 --set-duration=1h
 
-kal add journal "Captain's log" 2020-12-04 'Started from Świnoujście a bit after 03AM.  Due to miscommunication, bad planning and language problems my crew member Bartek managed to throw the whole mooring rope to the sea (clearly the captains fault - I didnt explain the task "release one end of the rope, let it go into the sea and then pull it in" well enough, and he did ask multiple times "are you really sure about that?" before throwing both ends of the rope to the sea).  Tail wind, between 8-16 knots relative windspeed, changed a bit between broad reach and butterfly.  While going butterfly, due to a rather big wave we had an accidental jib, bad enough that the preventer rope broke off the cleat it was attached to (but luckily no damanges to the rig).  There seems to be a minor salt water leakage by the rudder.  Passed Falsterbo around 21, moored up in the guest harbour in Skanör around 22.  Very quiet as it was way outside the season.  Didnt find any obvious choice on the payment automat for harbor fee - eventually I payed SEK 100 for "tvättstuga".  I got no access to the laundry room, so I decided that 100 SEK was an OK price for staying overnight with electricity off-season in Skanör.'
+plann add journal "Captain's log" 2020-12-04 'Started from Świnoujście a bit after 03AM.  Due to miscommunication, bad planning and language problems my crew member Bartek managed to throw the whole mooring rope to the sea (clearly the captains fault - I didnt explain the task "release one end of the rope, let it go into the sea and then pull it in" well enough, and he did ask multiple times "are you really sure about that?" before throwing both ends of the rope to the sea).  Tail wind, between 8-16 knots relative windspeed, changed a bit between broad reach and butterfly.  While going butterfly, due to a rather big wave we had an accidental jib, bad enough that the preventer rope broke off the cleat it was attached to (but luckily no damanges to the rig).  There seems to be a minor salt water leakage by the rudder.  Passed Falsterbo around 21, moored up in the guest harbour in Skanör around 22.  Very quiet as it was way outside the season.  Didnt find any obvious choice on the payment automat for harbor fee - eventually I payed SEK 100 for "tvättstuga".  I got no access to the laundry room, so I decided that 100 SEK was an OK price for staying overnight with electricity off-season in Skanör.'
 ```
 
 While the specification for journal, todo and event are fairly similar, the non-optional parameters will be different due to slightly different typical use-case scenarios:
@@ -37,30 +37,30 @@ The todo-item added above has both due timestamp and duration set, which is agai
 
 ### Reading the calendar
 
-To get things out from the calendar, one can use the kal agenda command:
+To get things out from the calendar, one can use the plann agenda command:
 
 ```
-kal agenda --config-section=private --config-section=work --agenda-days=30 --event-template="{dtstart} {summary} UID={uid}" --todo-template="{due} {summary} UID={uid}"
+plann agenda --config-section=private --config-section=work --agenda-days=30 --event-template="{dtstart} {summary} UID={uid}" --todo-template="{due} {summary} UID={uid}"
 ```
 
-kal agenda should first print out all events starting or ending within the next 30 days, then all tasks with dtstart or due within the next 30 days.  (in my revised "task management" above, dtstart is defined as due minus estimated work time).  The tasks should be "smart sorted", according to the algorithm given in the "Task management" section above ("based on the ratio between duration and available time until due date").  It should accept several --config-section, take out all it can find from those config sections and sort the things afterwards.  Exceptions due to unreachable caldav servers or calendars not supporting tasks etc should be caught and presented nicely.
+plann agenda should first print out all events starting or ending within the next 30 days, then all tasks with dtstart or due within the next 30 days.  (in my revised "task management" above, dtstart is defined as due minus estimated work time).  The tasks should be "smart sorted", according to the algorithm given in the "Task management" section above ("based on the ratio between duration and available time until due date").  It should accept several --config-section, take out all it can find from those config sections and sort the things afterwards.  Exceptions due to unreachable caldav servers or calendars not supporting tasks etc should be caught and presented nicely.
 
-The kal agenda is to be considered a convenience-command, it is slightly redundant.  The output of the command should be considered to be for direct human consumption, no further processing of the output should be done.  The kal select command is the ultimate tool for a lot of things:
+The plann agenda is to be considered a convenience-command, it is slightly redundant.  The output of the command should be considered to be for direct human consumption, no further processing of the output should be done.  The plann select command is the ultimate tool for a lot of things:
 
 ```
-kal select --timespan=2021-12-01+2w list
-kal select --todo --nocategories --list
-kal select --todo --nocategories -1 edit --add-category=keyboard
-kal select --todo --due-before=2021-12-01 --categories=keyboard --smart-sort list
-kal select --todo --due-before=2021-12-01 --categories=keyboard --smart-sort -1 complete
-kal select --uid=e71a6180-45a2-11ec-9605-fa163e7cfdd5 delete
-kal select --due-before=2021-12-24T15:00 --categories=housework calculate-panic-time --work-factor=0.125
-kal select --journal --dtstart-after=2021-10-01 --dtstart-before=2021-11-01 sum_hours
+plann select --timespan=2021-12-01+2w list
+plann select --todo --nocategories --list
+plann select --todo --nocategories -1 edit --add-category=keyboard
+plann select --todo --due-before=2021-12-01 --categories=keyboard --smart-sort list
+plann select --todo --due-before=2021-12-01 --categories=keyboard --smart-sort -1 complete
+plann select --uid=e71a6180-45a2-11ec-9605-fa163e7cfdd5 delete
+plann select --due-before=2021-12-24T15:00 --categories=housework calculate-panic-time --work-factor=0.125
+plann select --journal --dtstart-after=2021-10-01 --dtstart-before=2021-11-01 sum_hours
 ```
 
-kal select should select objects based on some criterias and then perform some action (`list`, `edit`, `postpone`, `complete`, `delete`, `calculate-panic-time`, 'sum_hours' and some more - see further below) on the objects.
+plann select should select objects based on some criterias and then perform some action (`list`, `edit`, `postpone`, `complete`, `delete`, `calculate-panic-time`, 'sum_hours' and some more - see further below) on the objects.
 
-The technical differences between tasks, events and journal entries are small - kal select should basically work on all three of them unless `--todo`, `--event` or `--journal` is epxlicitly given.  If the action given does not match one or more of the objects selected (say, "completing" a journal does not make sense), the script should raise an exception before doing any modifications of the calendar.  `--offset` and `--limit` may be used to specify a handful of objects.  "-1" is shortform for "--limit 1", or typically "do this action with the top item at the list"
+The technical differences between tasks, events and journal entries are small - plann select should basically work on all three of them unless `--todo`, `--event` or `--journal` is epxlicitly given.  If the action given does not match one or more of the objects selected (say, "completing" a journal does not make sense), the script should raise an exception before doing any modifications of the calendar.  `--offset` and `--limit` may be used to specify a handful of objects.  "-1" is shortform for "--limit 1", or typically "do this action with the top item at the list"
 
 `--smart-sort` will give the above mentioned sort algorithm for tasks, and regular sorting by dtstart for events and journals.
 
@@ -76,7 +76,7 @@ sum_hours will sum the duration of all objects.  For tasks and events in the fut
 
 The `pin` subcommand will "pin" one or more todo-items to some specific time on the calendar.  Duration will be copied.  The tasks will be serialized.  If there are conflicting events in the same calendar, the tasks will be put after the conflicting events.  No checks will be done to ensure that the tasks ends up within ordinary working hours, outside the night hours or before the due date.  Or perhaps some sanity checks should be done ... it will be a lot of cleanup-work to be done if one accidentally forgets "-1" and adds some hundreds of items to the calendar ...
 
-```kal select --todo --categories=housework --smart-sort --limit=3 pin '2021-12-02 16:00'```
+```plann select --todo --categories=housework --smart-sort --limit=3 pin '2021-12-02 16:00'```
 
 ### Time tracking
 
@@ -119,4 +119,4 @@ Quite much can be gained by using any kind of desktop calendar application, mobi
 * Go through all events that has just passed and mark up if one really attended or not, and time spent while doing so.
 * Easily go through a list of tasks suggested to be postponed and interactively select/unselect tasks from there.
 
-In examples/task-management-examples I simply used the `list`-command combined with `--todo-template` to create new calendar-cli commands, those were sent to an editor for manual editing.  The script looks horrible, but it kind of works.
+In examples/task-management-examples in calendar-cli I simply used the `list`-command combined with `--todo-template` to create new calendar-cli commands, those were sent to an editor for manual editing.  The script looks horrible, but it kind of works.
