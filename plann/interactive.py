@@ -180,7 +180,7 @@ def _set_relations_from_text_list(calendar, some_list, parent=None, indent=0):
             continue
         
         ## TODO: look through all the conditions above.  should we ever be here?
-        import pdb; pdb.set_trace()
+        raise NotImplementedError("We should not be here - please raise an issue at https://github.com/tobixen/plann or reach out to bugs@plann.no")
     for c in children:
         c.load()
     _adjust_relations(parent, children)
@@ -367,8 +367,6 @@ def _command_line_edit(line, calendar, interactive=True):
     assert splitted
     command = splitted.group(1)
     obj = _get_obj_from_line(splitted.group(2), calendar)
-    if obj:
-        command_edit(obj, command, interactive)
-    else:
-        import pdb; pdb.set_trace()
+    assert obj
+    command_edit(obj, command, interactive)
 

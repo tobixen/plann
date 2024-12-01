@@ -272,6 +272,7 @@ def _relships_by_type(obj, reltype_wanted=None):
             ret[reltype].append(other)
             
             ## Consistency check ... TODO ... look more into breakages
+            ## TODO: make functionality for scanning through all relationships in the calendar
             other_rels = other.get_relatives(fetch_objects=False)
             back_rel_types = set()
             for back_rel_type in other_rels:
@@ -279,20 +280,16 @@ def _relships_by_type(obj, reltype_wanted=None):
                     back_rel_types.add(back_rel_type)
 
             if len(back_rel_types) > 1:
-                import pdb; pdb.set_trace()
+                logging.error(f"Inconsistency issue in relationships - has to be manually resolved (UID={obj.icalendar_component_UID}, backrels: {back_rel_types})")
                 ## Inconsistency has to be manually fixed: more than one related-to property pointing from other to obj
-                1
             if len(back_rel_types) == 0:
-                import pdb; pdb.set_trace()
-                ## Inconsistency will be automatically fixed: no related-to property pointing from other to obj
+                logging.error(f"Inconsistency issue in relationships - will be automatically fixed: no related-to property pointing from other to obj")
                 ## adding the missing back rel
                 other.icalendar_component.add('RELATED-TO', str(obj.icalendar_component['UID']), parameters={'RELTYPE': backreltypes[reltype]})
                 other.save()
             else:
                 if back_rel_types != { backreltypes[reltype] }:
-                    import pdb; pdb.set_trace()
-                    ## Inconsistency has to be manually fixed: object and other points to each other, but reltype does not match
-                    1
+                    logging.error(f"Inconsistency issue in relationships - has to be manually resolved. Object and other points to each other, but reltype does not match")
     return ret
 
 def _relationship_text(obj, reltype_wanted=None):
@@ -365,7 +362,7 @@ def _list(objs, ics=False, template="{DTSTART:?{DUE:?(date missing)?}?%F %H:%M:%
     TODO: if there are parent/child-relationships that aren't bidrectionally linked, we may get problems
     """
     if indent>32:
-        import pdb; pdb.set_trace()
+        raise NotImplemented("too deep hierarchies, or circular links")
     if ics:
         if not objs:
             return
