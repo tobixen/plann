@@ -65,6 +65,9 @@ def find_calendars(args, raise_errors):
                 key = 'username'
             conn_params[key] = args[k]
     calendars = []
+    ## https://github.com/tobixen/plann/issues/11, credits to @bergercookie
+    if 'caldav_url' in conn_params:
+        conn_params['url'] = conn_params.pop('caldav_url')
     if conn_params:
         client = caldav.DAVClient(**conn_params)
         principal = _try(client.principal, {}, conn_params['url'])
