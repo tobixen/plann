@@ -2,7 +2,7 @@
 
 """https://github.com/tobixen/plann/ - high-level cli against caldav servers.
 
-Copyright (C) 2013-2022 Tobias Brox and other contributors.
+Copyright (C) 2013-2024 Tobias Brox and other contributors.
 
 See https://www.gnu.org/licenses/gpl-3.0.en.html for license information.
 

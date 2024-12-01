@@ -1,5 +1,8 @@
 from plann import panic_planning
 from datetime import datetime, timedelta
+from unittest import mock
+from caldav import Todo,Event
+from caldav.lib.vcal import create_ical
 
 def datetime_(*largs, **kwargs):
     ret = datetime(*largs, **kwargs)
@@ -70,3 +73,35 @@ def test_timeline_add():
     assert timeline[2]['begin'] == t(14)
     assert timeline[2]['obj'] == '14'
     assert timeline[3]['begin'] == t(15)
+
+def create_obj(comp_class='VTODO', duehour=None, **data):
+    if duehour:
+        tomorrow = (datetime.now() + timedelta(days=1)).replace(minute=0, second=0)
+        data['due'] = tomorrow.replace(hour=duehour)
+        data['dtstart'] = tomorrow.replace(hour=duehour-1)
+    compclass={'VEVENT': Event, 'VTODO': Todo}
+    ical = create_ical(**data)
+    return compclass[data.get('objtype', 'VEVENT')](client=None, url=f"https://example.com/{data['uid']}", data=ical)
+    
+def test_timeline_suggestion():
+    pri1 = create_obj(uid=1, priority=1, duehour=12)
+    pri2 = create_obj(uid=2, priority=1, duehour=10)
+    pri3 = create_obj(uid=3, priority=1, duehour=14)
+
+    ctx = mock.Mock
+    ctx.obj = {'objs': [pri1, pri2, pri3]}
+
+    timeline = panic_planning.timeline_suggestion(ctx, hours_per_day=23)
+
+    ## Can we make asserts that are robust enough not to fail should the algorithm change completely?
+    ## The only requirement is that it creates a timeline, isn't it?
+    assert timeline[0]['begin']>=datetime.now().astimezone()
+    assert len([x['obj'] for x in timeline if 'obj' in x]) == 3
+    assert len(set([x['obj'].url for x in timeline if 'obj' in x])) == 3
+
+    ## parents should always be handled after children
+    pri3.icalendar_component.add('RELATED_TO', 'https://example.com/2', parameters={'RELTYPE': 'CHILD'})
+    pri2.icalendar_component.add('RELATED_TO', 'https://example.com/3', parameters={'RELTYPE': 'PARENT'})
+    
+    timeline = panic_planning.timeline_suggestion(ctx, hours_per_day=23)
+    #['x' for x in assert 
