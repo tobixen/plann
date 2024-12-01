@@ -1,8 +1,8 @@
 metadata = {
-    "version": "0.15.1",
+    "version": "1.0.0",
     "author": "Tobias Brox",
     "author_short": "tobixen",
-    "copyright": "Copyright 2013-2023, Tobias Brox and contributors",
+    "copyright": "Copyright 2013-2024, Tobias Brox and contributors",
     "license": "GPLv3+",
     "license_url": "http://www.gnu.org/licenses/gpl-3.0-standalone.html",
     "maintainer": "Tobias Brox",

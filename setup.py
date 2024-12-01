@@ -27,9 +27,7 @@ setup(
     ],
     py_modules=['plann'],
     install_requires=[
-        'icalendar',
-        'caldav>=0.12-dev0',
-#        'isodate',
+        'caldav>=1.4.0'
         'tzlocal',
         'Click',
         'PyYAML',
