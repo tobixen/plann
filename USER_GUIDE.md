@@ -112,6 +112,8 @@ Events can either be output as ics, or through a template.
 
 The templating engine is built on top of the python `string.format()`.  To learn the basics of `string.format()`, w3schools has some nice interactive thing on the web, https://www.w3schools.com/python/ref_string_format.asp
 
+All or almost all icalendar fields should be available.  In addition, the `calendar_name` and `calendar_url` (lower case!) is available (and may be useful when listing content from several calendars).
+
 Text fields can be accessed directly i.e. like this:
 
 ```

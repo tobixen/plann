@@ -202,14 +202,26 @@ def test_plann():
         assert(not _adjust_ical_relations(todo1, {'CHILD': {uid2}, 'PARENT': set()}))
         assert(not _adjust_ical_relations(todo2, {'PARENT': {uid1}, 'CHILD': set()}))
 
-        ## This should return a list of human-readable strings.
-        list_td = _list(ctx, top_down=True)
-        list_bu = _list(ctx, bottom_up=True)
-        ## TODO: run tests on the returns
+        _select(ctx, todo=True)
+        ## This should return a list of human-readable strings, with an indented child.
+        list_td = _list(ctx.obj['objs'], top_down=True, echo=False)
+        assert(list_td[0][0] != ' ')
+        assert(list_td[1][0] == ' ')
+        assert('good' in list_td[0])
+
+        ## This should return a list of human-readable strings, with an indented parent.
+        list_bu = _list(ctx.obj['objs'], bottom_up=True, echo=False)
+        assert(list_bu[0][0] != ' ')
+        assert(list_bu[1][0] == ' ')
+        assert('good' in list_bu[1])
+
+        ## Test that the calendar_name template attribute works
+        list_cal = _list(ctx.obj['objs'], template="{calendar_name}", echo=False)
+        assert list_cal[0] == todo1.parent.name
+        assert list_cal[1] == todo2.parent.name
 
         ## panic planning, timeline_suggestion.
         ## We have two tasks in the calendar, each with one hour duration
-        _select(ctx, todo=True)
         timeline = timeline_suggestion(ctx, hours_per_day=24)
         assert(timeline.count() == 2)
         foo = timeline.get(datetime_(year=2012, month=12, day=20, hour=22, minute=35))
@@ -336,7 +348,7 @@ def test_plann():
         assert(dag(todo5, 'PARENT') == {uid4: {uid3: {uid1: {}}}})
 
         ## This should not throw one into the debugger
-        list_td = _list(ctx, top_down=True)
+        list_td = _list(ctx.obj['objs'], top_down=True, echo=False)
 
         def remove_parent(input):
             return f"{uid2}: todo2\n{uid3}: todo3\n  {uid4}: todo4\n     {uid5}: todo5"
@@ -352,7 +364,7 @@ def test_plann():
         assert(dag(todo5, 'PARENT') == {uid4: {uid3: {}}})
     
         ## This should not throw one into the debugger
-        list_td = _list(ctx, top_down=True)
+        #list_td = _list(ctx.obj['objs'], top_down=True, echo=False)
 
         def gen_prompt(ret):
             def prompt(*largs, **kwargs):
