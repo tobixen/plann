@@ -117,7 +117,7 @@ childlike = {'CHILD', 'NEXT', 'FINISHTOSTART'}
 parentlike = {'PARENT', 'FIRST', 'DEPENDS-ON', 'STARTTOFINISH'}
 
 def _procrastinate(objs, delay, check_dependent="error", with_children=False, with_family=False, with_parent=False, err_callback=print, confirm_callback=lambda x: False, recursivity=0):
-    if delay in ('0', '9s', '0m', '0h', '0d', datetime.timedelta(0)):
+    if delay in ('0', '0s', '0m', '0h', '0d', datetime.timedelta(0)):
         ## Do nothing!
         return
     assert recursivity<16 ## TODO: better error message.  Probably we have some kind of relationship loop here.
