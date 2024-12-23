@@ -8,7 +8,7 @@ Perhaps this work is moot ... or perhaps just 20 years too late.  Considering th
 
 ## Other tools
 
-There is a "competing" project at https://github.com/geier/khal - you may want to check it out - it's more mature but probably more complex.  It's using a "vsyncdir" backend - if I've understood it correctly, that involves building a local copy of the calendar.  The philosophy behind plann and calendar-cli is slightly different, it is supposed to be a simple cli-based caldav+ical client.  No synchronization, no local storage, just client-side operations.
+There is a "competing" project at https://github.com/geier/khal - you may want to check it out - it's more mature but probably more complex.  khal uses a "vdir" backend; a local directory with icalendar files. It is designed to operate offline (while some other tool can optionally synchronise this with a remote server). The philosophy behind plann and calendar-cli is the opposite: interact directly with a caldav server; no synchronisation, no local storage, just client-side operations.
 
 ## New vs old interface
 
