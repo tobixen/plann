@@ -55,17 +55,28 @@ class TestParseTimestamp:
              expected = expected.replace(tzinfo=tz.implicit_timezone)
          assert parse_add_dur(dt, dur) == expected
 
-    def _testTimeSpec(self, expected):
-        expected_tz=tz.implicit_timezone
+    def _stz(self, dt):
+        """
+        Ensures the dt has a timezone set
+        """
+        ## Find the default expected timezone
+        expected_tz = tz.implicit_timezone
         if not expected_tz:
             expected_tz = datetime.now().astimezone().tzinfo
+        if dt and isinstance(dt, datetime):
+            return dt.replace(tzinfo=expected_tz)
+        return dt
+
+    def _testTimeSpec(self, expected):
         for input in expected:
-            def stz(dt):
-                if dt and isinstance(dt, datetime):
-                    return dt.replace(tzinfo=expected_tz)
-                return dt
-            expv = tuple([stz(x) for x in expected[input]])
+            expv = tuple([self._stz(x) for x in expected[input]])
             assert parse_timespec(input)== expv
+
+    def _testRelativeTimeSpec(self, expected):
+        for input in expected:
+            ## Slow tests may sometimes span the exact moment when the second changes, so the 
+            expected_ = self._stz(datetime.now().replace(microsecond=0)) + expected[input]
+            assert parse_dt(input) in (expected_, expected_ + timedelta(seconds=1))
 
     @pytest.mark.skip(reason="Not implemented yet, waiting for feedback on https://github.com/gweis/isodate/issues/77")
     def testIsoIntervals(self):
@@ -97,6 +108,13 @@ class TestParseTimestamp:
                 (date(2007,3,1), None)
         }
         self._testTimeSpec(expected)
+
+    def testRelative(self):
+        expected = {
+            "+1h": timedelta(hours=1),
+            "now": timedelta(hours=0)
+        }
+        self._testRelativeTimeSpec(expected)
         
     def testTwoTimestamps(self):
         expected = {

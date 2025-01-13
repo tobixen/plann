@@ -406,7 +406,7 @@ def agenda(ctx):
     
       `select --event --start=now --end=+7d --limit=16 list`
     
-      `select --todo --sort '{DTSTART:?{DUE:?(0000)?}?%F %H:%M:%S}' --sort '{PRIORITY:?0}' --end=+7d --limit=16 list --bottom-up`
+      `select --todo --sort-key '{DTSTART:?{DUE:?(0000)?}?%F %H:%M:%S}' --sort '{PRIORITY:?0}' --end=+7d --limit=16 list --bottom-up`
 
     agenda is for convenience only and takes no options or parameters.
     Use the select command for advanced usage.  See also USAGE.md.

@@ -5,6 +5,18 @@ import dateutil
 import dateutil.parser
 import re
 
+"""
+Most important content:
+
+* parse_dt - parses almost anything into a datetime.
+* parse_timespec - parses a string (which may be a timestamp or an interval) into two datetimes
+* tz - a singleton containing the default timezones to be used
+
+parse_dt supports things like "+2h" or "now", while parse_timespec doesn't.
+
+The naming of those two are a bit arbitrary and may be changed in a future version of the library.  Old names will then continue working as legacy aliases.
+"""
+
 ## Singleton (aka global variable)
 @dataclass
 class Tz():
@@ -12,6 +24,9 @@ class Tz():
     Singleton class storing timezone preferences
 
     (floating time not supported yet)
+    
+    "implicit" is the timezone that is implicitly used for timestamps given by the user
+    "store" is the timezone used by the storage backend
     """
     show_native_timezone: bool=False
     _implicit_timezone: zoneinfo.ZoneInfo = None
@@ -40,7 +55,7 @@ class Tz():
 tz=Tz()
 
 def _now():
-    return datetime.datetime.now().astimezone(tz.implicit_timezone)
+    return datetime.datetime.now().astimezone(tz.implicit_timezone).replace(microsecond=0)
 
 def _ensure_ts(dt):
     """
@@ -58,12 +73,6 @@ def _ensure_ts(dt):
     return datetime.datetime(dt.year, dt.month, dt.day, tzinfo=tz.implicit_timezone).astimezone(tz.implicit_timezone)
 
 def parse_dt(input, return_type=None, for_storage=False):
-    ret = _parse_dt(input, return_type)
-    if for_storage and hasattr(ret, "astimezone"):
-        ret = ret.astimezone(tz.store_timezone)
-    return ret
-    
-def _parse_dt(input, return_type=None):
     """
     Convenience-method, it is very liberal in what it accepts as input:
 
@@ -71,12 +80,19 @@ def _parse_dt(input, return_type=None):
     * datetime or date
     * VDDDTypes from the icalendar library
     * strings like "+2h" means "two hours in the future"
+    * special string "now"
 
     If return_type is date, return a date - if return_type is
     datetime, return a datetime.  If no return_type is given, try to
     guess if we should return a date or a datetime.  Datetime should
     always have a timezone.
     """
+    ret = _parse_dt(input, return_type)
+    if for_storage and hasattr(ret, "astimezone"):
+        ret = ret.astimezone(tz.store_timezone)
+    return ret
+    
+def _parse_dt(input, return_type=None):
     if hasattr(input, 'dt'):
         input = input.dt
     if isinstance(input, datetime.datetime):
@@ -87,9 +103,12 @@ def _parse_dt(input, return_type=None):
         if return_type is datetime.datetime:
             return _ensure_ts(input)
         return input
+    ## dateutil.parser.parse does not recognize 'now'
+    if input == 'now':
+        ret = _now()
     ## dateutil.parser.parse does not recognize '+2 hours', like date does.
-    if input.startswith('+'):
-        ret = parse_add_dur(datetime.datetime.now(), input[1:])
+    elif input.startswith('+'):
+        ret = parse_add_dur(_now(), input[1:])
     else:
         ret = dateutil.parser.parse(input)
     if return_type is datetime.datetime:
@@ -150,12 +169,6 @@ def parse_add_dur(dt, dur, for_storage=False, ts_allowed=False):
    
 
 def parse_timespec(timespec, for_storage=False):
-    ret = _parse_timespec(timespec)
-    if for_storage:
-        ret = (x and x.astimezone(tz.store_timezone) for x in ret)
-    return ret
-
-def _parse_timespec(timespec):
     """parses a timespec and return two timestamps
 
     The ISO8601 interval format, format 1, 2 or 3 as described at
@@ -170,6 +183,12 @@ def _parse_timespec(timespec):
 
     One timestamp should be accepted, and the second return value will be None.
     """
+    ret = _parse_timespec(timespec)
+    if for_storage:
+        ret = (x and x.astimezone(tz.store_timezone) for x in ret)
+    return ret
+
+def _parse_timespec(timespec):
     if isinstance(timespec, datetime.date):
         return (timespec,timespec)
 

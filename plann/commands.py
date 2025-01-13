@@ -20,8 +20,8 @@ def _select(ctx, interactive=False, mass_interactive=False, **kwargs):
     __select(ctx, **kwargs)
     ## TODO: move the rest to interactive module?
     if (interactive or mass_interactive) and ctx.obj['objs']:
+        objs = ctx.obj['objs']
         if mass_interactive:
-            objs = ctx.obj['objs']
             ctx.obj['objs'] = []
             select_list = "\n".join(_list(
                 objs, echo=False,

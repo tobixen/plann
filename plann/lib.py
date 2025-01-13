@@ -171,8 +171,13 @@ def _procrastinate(objs, delay, check_dependent="error", with_children=False, wi
                 if p.get('STATUS') == 'COMPLETED':
                     _procrastinate([x], new_due, check_dependent=False, err_callback=err_callback, confirm_callback=confirm_callback, recursivity=recursivity+1)
                 else:
-                    err_callback(f"{summary} could not be postponed due to parent {_summary(p)} with due {_ensure_ts(p['DUE'])} and priority {p.get('priority', 0)}")
-                    if check_dependent == "interactive" and p.get('priority', 9)>2 and confirm_callback("procrastinate parent?"):
+                    p_postponable = check_dependent == "interactive" and p.get('priority', 9)>2
+                    p_auto_postponable = p_postponable and i.get('priority',0) <= p.get('priority', 0)
+                    if p_auto_postponable:
+                        err_callback(f"{summary} will be postponed together with parent {_summary(p)} with due {_ensure_ts(p['DUE'])} and priority {p.get('priority', 0)}")
+                    else:
+                        err_callback(f"{summary} could not be postponed due to parent {_summary(p)} with due {_ensure_ts(p['DUE'])} and priority {p.get('priority', 0)}")
+                    if p_postponable and (p_auto_postponable or confirm_callback("procrastinate parent?")):
                         _procrastinate([parent], new_due+max(parent.get_duration()+x.get_duration()+datetime.timedelta(minutes=1), datetime.timedelta(minutes=1)), check_dependent=check_dependent, err_callback=err_callback, confirm_callback=confirm_callback, recursivity=recursivity+1)
                         _procrastinate([x], new_due, check_dependent=check_dependent, err_callback=err_callback, confirm_callback=confirm_callback, recursivity=recursivity+1)
             elif check_dependent == "return":
