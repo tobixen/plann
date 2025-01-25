@@ -72,15 +72,15 @@ Always consult --help for up-to-date and complete listings of options.
 The list below will only contain the most important options and may
 not be up-to-date and may contain features not implemented yet.
 
-* --caldav-url, --caldav-user, --caldav-pass: how to connect to the CalDAV server.  Fits better into a configuration file. (CONFIGURATION FILE NOT YET IMPLEMENTED IN `plann`)
+* --caldav-url, --caldav-user, --caldav-pass: how to connect to the CalDAV server.  (Fits better into a configuration file)
 * --calendar-url: url to the calendar one wants to use.  A relative URL (path) or a calendar-id is also accepted.
 * --config-file: use a specific configuration file (default: $HOME/.config/calendar.conf)
-* --config-section: use a specific section from the config file (i.e. to select a different caldav-server to connect to) (CONFIGURATION FILE NOT YET IMPLEMENTED IN `plann`)
+* --config-section: use a specific section from the config file (i.e. to select a different caldav-server to connect to)
 * --icalendar: Write or read icalendar to/from stdout/stdin
 * --nocaldav: don't connect to a caldav server
 * --timezone: any "naive" timestamp should be considered to belong to the given time zone, timestamps outputted should be in this time zone, timestamps given through options should be considered to be in this time zone (Olson database identifiers, like UTC or Europe/Helsinki). (default: local timezone)
 
-The caldav URL should be something like i.e. http://some.davical.server/caldav.php/ - it is only supposed to relay the server location, not the user or calendar.  Things will most likely work if you give http://some.davical.server/caldav.php/tobixen/work-calendar/ - but it will ignore the calendar part of it, and use first calendar it can find - which perhaps may be tobixen/family-calendar/.  Use http://some.davical.server/caldav.php/ as the caldav URL, and /tobixen/family-calendar as the calendar-url.
+The caldav URL should be something like i.e. http://some.davical.server/caldav.php/ - it is only supposed to relay the server location, not the user or calendar.  Things will most likely work if you give http://some.davical.server/caldav.php/tobixen/work-calendar/ - but it will ignore the calendar part of it, and use first calendar it can find - which perhaps may be `tobixen/family-calendar/`.  Use http://some.davical.server/caldav.php/ as the caldav URL, and `/tobixen/family-calendar` as the calendar-url.
 
 ### Commands
 
@@ -100,7 +100,7 @@ Supported since `calendar_cli` (predecessor to `plann`) v0.12:
 * An iso time stamp, followed with the duration, using either + or space as separator.  Duration is a number postfixed by s for seconds, m for minutes, h for hours, d for days, w for weeks and y for years (i.e. 2013-09-10T13:37+30d)
 * ISO dates.  For full day events, make sure to specify the duration in days.
 
-All of those would eventually be supported in future versions if it's not too difficult to achieve:
+Some of those may already be implemented, all should eventually work in some future version of plann:
 
 * Two ISO timestamps separated by a dash (-)
 * "tomorrow" instead of an ISO date
@@ -230,4 +230,4 @@ See USAGE.MD for further instructions on how to use `plann`.
 
 ## Roadmap
 
-See NEXT_LEVEL.md and NEW_CLI.md for the direction the project is heading.
+See [`NEXT_LEVEL.md`](NEXT_LEVEL.md)and [`NEW_CLI.md`](NEW_CLI.md) for the direction the project is heading.
