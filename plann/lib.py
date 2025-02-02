@@ -11,6 +11,7 @@ TODO: Sort all this mess.  Split out things that are interactive?
 import datetime
 import caldav
 import logging
+import re
 from collections import defaultdict
 from plann.template import Template
 from plann.timespec import tz, _now, _ensure_ts, parse_dt, parse_add_dur, parse_timespec
@@ -23,12 +24,34 @@ attr_time = ['dtstamp', 'dtstart', 'due', 'dtend', 'duration']
 attr_int = ['priority']
 
 def _split_vcal(ical):
-    ical = ical.strip()
+    ical = ical.strip().replace('\r\n','\n')
     icals = []
     while ical.startswith("BEGIN:VCALENDAR\n"):
         pos = ical.find("\nEND:VCALENDAR") + 14
         icals.append(ical[:pos])
         ical = ical[pos:].lstrip()
+    assert not ical
+    if len(icals) == 1:
+        ical_start = icals[0].find('BEGIN', 15)
+        header = icals[0][:ical_start]
+        ical = icals[0][ical_start:]
+        icals = []
+        prev_uid = None
+        while ical.startswith('BEGIN:'):
+            what = ical[6:ical.find('\n')]
+            uidpos = ical.find('UID:')
+            uidend = ical.find('\n', uidpos)
+            uidline = ical[uidpos:uidend]
+            pos = ical.find('END:' + what) + 4 + len(what)
+            if uidline != prev_uid:
+                icals.append(ical[:pos])
+                prev_uid = uidline
+            else:
+                icals[-1].append(ical[:pos])
+            ical = ical[pos:].strip()
+        import pdb; pdb.set_trace()
+        assert ical == 'END:VCALENDAR'
+        icals = [f"{header}{x}\nEND:VCALENDAR" for x in icals]
     return icals
 
 def find_calendars(args, raise_errors):
