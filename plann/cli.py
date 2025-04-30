@@ -24,7 +24,7 @@ from plann.config import config_section, read_config, expand_config_section
 from plann.metadata import metadata
 from plann.commands import _select, _edit, _cats, _check_for_panic, _add_todo, _add_event, _agenda, _check_due, _dismiss_panic, _split_huge_tasks, _split_high_pri_tasks, _set_task_attribs
 from plann.lib import find_calendars, attr_txt_one, attr_txt_many, attr_time, attr_int, _list, _split_vcal
-from plann.timespec import tz
+from plann.timespec import tz, parse_dt
 from plann.interactive import _abort
 __version__ = metadata["version"]
 
@@ -441,6 +441,7 @@ def manage_tasks(ctx):
     * split-huge-tasks
     * split-high-pri-tasks
     * dismiss-panic
+    * interactive-fix-panic
     """
     ## TODO: pinned tasks for the previous week.
     ## * Go through the events ... for each of them, ask if it was done or not
@@ -452,14 +453,16 @@ def manage_tasks(ctx):
     _split_high_pri_tasks(ctx)
     click.echo("Checking if there is any missing metadata on your tasks ...")
     _set_task_attribs(ctx)
-    click.echo("Here is your upcoming agenda, have a quick look through it")
-    _agenda(ctx)
     click.echo("Checking if we should go in 'panic mode', perhaps it's needed to procrastinate some lower-priority tasks")
     _dismiss_panic(ctx, hours_per_day=24)
+    click.echo("New panic check")
+    _dismiss_panic(ctx, hours_per_day=14)
     click.echo("Going through your near-due tasks")
     _check_due(ctx)
-    click.echo("New panic check.  (Eventually, press ctrl-c and start working on the tasks rather than obsessing over them ...)")
-    _dismiss_panic(ctx, hours_per_day=8)
+    click.echo("Stick tasks to your calendar")
+    _check_for_panic(ctx, hours_per_day=24, interactive_fix_timeline=True, timeline_end=parse_dt('+5d'), include_all_events=True)
+    click.echo("Here is your upcoming agenda, have a quick look through it")
+    _agenda(ctx)
 
 @interactive.command()
 @click.option('--limit', help='If more than limit overdue tasks are found, probably we should do a mass procrastination rather than going through one and one task')
