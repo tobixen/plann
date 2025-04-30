@@ -2,7 +2,7 @@
 name = "plann"
 version = "1.1.dev"
 description = "Plann is a command-line tool for interfacing towards CalDAV calendar servers"
-authors = ["Tobias Brox <tobias@redpill-linpro.com>"]
+authors = [{ name = "Tobias Brox", email="tobias@redpill-linpro.com"}]
 license = "GPL 3.0"
 readme = "README.md"
 urls = { Homepage = "https://plann.no" }
