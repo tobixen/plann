@@ -413,7 +413,7 @@ def _agenda(ctx):
     ctx.obj['objs'] = objs + ["======"] + ctx.obj['objs']
     return _list(ctx.obj['objs'])
 
-def _check_due(ctx, limit=16, lookahead='16h'):
+def _check_due(ctx, limit=16, lookahead='24h'):
     end_ = parse_add_dur(datetime.datetime.now(), lookahead)
     _select(ctx=ctx, todo=True, end=end_, limit=limit, sort_key=['{PRIORITY:?0?} {DTSTART:?{DUE:?(0000)?}?%F %H:%M:%S}'])
     objs = ctx.obj['objs']

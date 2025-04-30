@@ -12,7 +12,7 @@ jobs:
     name: ${{ matrix.python }}
     runs-on: ubuntu-latest
     strategy:
-      fail-fast: false
+      fail-fast: true
       matrix:
         python:
           - '3.13'
@@ -21,11 +21,11 @@ jobs:
           - '3.10'
           - '3.9'
     steps:
-      - uses: actions/checkout@v2
-      - uses: actions/setup-python@v2
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python }}
-      - uses: actions/cache@v1
+      - uses: actions/cache@v4
         with:
           path: ~/.cache/pip
           key: pip|${{ hashFiles('setup.py') }}|${{ hashFiles('tox.ini') }}
@@ -34,11 +34,11 @@ jobs:
   docs:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v2
-      - uses: actions/setup-python@v2
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
         with:
           python-version: '3.13'
-      - uses: actions/cache@v1
+      - uses: actions/cache@v4
         with:
           path: ~/.cache/pip
           key: pip|${{ hashFiles('setup.py') }}|${{ hashFiles('tox.ini') }}

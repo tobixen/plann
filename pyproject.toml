@@ -1,0 +1,19 @@
+[project]
+name = "plann"
+version = "1.1.dev"
+description = "Plann is a command-line tool for interfacing towards CalDAV calendar servers"
+authors = [{ name = "Tobias Brox", email="tobias@redpill-linpro.com"}]
+license = "GPL 3.0"
+readme = "README.md"
+urls = { Homepage = "https://plann.no" }
+dependencies = [
+  "caldav>=1.4.0",
+  "Click",
+  "PyYAML",
+  "sortedcontainers"
+]
+dynamic = ["version"]
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
