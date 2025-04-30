@@ -184,7 +184,8 @@ def parse_timespec(timespec, for_storage=False):
     One timestamp should be accepted, and the second return value will be None.
     """
     ret = _parse_timespec(timespec)
-    if for_storage:
+    # do not try to adjust timezone for datetime.date (all-day events)
+    if for_storage and isinstance(ret[0], datetime.datetime):
         ret = (x and x.astimezone(tz.store_timezone) for x in ret)
     return ret
 
