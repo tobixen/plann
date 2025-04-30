@@ -1,5 +1,6 @@
 [project]
 name = "plann"
+version = "1.1.dev"
 description = "Plann is a command-line tool for interfacing towards CalDAV calendar servers"
 authors = ["Tobias Brox <tobias@redpill-linpro.com>"]
 license = "GPL 3.0"
