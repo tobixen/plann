@@ -7,6 +7,9 @@ readme = "README.md"
 urls = { Homepage = "https://plann.no" }
 dependencies = [
   "caldav>=1.4.0",
+  "Click",
+  "PyYAML",
+  "sortedcontainers"
 ]
 dynamic = ["version"]
 
