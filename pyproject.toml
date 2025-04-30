@@ -1,10 +1,14 @@
 [tool.poetry]
 name = "plann"
-version = "0.1.0"
 description = "Plann is a command-line tool for interfacing towards CalDAV calendar servers"
 authors = ["Tobias Brox <tobias@redpill-linpro.com>"]
 license = "GPL 3.0"
 readme = "README.md"
+urls = { Homepage = "https://plann.no" }
+dependencies = [
+  "caldav>=1.4.0",
+]
+dynamic = ["version"]
 
 [tool.poetry.dependencies]
 python = "3.9,3.10,3.11,3.12,3.13"
