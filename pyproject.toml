@@ -1,4 +1,4 @@
-[tool.poetry]
+[project]
 name = "plann"
 description = "Plann is a command-line tool for interfacing towards CalDAV calendar servers"
 authors = ["Tobias Brox <tobias@redpill-linpro.com>"]
