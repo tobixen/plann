@@ -26,6 +26,9 @@ Both events and tasks generally contain information about future plans, journals
 
 * For collaboration, it's important to check when participants have available time, as well as to be able to invite participants to calendar entries, and to be able to reply to invitations in such a manner that the event both appears on the personal calendar and that the organizer gets notified on whom will participate.
 
+* The calendaring system should be able to assist with time tracking.  After doing some research on solutions out there,  I've come up with those thoughts:
+  * Time tracking information should be available in a standard format to any app that needs it.  It seems perfect to store it as calendar data.  The icalendar standard does not currently 
+
 ## Standards as they are now:
 
 ### Calendar resource object types
@@ -77,19 +80,15 @@ Perhaps even make it to a general rule that all activities should be registered 
 
 ### Time tracking
 
-When marking a task (VTODO) as completed, it ought to be possible to mark up how much time was spent on it (i.e. "2 hours"), optionally when it was done (default, worked on it until just now), optionally a description of what was done.  Similarly, for a VEVENT it should be possible to write up i.e. meeting notes and record that one actually spent time being in a meeting.  It's possible to use the DURATION field or the difference between DTSTART and COMPLETED for this, but those fields may also be used for other purposes as mentioned in the "More on timestamps"-section above.  Utilizing this for time tracking, and one risks throwing away useful data.  One could add extra data in X-fields, but then the data would not be available for other tools.
+Time tracking should be an integrated part of a good calendaring system.  Sadly, time tracking does not fit neatly into the iCalendar format as of today.  I'd love to see an update to the standard for this.
 
-If one always ensures to "stick" tasks to the calendar, time tracking can be done in the DTSTART/DTEND of the VEVENT.  It's not the best, event objects are not really designed for keeping time tracking information, the primary purpose is to contain information about the future - not the past.  There is nofields to indicate that one has participated in an event, the nearest is to set the attendee status to "accepted".  "Accepted" means "I was planning to attend to this event", it doesn't mean "I actually participated in this event".  It could also cause extra noise if one is to actively reject a calendar event after the event happened, as it may cause notifications to be sent to the organizer.  To make it even more complicated, the time spent on the event may be different than planned (i.e. a meeting dragging out in time or being cut short), it doesn't always make sense to edit the DTSTART/DTEND of a meeting to indicate how much time was actually spent on the meeting.
+The three best solutions I can think of is:
 
-A VJOURNAL entry is (the only entry) supposed to describe the past, and could be a good place to store such data.  Unfortunately VJOURNAL entries cannot have DURATION nor DTEND (and it's recommended to put a date rather than a timestamp into DTSTART).
+* Add an optional DTEND and/or DURATION property to JOURNAL entries (as those are meant to be used to record the past, while VEVENT and VTODO is meant to plan the future).  (This is probably a no-go - for decades in the future, people will be using legacy software where the DTEND would not pass validation)
+* Add another participant status (PARTSTAT), ATTENDED (but great care should be taken, one may not always want to notify event organizers that one participated in an event).
+* A separate calendar component type, like VTIMESPENT.
 
-It is a great mess - the designers of the calendar standards absolutely didn't consider the need of tracking time spent.
-
-When completing a recurring tasks, I'm actually storing information on *what has happened*.  Every time a recurring task is completed, the information from the master event is duplicated into a completed recurrence object.  We could possibly use the DURATION of a completed recurrence to denote time spent.  Non-recurring tasks may be hand-crafted into recurring tasks with COUNT set to one.  That does feel like a rather dirty workaround though.
-
-The RELATED-TO property may possibly be used to squeeze in some extra information.  A VJOURNAL entry may mean something took place or was done, with some free-text comment on the work done for the archives.  The VJOURNAL may be a child of one or more VEVENTs, this relationship may indicate that those events are special time tracking events, and that the timestamps in the VEVENTs corresponds to the time actually spent.  Those events may again be the child of the VEVENT or VTODO where the planned or estimated time is stored.  Brilliantly complex - and for sure, no other calendaring systems will anyway be able to understand what time ranges are spent vs planned - one could as well use X-NONSTANDARD properties for this purpose.
-
-There is additional complexity that the time spent may be flagged as overtime, and that there may be billing information as well.  I'm considering it to be site-specific and outside the scope.  It may be possible to squeeze this information in somewhere, maybe in the CATEGORIES field, or maybe in some X-NONSTANDARD attributes.
+I've been thinking relatively deeply about this - and considered that while waiting for better standards the best solution is to be using PARTSTAT=X-ATTENDED.  For personal time tracking, it may be important to make a personal copy of the event ensuring status updates are not sent to the organizer.
 
 ### Striking out something from the calendar
 
