@@ -1,7 +1,7 @@
 import pytest
 from unittest.mock import patch
-from caldav import Todo
-from plann.lib import _summary,  _procrastinate, _adjust_ical_relations, _add_category, _set_something
+from caldav import Todo, Calendar
+from plann.lib import _summary,  _procrastinate, _adjust_ical_relations, _add_category, _set_something, add_time_tracking_timew, add_time_tracking
 from datetime import datetime, timedelta
 from datetime import timezone
 
@@ -33,6 +33,23 @@ def test_summary():
     assert(_summary(t) == "Buy some food and drinks, clean up the place, hang up some baloons")
     t.icalendar_component.pop('DESCRIPTION')
     assert(_summary(t) == "19970901T130000Z-123404@host.com")
+    
+@pytest.mark.parametrize("method", [add_time_tracking_timew, add_time_tracking])
+@patch("plann.lib.subprocess.run")
+def test_add_time_tracking_timew(mock_run, method):
+    ts1 = datetime(2020, 2, 20, 20, 2)
+    ts2 = datetime(2020, 2, 20, 20, 20)
+    obj = Todo()
+    obj.data = todo
+    obj.parent=Calendar()
+    obj.parent.extra_config={'time_tracking': ['timew']}
+    
+    method(obj, ts1, ts2)
+
+    mock_run.assert_called_once()
+    cmd_arr = mock_run.mock_calls[0].args[0]
+    assert cmd_arr[0:5] == ['timew', 'track', '2020-02-20T20:02', '-', '2020-02-20T20:20']
+
 
 def test_add_set_category():
     t = Todo()

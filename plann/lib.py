@@ -11,6 +11,7 @@ TODO: Sort all this mess.  Split out things that are interactive?
 import datetime
 import caldav
 import logging
+import subprocess
 from collections import defaultdict
 from plann.template import Template
 from plann.timespec import tz, _now, _ensure_ts, parse_dt, parse_add_dur, parse_timespec
@@ -64,7 +65,13 @@ def find_calendars(args, raise_errors):
             if key == 'user':
                 key = 'username'
             conn_params[key] = args[k]
+    extra_params = {}
+    if 'extra_params' in conn_params:
+        extra_params = conn_params.pop('extra_params')
     calendars = []
+    ## TODO: test this more thoroughly.
+    ## The code above is supposed to remote the `caldav_`-prefix
+    ## Stil the lines below was added to fix
     ## https://github.com/tobixen/plann/issues/11, credits to @bergercookie
     if 'caldav_url' in conn_params:
         conn_params['url'] = conn_params.pop('caldav_url')
@@ -89,6 +96,11 @@ def find_calendars(args, raise_errors):
             calendars.append(calendar)
         if not calendars and tries == 0:
             calendars = _try(principal.calendars, {}, "conn_params['url'] - all calendars")
+
+    if extra_params:
+        for cal in calendars:
+            cal.extra_params = extra_params
+
     return calendars or []
 
 def _icalendar_component(obj):
@@ -108,6 +120,51 @@ def _add_category(obj, category):
         category = category.split(',')
     cats.extend(category)
     comp.add('categories', cats)
+
+def add_time_tracking_timew(obj, start=None, end=None):
+    comp = _icalendar_component(obj)
+    tags = ['plann-export']
+
+    if 'categories' in comp:
+        for cat in comp.pop('categories').cats:
+            tags.append(f'category:{cat}')
+    tags.append(f'uid:{comp["uid"]}')
+    tags.append(f'summary:{_summary(obj)}')
+    tags.append(f'comptype:{comp.name}')
+
+    if start:
+        start = start.strftime("%FT%H:%M")
+    if end:
+        end = end.strftime("%FT%H:%M")
+
+    if start and end:
+        subprocess.run(["timew", "track", start, '-', end] + tags)
+    elif start:
+        subprocess.run(["timew", "start", start] + tags)
+    else:
+        subprocess.run(["timew", "start"] + tags)
+
+def add_time_tracking(obj, start=None, end=None):
+    time_tracking = None
+    comp = _icalendar_component(obj)
+    if hasattr(obj.parent, 'extra_config'):
+        cfg = obj.parent.extra_config
+        if 'time_tracking' in cfg:
+            time_tracking = cfg['time_tracking']
+    if time_tracking is None:
+        raise NotImplementedError('Time tracking is so far not supported internally in plann, only through external tools')
+
+    ## TODO: This is not tested
+    if not start and comp.name == 'VEVENT':
+        start = comp.start
+        end = comp.end
+
+    for tt in time_tracking:
+        ## TODO: this must be done in a more clever way if introducing more time tracking types
+        if tt == 'timew':
+            add_time_tracking_timew(obj, start, end)
+        else:
+            raise NotImplementedError('Only time tracking through taskw supported so far')
 
 def _summary(obj):
     i = _icalendar_component(obj)

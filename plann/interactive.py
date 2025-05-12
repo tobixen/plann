@@ -20,7 +20,7 @@ import os
 import tempfile
 import subprocess
 from plann.template import Template
-from plann.lib import _list, _adjust_relations, _summary, _procrastinate, _process_set_arg, _set_something, _icalendar_component, _relationship_text, _split_vcal, _now
+from plann.lib import _list, _adjust_relations, _summary, _procrastinate, _process_set_arg, _set_something, _icalendar_component, _relationship_text, _split_vcal, _now, add_time_tracking
 from plann.timespec import _ensure_ts, parse_add_dur
 from icalendar.prop import vRecur
 
@@ -68,6 +68,9 @@ def command_edit(obj, command, interactive=True):
         _interactive_ical_edit([obj])
     elif command == 'family':
         _interactive_relation_edit([obj])
+    elif command == 'start':
+        ## TODO - experimental and very incomplete!
+        add_time_tracking(obj)
     elif command == 'pdb':
         if interactive:
             comp = obj.icalendar_component
