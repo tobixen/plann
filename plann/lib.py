@@ -15,6 +15,7 @@ import subprocess
 from collections import defaultdict
 from plann.template import Template
 from plann.timespec import tz, _now, _ensure_ts, parse_dt, parse_add_dur, parse_timespec
+import icalendar
 import click ## TODO - this should be removed, eventually
 
 ## TODO: maybe find those attributes through the icalendar library? icalendar.cal.singletons, icalendar.cal.multiple, etc
@@ -24,6 +25,37 @@ attr_time = ['dtstamp', 'dtstart', 'due', 'dtend', 'duration']
 attr_int = ['priority']
 
 def _split_vcal(ical):
+    """
+    This method will take an ical string containing one VCALENDAR with multiple calendar resource objects and split it into one VCALENDAR per calendar resource object.
+    """
+    ical_cal = icalendar.Calendar.from_ical(ical)
+    split_by_uid = {}
+    
+    ## TODO: ical_cal.copy() gives an empty calendar without
+    ## subcomponents.  Bug or feature?  If this behaviour changes,
+    ## this needs rewriting.
+    ical_cal_stripped = ical_cal.copy()
+
+    for subcomponent in ical_cal.subcomponents:
+        if isinstance(subcomponent, icalendar.Timezone):
+            ical_cal_stripped.add_component(subcomponent)
+        
+    for subcomponent in ical_cal.subcomponents:
+        if not isinstance(subcomponent, icalendar.Timezone):
+            uid = subcomponent['UID']
+            if not uid in split_by_uid:
+                split_by_uid[uid] = ical_cal_stripped.copy()
+                ## TODO: depends on the copy issue mentioned above
+                for tz in ical_cal_stripped.subcomponents:
+                    split_by_uid[uid].add_component(tz)
+            split_by_uid[uid].add_component(subcomponent)
+    return split_by_uid.values()
+
+def _split_vcals(ical):
+    """
+    This method will take a string with multiple VCALENDAR entries and
+    split it into a list
+    """
     ical = ical.strip()
     icals = []
     while ical.startswith("BEGIN:VCALENDAR\n"):
@@ -152,7 +184,7 @@ def add_time_tracking(obj, start=None, end=None):
         if 'time_tracking' in cfg:
             time_tracking = cfg['time_tracking']
     if time_tracking is None:
-        raise NotImplementedError('Time tracking is so far not supported internally in plann, only through external tools')
+        raise NotImplementedError('Time tracking is so far not supported internally in plann, only through external tools, and only timewarrior as for now.  You have to set `time_tracking=timewarrior` in your calendar configuration')
 
     ## TODO: This is not tested
     if not start and comp.name == 'VEVENT':
@@ -235,6 +267,10 @@ def _procrastinate(objs, delay, check_dependent="error", with_children=False, wi
                     else:
                         err_callback(f"{summary} could not be postponed due to parent {_summary(p)} with due {_ensure_ts(p['DUE'])} and priority {p.get('priority', 0)}")
                     if p_postponable and (p_auto_postponable or confirm_callback("procrastinate parent?")):
+                        import inspect
+                        stack_depth = len(inspect.stack())
+                        if stack_depth > 13:
+                            breakpoint()
                         _procrastinate([parent], new_due+max(parent.get_duration()+x.get_duration()+datetime.timedelta(minutes=1), datetime.timedelta(minutes=1)), check_dependent=check_dependent, err_callback=err_callback, confirm_callback=confirm_callback, recursivity=recursivity+1)
                         _procrastinate([x], new_due, check_dependent=check_dependent, err_callback=err_callback, confirm_callback=confirm_callback, recursivity=recursivity+1)
             elif check_dependent == "return":

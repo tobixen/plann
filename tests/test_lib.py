@@ -1,7 +1,7 @@
 import pytest
 from unittest.mock import patch
 from caldav import Todo, Calendar
-from plann.lib import _summary,  _procrastinate, _adjust_ical_relations, _add_category, _set_something, add_time_tracking_timew, add_time_tracking
+from plann.lib import _summary,  _procrastinate, _adjust_ical_relations, _add_category, _set_something, add_time_tracking_timew, add_time_tracking, _split_vcal
 from datetime import datetime, timedelta
 from datetime import timezone
 
@@ -122,5 +122,61 @@ def test_adjust_ical_relations():
     assert(rels['PARENT'] == {'PARENT-A0', 'PARENT-A2', 'PARENT-B0', 'PARENT-B2'})
     assert(rels['CHILD'] == {'CHILD-A0', 'CHILD-A1', 'CHILD-A2'})
 
-#def test_split_vcal():
+#def test_split_vcals():
 ## TODO    
+
+def test_split_vcal():
+    ## This VCALENDAR contains three events, but only two separate
+    ## event components as one of the events is a recurrence object.
+    ## According to the CalDAV standard it should be wrapped in two VCALENDAR 
+    input = """BEGIN:VCALENDAR
+VERSION:2.0
+PRODID:-//eome//prodid//en_DK
+BEGIN:VTIMEZONE
+TZID:Europe/Oslo
+X-LIC-LOCATION:Europe/Oslo
+BEGIN:STANDARD
+TZOFFSETFROM:+0200
+TZOFFSETTO:+0100
+TZNAME:CET
+DTSTART:20251026T030000
+RRULE:FREQ=YEARLY;BYMONTH=10;BYDAY=-1SU
+END:STANDARD
+BEGIN:DAYLIGHT
+TZOFFSETFROM:+0100
+TZOFFSETTO:+0200
+TZNAME:CEST
+DTSTART:20250330T020000
+RRULE:FREQ=YEARLY;BYMONTH=3;BYDAY=-1SU
+END:DAYLIGHT
+END:VTIMEZONE
+BEGIN:VEVENT
+UID:2025-09-27-189a6563aa65236c@techtalks.com
+SUMMARY:Varnish - the world's fastest web cache
+DTSTART:20250927T103000Z
+DTEND:20250927T110000Z
+DESCRIPTION: A talk about Varnish
+LOCATION:Room 1: Dubulti 2
+END:VEVENT
+BEGIN:VEVENT
+SUMMARY:recurrence with attendee one single item
+DTSTART;TZID=Europe/Zurich:20240101T090000
+DTEND;TZID=Europe/Zurich:20240101T180000
+UID:test1
+DESCRIPTION:this is the recurrent series
+TRANSP:OPAQUE
+RRULE:FREQ=WEEKLY;BYDAY=TU,WE,TH
+END:VEVENT
+BEGIN:VEVENT
+SUMMARY:single item
+DTSTART;TZID=Europe/Zurich:20240605T090000
+DTEND;TZID=Europe/Zurich:20240605T170000
+UID:test1
+DESCRIPTION:this is the single item assigning a attendee to just one event
+ATTENDEE:foo.bar@corge.baz
+RECURRENCE-ID:20240605T070000Z
+END:VEVENT
+END:VCALENDAR
+"""
+    output = _split_vcal(input)
+    assert(len(output) == 2)

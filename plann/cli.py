@@ -23,8 +23,9 @@ import sys
 from plann.config import config_section, read_config, expand_config_section
 from plann.metadata import metadata
 from plann.commands import _select, _edit, _cats, _check_for_panic, _add_todo, _add_event, _agenda, _check_due, _dismiss_panic, _split_huge_tasks, _split_high_pri_tasks, _set_task_attribs
-from plann.lib import find_calendars, attr_txt_one, attr_txt_many, attr_time, attr_int, _list, _split_vcal
-from plann.timespec import tz, parse_dt
+from plann.lib import find_calendars, attr_txt_one, attr_txt_many, attr_time, attr_int, _list, _split_vcal, _split_vcals
+from plann.lib import add_time_tracking as add_time_tracking_
+from plann.timespec import tz, parse_dt, _now
 from plann.interactive import _abort
 __version__ = metadata["version"]
 
@@ -172,6 +173,26 @@ def select(*largs, **kwargs):
     """
     return _select(*largs, **kwargs)
 
+@select.command()
+@click.pass_context
+@click.option('startnow/track', help="the event starts now vs track the original timespan", default=True)
+def add_time_tracking(startnow):
+    """
+    Track time spent on events/tasks
+    """
+    objs = ctx.obj['objs']
+    if startnow:
+        start_time = _now()
+    else:
+        start_time = None
+    if not startnow and not all (x for x in objs if isinstance(x, caldav.calendarobjectresource.Event)):
+        _abort("original timespan is only allowed for events - and you've selected tasks or journals")
+    if len(objs)>1 and startnow:
+        _abort("Only one event/task can be started at the time")
+    if not len(objs):
+        _abort("No items selected for tracking")
+    for x in objs:
+        add_time_tracking_(obj, start_time)
 
 @select.command()
 @click.pass_context
@@ -355,7 +376,10 @@ def ical(ctx, ical_data, ical_file):
     if ctx.obj['ical_fragment']:
         ical = ical.replace('\nEND:', f"{ctx.obj['ical_fragment']}\nEND:")
     if 'BEGIN:VCALENDAR' in ical:
-        icals = _split_vcal(ical)
+        if ical.count('BEGIN:VCALENDAR') > 1:
+            icals = _split_vcals(ical)
+        else:
+            icals = _split_vcal(ical)
     else:
         icals = [ ical ]
     for ical in icals:
