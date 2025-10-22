@@ -185,6 +185,39 @@ plann-ai "Préparer la présentation pour lundi"
 
 ## ⚙️ Configuration
 
+### Configuration plann (REQUIS)
+
+**Avant de pouvoir utiliser plann-ai ou plann-ai-gui**, vous DEVEZ configurer plann avec vos paramètres CalDAV.
+
+Le fichier de configuration doit être créé dans `~/.config/calendar.conf` (format JSON ou YAML).
+
+**Exemple rapide (JSON)** :
+```json
+{
+  "default": {
+    "caldav_url": "https://votre-serveur.com/caldav/",
+    "caldav_user": "votre_utilisateur",
+    "caldav_pass": "votre_mot_de_passe"
+  }
+}
+```
+
+**Fichiers d'exemple fournis** :
+- `calendar.conf.example` - Exemple minimal en JSON
+- `calendar.conf.example.yaml` - Exemple complet en YAML avec NextCloud, Google Calendar, iCloud, etc.
+
+Pour utiliser un exemple :
+```bash
+# Copier et éditer un exemple
+cp calendar.conf.example ~/.config/calendar.conf
+# Puis éditez le fichier avec vos paramètres
+
+# Tester la configuration
+plann list-calendars
+```
+
+**Au premier lancement de plann-ai-gui**, si aucune configuration n'est détectée, une boîte de dialogue vous guidera avec les instructions de configuration.
+
 ### Variables d'environnement
 
 ```bash
@@ -194,17 +227,6 @@ export OLLAMA_HOST="http://localhost:11434"
 # Modèle par défaut (défaut: llama2)
 export OLLAMA_MODEL="mistral"
 ```
-
-### Configuration plann
-
-Le script utilise automatiquement votre configuration plann existante :
-
-```bash
-# Si vous n'avez pas encore configuré plann
-plann --help
-```
-
-Le fichier de configuration est dans `~/.config/calendar.conf`
 
 ### Utiliser une section de configuration spécifique
 
