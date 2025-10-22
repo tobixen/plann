@@ -31,12 +31,19 @@ setup(
         'tzlocal',
         'Click',
         'PyYAML',
+        'requests',  ## Required for Ollama integration
         'sortedcontainers'
     ],
+    
+    extras_require={
+    'voice': ['SpeechRecognition', 'pyaudio'],  ## Optional voice recognition support
+},
 
     entry_points={
         'console_scripts': [
             'plann = plann.cli:cli',
+            'plann-ai = plann.ai_cli:cli',
+            'plann-ai-gui = plann.gui:main',
         ],
     },
    **metadata_

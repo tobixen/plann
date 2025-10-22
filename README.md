@@ -34,10 +34,45 @@ To run it, you have to activate this virtual environment in your current shell.
 
 ### Systemwide Install
 
-This installs `plann` and all its dependencies system-wide.
+## Natural Language Interface with Ollama (NEW!) 🤖
 
-1. Clone this repo, cd to `plann`
-2. `sudo ./setup.py install`
+**plann** now supports adding events and tasks using natural language, powered by [Ollama](https://ollama.ai/)!
+
+> _"Considering the recent progress of AI and chatbots, probably soon all calendar queries can be done in natural language."_
+>
+> **It's here now!** ✨
+
+Quick start:
+
+\`\`\`sh
+# Install Ollama (https://ollama.ai/)
+curl -fsSL https://ollama.ai/install.sh | sh
+
+# Start Ollama and pull a model
+ollama serve
+ollama pull llama2
+
+# Install the Ollama integration dependencies
+pip install -r requirements-ollama.txt
+
+# Option 1: Graphical interface (minimal, always-on-top widget)
+plann-ai-gui
+
+# Option 2: Command-line interface
+plann-ai "Rendez-vous dentiste demain à 14h"
+plann-ai "Réunion équipe lundi 10h pour 2 heures"
+plann-ai "Acheter du pain"
+plann-ai "Finir le rapport pour vendredi"
+
+# Voice mode (optional, requires SpeechRecognition)
+plann-ai --voice
+\`\`\`
+
+For complete documentation, see [OLLAMA_INTEGRATION.md](OLLAMA_INTEGRATION.md)
+
+
+
+
 
 ## Support
 
