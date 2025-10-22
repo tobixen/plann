@@ -25,6 +25,7 @@ class PlannGUI:
         self.config_section = config_section
         self.model = model
         self.ollama_host = ollama_host
+        self.config_loaded = False
 
         # Initialize Ollama client
         self.ollama = OllamaClient(ollama_host)
@@ -59,7 +60,10 @@ class PlannGUI:
         self.create_widgets()
 
         # Load config and calendars
-        self.load_config()
+        self.config_loaded = self.load_config()
+
+        # Update UI based on configuration status
+        self.update_ui_state()
 
     def setup_styles(self):
         """Setup UI styles"""
@@ -107,9 +111,6 @@ class PlannGUI:
             style='Status.TLabel'
         )
         self.status_label.pack()
-
-        # Update status
-        self.update_status()
 
         # Separator
         ttk.Separator(main_frame, orient='horizontal').pack(fill='x', pady=10)
@@ -246,17 +247,66 @@ class PlannGUI:
 
             if not self.calendars:
                 self.log_message("⚠️ Aucun calendrier trouvé. Configurez plann d'abord.", 'error')
+                self.show_config_help()
+                return False
             else:
                 self.log_message(f"✓ {len(self.calendars)} calendrier(s) trouvé(s)", 'success')
+                return True
 
         except Exception as e:
             self.config = None
             self.calendars = []
             self.log_message(f"⚠️ Erreur de configuration: {e}", 'error')
+            self.show_config_help()
+            return False
+
+    def show_config_help(self):
+        """Show configuration help dialog"""
+        config_path = os.path.expanduser("~/.config/calendar.conf")
+
+        help_message = f"""Plann n'est pas encore configuré !
+
+Pour utiliser plann-ai-gui, vous devez d'abord configurer plann :
+
+1. Créez le fichier de configuration :
+   {config_path}
+
+2. Ajoutez vos paramètres CalDAV (exemple) :
+
+   {{
+     "default": {{
+       "caldav_url": "https://votre-serveur.com/caldav/",
+       "caldav_user": "votre_utilisateur",
+       "caldav_pass": "votre_mot_de_passe"
+     }}
+   }}
+
+3. Testez votre configuration :
+   plann list-calendars
+
+Pour plus d'informations, consultez :
+   plann --help
+
+Voulez-vous quitter l'application ?"""
+
+        response = messagebox.askyesno(
+            "Configuration requise",
+            help_message,
+            icon='warning'
+        )
+
+        if response:  # User clicked "Yes" to quit
+            self.root.quit()
+            sys.exit(0)
 
     def update_status(self):
         """Update Ollama connection status"""
-        if self.ollama_available:
+        if not self.config_loaded:
+            self.status_label.config(
+                text="🔴 Configuration requise",
+                foreground='#d9534f'
+            )
+        elif self.ollama_available:
             self.status_label.config(
                 text=f"🟢 Connecté à Ollama ({self.model})",
                 foreground='#5cb85c'
@@ -266,6 +316,17 @@ class PlannGUI:
                 text="🔴 Ollama non disponible",
                 foreground='#d9534f'
             )
+
+    def update_ui_state(self):
+        """Update UI elements based on configuration status"""
+        if not self.config_loaded:
+            # Disable action buttons if not configured
+            self.add_button.config(state=tk.DISABLED)
+            self.voice_button.config(state=tk.DISABLED)
+            self.text_input.config(state=tk.DISABLED)
+
+        # Update status regardless
+        self.update_status()
 
     def toggle_always_on_top(self):
         """Toggle always on top"""

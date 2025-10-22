@@ -1,0 +1,7 @@
+{
+  "default": {
+    "caldav_url": "https://votre-serveur-caldav.com/caldav/",
+    "caldav_user": "votre_utilisateur",
+    "caldav_pass": "votre_mot_de_passe"
+  }
+}

@@ -1,0 +1,44 @@
+---
+# Exemple de configuration pour plann
+# Copiez ce fichier vers ~/.config/calendar.conf et adaptez-le à vos besoins
+
+# Configuration par défaut
+default:
+  caldav_url: "https://votre-serveur-caldav.com/caldav/"
+  caldav_user: "votre_utilisateur"
+  caldav_pass: "votre_mot_de_passe"
+  # Optionnel: calendar_url ou calendar_name pour cibler un calendrier spécifique
+  # calendar_url: "/calendars/user/personal/"
+  # calendar_name: "Personnel"
+
+# Exemple avec plusieurs configurations
+# work:
+#   caldav_url: "https://work.example.com/caldav/"
+#   caldav_user: "user@work.com"
+#   caldav_pass: "work_password"
+#   calendar_name: "Work Calendar"
+#
+# personal:
+#   caldav_url: "https://personal.example.com/caldav/"
+#   caldav_user: "user@personal.com"
+#   caldav_pass: "personal_password"
+#   calendar_name: "Personal Calendar"
+
+# Exemple avec NextCloud/OwnCloud
+# nextcloud:
+#   caldav_url: "https://cloud.example.com/remote.php/dav/"
+#   caldav_user: "username"
+#   caldav_pass: "password"
+#   # Pour NextCloud, vous pouvez aussi utiliser un mot de passe d'application
+
+# Exemple avec Google Calendar (via CalDAV)
+# google:
+#   caldav_url: "https://apidata.googleusercontent.com/caldav/v2/"
+#   caldav_user: "your.email@gmail.com"
+#   caldav_pass: "app_specific_password"  # Nécessite un mot de passe d'application
+
+# Exemple avec iCloud
+# icloud:
+#   caldav_url: "https://caldav.icloud.com/"
+#   caldav_user: "your.apple.id@icloud.com"
+#   caldav_pass: "app_specific_password"  # Nécessite un mot de passe d'application
