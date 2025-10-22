@@ -46,11 +46,14 @@ ollama pull mistral
 ollama pull mixtral
 ```
 
-### 4. Installer les dépendances Python
+### 4. Installer plann et les dépendances Python
 
 ```bash
-# Dépendance requise
-pip install requests
+# Installer plann (requis pour les commandes plann-ai et plann-ai-gui)
+pip install .  # ou 'pip install -e .' pour le mode développement
+
+# Installer les dépendances Ollama
+pip install -r requirements-ollama.txt
 
 # Optionnel : pour le mode vocal
 pip install SpeechRecognition pyaudio
@@ -347,22 +350,20 @@ plann-ai utilise l'architecture moderne de plann :
 ### Depuis le code source
 
 ```bash
-# Cloner le repository
-git clone https://github.com/votre-repo/plann-ollama.git
-cd plann-ollama
+# Cloner le repository (ou si vous avez déjà le code)
+cd plann
 
-# Installer avec pip
-pip install .
+# IMPORTANT: Installer plann lui-même d'abord
+pip install .  # ou 'pip install -e .' pour le mode développement
 
-# Ou avec support vocal
+# Installer les dépendances Ollama
+pip install -r requirements-ollama.txt
+
+# Optionnel : avec support vocal
 pip install ".[voice]"
 ```
 
-### Installation des dépendances Ollama uniquement
-
-```bash
-pip install -r requirements-ollama.txt
-```
+**Note importante**: Vous devez installer le package `plann` lui-même avec `pip install .` avant de pouvoir utiliser les commandes `plann-ai` et `plann-ai-gui`. L'installation des requirements seuls (`pip install -r requirements-ollama.txt`) n'est pas suffisante.
 
 ## 🤝 Contribution
 

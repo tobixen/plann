@@ -52,7 +52,8 @@ curl -fsSL https://ollama.ai/install.sh | sh
 ollama serve
 ollama pull llama2
 
-# Install the Ollama integration dependencies
+# Install plann with Ollama integration
+pip install .  # or 'pip install -e .' for development mode
 pip install -r requirements-ollama.txt
 
 # Option 1: Graphical interface (minimal, always-on-top widget)
