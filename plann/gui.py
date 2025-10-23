@@ -25,6 +25,7 @@ class ConfigDialog:
 
     def __init__(self, parent=None):
         self.result = None
+        self.is_active = True
 
         # Create dialog window
         if parent:
@@ -41,6 +42,9 @@ class ConfigDialog:
         x = (self.dialog.winfo_screenwidth() // 2) - (500 // 2)
         y = (self.dialog.winfo_screenheight() // 2) - (450 // 2)
         self.dialog.geometry(f"+{x}+{y}")
+
+        # Handle window close
+        self.dialog.protocol("WM_DELETE_WINDOW", self.on_close)
 
         self.create_widgets()
 
@@ -142,7 +146,7 @@ class ConfigDialog:
         ttk.Button(
             button_frame,
             text="Annuler",
-            command=self.dialog.destroy
+            command=self.on_close
         ).pack(side=tk.LEFT, padx=5)
 
     def test_connection(self):
@@ -181,27 +185,43 @@ class ConfigDialog:
             calendars = principal.calendars()
 
             if calendars:
-                self.dialog.after(0, lambda: self.test_result_label.config(
-                    text=f"✅ Connexion réussie ! {len(calendars)} calendrier(s) trouvé(s)",
-                    foreground='green'
-                ))
+                self._safe_update_widget(
+                    lambda: self.test_result_label.config(
+                        text=f"✅ Connexion réussie ! {len(calendars)} calendrier(s) trouvé(s)",
+                        foreground='green'
+                    )
+                )
             else:
-                self.dialog.after(0, lambda: self.test_result_label.config(
-                    text="⚠️ Connexion OK mais aucun calendrier trouvé",
-                    foreground='orange'
-                ))
+                self._safe_update_widget(
+                    lambda: self.test_result_label.config(
+                        text="⚠️ Connexion OK mais aucun calendrier trouvé",
+                        foreground='orange'
+                    )
+                )
 
         except Exception as e:
             error_msg = str(e)
             if len(error_msg) > 80:
                 error_msg = error_msg[:80] + "..."
-            self.dialog.after(0, lambda: self.test_result_label.config(
-                text=f"❌ Erreur : {error_msg}",
-                foreground='red'
-            ))
+            self._safe_update_widget(
+                lambda: self.test_result_label.config(
+                    text=f"❌ Erreur : {error_msg}",
+                    foreground='red'
+                )
+            )
 
         finally:
-            self.dialog.after(0, lambda: self.test_button.config(state=tk.NORMAL, text="Tester la connexion"))
+            self._safe_update_widget(
+                lambda: self.test_button.config(state=tk.NORMAL, text="Tester la connexion")
+            )
+
+    def _safe_update_widget(self, callback):
+        """Safely update widget from background thread"""
+        if self.is_active:
+            try:
+                self.dialog.after(0, callback)
+            except:
+                pass  # Dialog may have been closed
 
     def save_config(self):
         """Save configuration to file"""
@@ -268,13 +288,21 @@ class ConfigDialog:
             )
 
             self.result = config
-            self.dialog.destroy()
+            self.on_close()
 
         except Exception as e:
             messagebox.showerror(
                 "Erreur",
                 f"Impossible de sauvegarder la configuration:\n{e}"
             )
+
+    def on_close(self):
+        """Handle dialog close"""
+        self.is_active = False
+        try:
+            self.dialog.destroy()
+        except:
+            pass
 
     def show(self):
         """Show dialog and wait for result"""
