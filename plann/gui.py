@@ -622,8 +622,16 @@ class PlannGUI:
 
     def load_config(self):
         """Load plann configuration and calendars"""
+        config_path = os.path.expanduser("~/.config/calendar.conf")
+
+        print(f"\n[DEBUG] Loading config from: {config_path}")
+        print(f"[DEBUG] File exists: {os.path.exists(config_path)}")
+
         try:
-            config_data = read_config()
+            config_data = read_config(config_path)
+
+            print(f"[DEBUG] Config data loaded: {list(config_data.keys()) if config_data else 'None'}")
+
             self.config = expand_config_section(config_data, self.config_section)
 
             # Find calendars
