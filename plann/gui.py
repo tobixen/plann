@@ -13,6 +13,7 @@ import sys
 import os
 import json
 import time
+import queue
 
 from plann.ollama import OllamaClient, NaturalLanguageParser, format_for_plann
 from plann.config import read_config, expand_config_section
@@ -26,6 +27,7 @@ class ConfigDialog:
     def __init__(self, parent=None):
         self.result = None
         self.is_active = True
+        self.ui_queue = queue.Queue()
 
         # Create dialog window
         if parent:
@@ -52,6 +54,9 @@ class ConfigDialog:
         if parent:
             self.dialog.transient(parent)
             self.dialog.grab_set()
+
+        # Start processing UI updates from queue
+        self._process_ui_queue()
 
     def create_widgets(self):
         """Create configuration form widgets"""
@@ -248,18 +253,44 @@ class ConfigDialog:
         """Safely update widget from background thread"""
         if self.is_active:
             try:
-                self.dialog.after(0, callback)
+                self.ui_queue.put(callback)
             except:
                 pass  # Dialog may have been closed
 
+    def _process_ui_queue(self):
+        """Process UI updates from queue (runs in main thread)"""
+        try:
+            while True:
+                # Get all pending callbacks
+                callback = self.ui_queue.get_nowait()
+                try:
+                    callback()
+                except Exception as e:
+                    print(f"[DEBUG] Error in UI callback: {e}")
+        except queue.Empty:
+            pass
+
+        # Schedule next check if still active
+        if self.is_active:
+            self.dialog.after(100, self._process_ui_queue)
+
     def save_config(self):
         """Save configuration to file"""
+        print("\n" + "="*50)
+        print("[DEBUG] Saving configuration...")
+        print("="*50)
+
         url = self.url_entry.get().strip()
         user = self.user_entry.get().strip()
         password = self.pass_entry.get()
         section = self.section_entry.get().strip() or "default"
 
+        print(f"[DEBUG] URL: {url}")
+        print(f"[DEBUG] User: {user}")
+        print(f"[DEBUG] Section: {section}")
+
         if not url or not user or not password:
+            print("[DEBUG] Missing fields!")
             messagebox.showerror(
                 "Champs manquants",
                 "Veuillez remplir tous les champs obligatoires (*)."
@@ -270,35 +301,50 @@ class ConfigDialog:
         config_path = os.path.expanduser("~/.config/calendar.conf")
         config_dir = os.path.dirname(config_path)
 
+        print(f"[DEBUG] Config path: {config_path}")
+        print(f"[DEBUG] Config dir: {config_dir}")
+
         # Create config directory if needed
         if not os.path.exists(config_dir):
+            print(f"[DEBUG] Creating config directory...")
             try:
                 os.makedirs(config_dir)
+                print(f"[DEBUG] Directory created successfully")
             except Exception as e:
+                print(f"[DEBUG] Error creating directory: {e}")
                 messagebox.showerror(
                     "Erreur",
                     f"Impossible de créer le répertoire de configuration:\n{e}"
                 )
                 return
+        else:
+            print(f"[DEBUG] Config directory already exists")
 
         # Load existing config or create new
         config = {}
         if os.path.exists(config_path):
+            print(f"[DEBUG] Loading existing config...")
             try:
                 with open(config_path, 'r') as f:
                     config = json.load(f)
+                print(f"[DEBUG] Existing config loaded: {list(config.keys())}")
 
                 # Backup existing file
                 backup_path = f"{config_path}.{int(time.time())}.bak"
+                print(f"[DEBUG] Creating backup at: {backup_path}")
                 os.rename(config_path, backup_path)
             except Exception as e:
+                print(f"[DEBUG] Error loading config: {e}")
                 messagebox.showerror(
                     "Erreur",
                     f"Impossible de lire la configuration existante:\n{e}"
                 )
                 return
+        else:
+            print(f"[DEBUG] No existing config, creating new")
 
         # Add new section
+        print(f"[DEBUG] Adding section '{section}' to config")
         config[section] = {
             "caldav_url": url,
             "caldav_user": user,
@@ -306,9 +352,11 @@ class ConfigDialog:
         }
 
         # Save config
+        print(f"[DEBUG] Writing config to file...")
         try:
             with open(config_path, 'w') as f:
                 json.dump(config, f, indent=4)
+            print(f"[DEBUG] Config written successfully!")
 
             messagebox.showinfo(
                 "Configuration sauvegardée",
