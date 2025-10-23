@@ -627,6 +627,22 @@ class PlannGUI:
 
             print(f"[DEBUG] Config data loaded: {list(config_data.keys()) if config_data else 'None'}")
 
+            # Migration: if 'default' doesn't exist but other sections do, copy the first one to 'default'
+            if config_data and 'default' not in config_data:
+                other_sections = [s for s in config_data.keys() if s != 'default']
+                if other_sections:
+                    first_section = other_sections[0]
+                    print(f"[DEBUG] No 'default' section found, migrating '{first_section}' to 'default'")
+                    config_data['default'] = config_data[first_section]
+
+                    # Save the migrated config
+                    try:
+                        with open(config_path, 'w') as f:
+                            json.dump(config_data, f, indent=4)
+                        print(f"[DEBUG] Migration saved successfully")
+                    except Exception as e:
+                        print(f"[DEBUG] Failed to save migration: {e}")
+
             self.config = expand_config_section(config_data, self.config_section)
 
             # Find calendars
