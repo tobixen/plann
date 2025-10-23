@@ -11,11 +11,275 @@ import threading
 from datetime import datetime
 import sys
 import os
+import json
+import time
 
 from plann.ollama import OllamaClient, NaturalLanguageParser, format_for_plann
 from plann.config import read_config, expand_config_section
 from plann.lib import find_calendars
 from plann.commands import _add_event, _add_todo
+
+
+class ConfigDialog:
+    """Configuration dialog for CalDAV settings"""
+
+    def __init__(self, parent=None):
+        self.result = None
+
+        # Create dialog window
+        if parent:
+            self.dialog = tk.Toplevel(parent)
+        else:
+            self.dialog = tk.Tk()
+
+        self.dialog.title("Configuration CalDAV")
+        self.dialog.geometry("500x450")
+        self.dialog.resizable(False, False)
+
+        # Center window
+        self.dialog.update_idletasks()
+        x = (self.dialog.winfo_screenwidth() // 2) - (500 // 2)
+        y = (self.dialog.winfo_screenheight() // 2) - (450 // 2)
+        self.dialog.geometry(f"+{x}+{y}")
+
+        self.create_widgets()
+
+        # Make modal
+        if parent:
+            self.dialog.transient(parent)
+            self.dialog.grab_set()
+
+    def create_widgets(self):
+        """Create configuration form widgets"""
+        main_frame = ttk.Frame(self.dialog, padding="20")
+        main_frame.pack(fill=tk.BOTH, expand=True)
+
+        # Title
+        title = ttk.Label(
+            main_frame,
+            text="Configuration CalDAV",
+            font=('Arial', 14, 'bold')
+        )
+        title.pack(pady=(0, 20))
+
+        # Info text
+        info = ttk.Label(
+            main_frame,
+            text="Configurez votre serveur CalDAV pour synchroniser\nvos événements et tâches.",
+            justify=tk.CENTER
+        )
+        info.pack(pady=(0, 20))
+
+        # Form frame
+        form_frame = ttk.Frame(main_frame)
+        form_frame.pack(fill=tk.BOTH, expand=True)
+
+        # CalDAV URL
+        ttk.Label(form_frame, text="URL CalDAV *").grid(row=0, column=0, sticky=tk.W, pady=5)
+        self.url_entry = ttk.Entry(form_frame, width=40)
+        self.url_entry.grid(row=0, column=1, pady=5, padx=(10, 0))
+        self.url_entry.insert(0, "https://")
+
+        ttk.Label(
+            form_frame,
+            text="Ex: https://nextcloud.com/remote.php/dav/",
+            font=('Arial', 8),
+            foreground='gray'
+        ).grid(row=1, column=1, sticky=tk.W, padx=(10, 0))
+
+        # Username
+        ttk.Label(form_frame, text="Utilisateur *").grid(row=2, column=0, sticky=tk.W, pady=5)
+        self.user_entry = ttk.Entry(form_frame, width=40)
+        self.user_entry.grid(row=2, column=1, pady=5, padx=(10, 0))
+
+        # Password
+        ttk.Label(form_frame, text="Mot de passe *").grid(row=3, column=0, sticky=tk.W, pady=5)
+        self.pass_entry = ttk.Entry(form_frame, width=40, show="*")
+        self.pass_entry.grid(row=3, column=1, pady=5, padx=(10, 0))
+
+        # Section name
+        ttk.Label(form_frame, text="Nom de section").grid(row=4, column=0, sticky=tk.W, pady=5)
+        self.section_entry = ttk.Entry(form_frame, width=40)
+        self.section_entry.grid(row=4, column=1, pady=5, padx=(10, 0))
+        self.section_entry.insert(0, "default")
+
+        ttk.Label(
+            form_frame,
+            text="Par défaut : 'default'",
+            font=('Arial', 8),
+            foreground='gray'
+        ).grid(row=5, column=1, sticky=tk.W, padx=(10, 0))
+
+        # Test result label
+        self.test_result_label = ttk.Label(
+            form_frame,
+            text="",
+            font=('Arial', 9)
+        )
+        self.test_result_label.grid(row=6, column=0, columnspan=2, pady=10)
+
+        # Buttons frame
+        button_frame = ttk.Frame(main_frame)
+        button_frame.pack(pady=(20, 0))
+
+        # Test button
+        self.test_button = ttk.Button(
+            button_frame,
+            text="Tester la connexion",
+            command=self.test_connection
+        )
+        self.test_button.pack(side=tk.LEFT, padx=5)
+
+        # Save button
+        self.save_button = ttk.Button(
+            button_frame,
+            text="Sauvegarder",
+            command=self.save_config
+        )
+        self.save_button.pack(side=tk.LEFT, padx=5)
+
+        # Cancel button
+        ttk.Button(
+            button_frame,
+            text="Annuler",
+            command=self.dialog.destroy
+        ).pack(side=tk.LEFT, padx=5)
+
+    def test_connection(self):
+        """Test CalDAV connection"""
+        url = self.url_entry.get().strip()
+        user = self.user_entry.get().strip()
+        password = self.pass_entry.get()
+
+        if not url or not user or not password:
+            self.test_result_label.config(
+                text="❌ Tous les champs obligatoires doivent être remplis",
+                foreground='red'
+            )
+            return
+
+        self.test_button.config(state=tk.DISABLED, text="Test en cours...")
+        self.test_result_label.config(text="⏳ Test de connexion...", foreground='orange')
+        self.dialog.update()
+
+        # Test in background
+        threading.Thread(target=self._test_connection_thread, args=(url, user, password), daemon=True).start()
+
+    def _test_connection_thread(self, url, user, password):
+        """Test connection in background thread"""
+        try:
+            import caldav
+
+            # Try to connect
+            client = caldav.DAVClient(
+                url=url,
+                username=user,
+                password=password
+            )
+
+            principal = client.principal()
+            calendars = principal.calendars()
+
+            if calendars:
+                self.dialog.after(0, lambda: self.test_result_label.config(
+                    text=f"✅ Connexion réussie ! {len(calendars)} calendrier(s) trouvé(s)",
+                    foreground='green'
+                ))
+            else:
+                self.dialog.after(0, lambda: self.test_result_label.config(
+                    text="⚠️ Connexion OK mais aucun calendrier trouvé",
+                    foreground='orange'
+                ))
+
+        except Exception as e:
+            error_msg = str(e)
+            if len(error_msg) > 80:
+                error_msg = error_msg[:80] + "..."
+            self.dialog.after(0, lambda: self.test_result_label.config(
+                text=f"❌ Erreur : {error_msg}",
+                foreground='red'
+            ))
+
+        finally:
+            self.dialog.after(0, lambda: self.test_button.config(state=tk.NORMAL, text="Tester la connexion"))
+
+    def save_config(self):
+        """Save configuration to file"""
+        url = self.url_entry.get().strip()
+        user = self.user_entry.get().strip()
+        password = self.pass_entry.get()
+        section = self.section_entry.get().strip() or "default"
+
+        if not url or not user or not password:
+            messagebox.showerror(
+                "Champs manquants",
+                "Veuillez remplir tous les champs obligatoires (*)."
+            )
+            return
+
+        # Config file path
+        config_path = os.path.expanduser("~/.config/calendar.conf")
+        config_dir = os.path.dirname(config_path)
+
+        # Create config directory if needed
+        if not os.path.exists(config_dir):
+            try:
+                os.makedirs(config_dir)
+            except Exception as e:
+                messagebox.showerror(
+                    "Erreur",
+                    f"Impossible de créer le répertoire de configuration:\n{e}"
+                )
+                return
+
+        # Load existing config or create new
+        config = {}
+        if os.path.exists(config_path):
+            try:
+                with open(config_path, 'r') as f:
+                    config = json.load(f)
+
+                # Backup existing file
+                backup_path = f"{config_path}.{int(time.time())}.bak"
+                os.rename(config_path, backup_path)
+            except Exception as e:
+                messagebox.showerror(
+                    "Erreur",
+                    f"Impossible de lire la configuration existante:\n{e}"
+                )
+                return
+
+        # Add new section
+        config[section] = {
+            "caldav_url": url,
+            "caldav_user": user,
+            "caldav_pass": password
+        }
+
+        # Save config
+        try:
+            with open(config_path, 'w') as f:
+                json.dump(config, f, indent=4)
+
+            messagebox.showinfo(
+                "Configuration sauvegardée",
+                f"Configuration sauvegardée avec succès dans:\n{config_path}\n\n"
+                f"Section: {section}"
+            )
+
+            self.result = config
+            self.dialog.destroy()
+
+        except Exception as e:
+            messagebox.showerror(
+                "Erreur",
+                f"Impossible de sauvegarder la configuration:\n{e}"
+            )
+
+    def show(self):
+        """Show dialog and wait for result"""
+        self.dialog.wait_window()
+        return self.result
 
 
 class PlannGUI:
@@ -221,6 +485,21 @@ class PlannGUI:
         )
         always_on_top_cb.pack(side=tk.LEFT)
 
+        # Config button
+        config_button = tk.Button(
+            bottom_frame,
+            text="⚙️ Configurer",
+            command=self.open_config_dialog,
+            bg='#6c757d',
+            fg='white',
+            font=('Arial', 9),
+            relief=tk.FLAT,
+            padx=10,
+            pady=2,
+            cursor='hand2'
+        )
+        config_button.pack(side=tk.RIGHT, padx=(0, 5))
+
         # Clear history button
         clear_button = tk.Button(
             bottom_frame,
@@ -262,42 +541,49 @@ class PlannGUI:
 
     def show_config_help(self):
         """Show configuration help dialog"""
-        config_path = os.path.expanduser("~/.config/calendar.conf")
+        help_message = """Plann n'est pas encore configuré !
 
-        help_message = f"""Plann n'est pas encore configuré !
+Voulez-vous ouvrir l'assistant de configuration ?
 
-Pour utiliser plann-ai-gui, vous devez d'abord configurer plann :
-
-1. Créez le fichier de configuration :
-   {config_path}
-
-2. Ajoutez vos paramètres CalDAV (exemple) :
-
-   {{
-     "default": {{
-       "caldav_url": "https://votre-serveur.com/caldav/",
-       "caldav_user": "votre_utilisateur",
-       "caldav_pass": "votre_mot_de_passe"
-     }}
-   }}
-
-3. Testez votre configuration :
-   plann list-calendars
-
-Pour plus d'informations, consultez :
-   plann --help
-
-Voulez-vous quitter l'application ?"""
+Cela vous permettra de configurer facilement
+votre serveur CalDAV."""
 
         response = messagebox.askyesno(
             "Configuration requise",
             help_message,
-            icon='warning'
+            icon='question'
         )
 
-        if response:  # User clicked "Yes" to quit
-            self.root.quit()
-            sys.exit(0)
+        if response:  # User wants to configure
+            self.open_config_dialog()
+        else:
+            # Ask if they want to quit
+            if messagebox.askyesno(
+                "Quitter ?",
+                "Voulez-vous quitter l'application ?\n\n"
+                "Sans configuration, vous ne pourrez pas ajouter d'événements.",
+                icon='warning'
+            ):
+                self.root.quit()
+                sys.exit(0)
+
+    def open_config_dialog(self):
+        """Open configuration dialog"""
+        dialog = ConfigDialog(self.root)
+        result = dialog.show()
+
+        if result:
+            # Configuration saved, reload
+            self.log_message("✓ Configuration sauvegardée, rechargement...", 'success')
+            self.config_loaded = self.load_config()
+            self.update_ui_state()
+
+            if self.config_loaded:
+                messagebox.showinfo(
+                    "Succès",
+                    "Configuration chargée avec succès !\n\n"
+                    "Vous pouvez maintenant ajouter des événements et tâches."
+                )
 
     def update_status(self):
         """Update Ollama connection status"""
@@ -324,6 +610,11 @@ Voulez-vous quitter l'application ?"""
             self.add_button.config(state=tk.DISABLED)
             self.voice_button.config(state=tk.DISABLED)
             self.text_input.config(state=tk.DISABLED)
+        else:
+            # Enable action buttons if configured
+            self.add_button.config(state=tk.NORMAL)
+            self.voice_button.config(state=tk.NORMAL)
+            self.text_input.config(state=tk.NORMAL)
 
         # Update status regardless
         self.update_status()

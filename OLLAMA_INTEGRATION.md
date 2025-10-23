@@ -189,6 +189,28 @@ plann-ai "Préparer la présentation pour lundi"
 
 **Avant de pouvoir utiliser plann-ai ou plann-ai-gui**, vous DEVEZ configurer plann avec vos paramètres CalDAV.
 
+#### Option 1 : Interface graphique de configuration (RECOMMANDÉ) 🎨
+
+**Au premier lancement de plann-ai-gui**, si aucune configuration n'est détectée, un assistant graphique s'affichera automatiquement.
+
+Vous pouvez aussi ouvrir l'assistant manuellement :
+- Depuis l'interface : cliquez sur le bouton **⚙️ Configurer**
+- En ligne de commande : `python -m plann.gui` (même si pas configuré)
+
+L'assistant vous permet de :
+- ✅ Saisir vos paramètres CalDAV (URL, utilisateur, mot de passe)
+- ✅ Tester la connexion avant de sauvegarder
+- ✅ Voir combien de calendriers sont détectés
+- ✅ Sauvegarder automatiquement dans `~/.config/calendar.conf`
+
+**Exemple de serveurs supportés** :
+- NextCloud/OwnCloud : `https://votre-cloud.com/remote.php/dav/`
+- Google Calendar : `https://apidata.googleusercontent.com/caldav/v2/` (nécessite mot de passe d'application)
+- iCloud : `https://caldav.icloud.com/` (nécessite mot de passe d'application)
+- Radicale, Baïkal, etc.
+
+#### Option 2 : Configuration manuelle
+
 Le fichier de configuration doit être créé dans `~/.config/calendar.conf` (format JSON ou YAML).
 
 **Exemple rapide (JSON)** :
@@ -215,8 +237,6 @@ cp calendar.conf.example ~/.config/calendar.conf
 # Tester la configuration
 plann list-calendars
 ```
-
-**Au premier lancement de plann-ai-gui**, si aucune configuration n'est détectée, une boîte de dialogue vous guidera avec les instructions de configuration.
 
 ### Variables d'environnement
 
