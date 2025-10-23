@@ -106,18 +106,13 @@ class ConfigDialog:
         self.pass_entry = ttk.Entry(form_frame, width=40, show="*")
         self.pass_entry.grid(row=3, column=1, pady=5, padx=(10, 0))
 
-        # Section name
-        ttk.Label(form_frame, text="Nom de section").grid(row=4, column=0, sticky=tk.W, pady=5)
-        self.section_entry = ttk.Entry(form_frame, width=40)
-        self.section_entry.grid(row=4, column=1, pady=5, padx=(10, 0))
-        self.section_entry.insert(0, "default")
-
+        # Note about section
         ttk.Label(
             form_frame,
-            text="Par défaut : 'default'",
+            text="Note: La configuration sera sauvegardée dans la section 'default'",
             font=('Arial', 8),
             foreground='gray'
-        ).grid(row=5, column=1, sticky=tk.W, padx=(10, 0))
+        ).grid(row=4, column=0, columnspan=2, pady=10)
 
         # Test result label
         self.test_result_label = ttk.Label(
@@ -125,7 +120,7 @@ class ConfigDialog:
             text="",
             font=('Arial', 9)
         )
-        self.test_result_label.grid(row=6, column=0, columnspan=2, pady=10)
+        self.test_result_label.grid(row=5, column=0, columnspan=2, pady=10)
 
         # Buttons frame
         button_frame = ttk.Frame(main_frame)
@@ -283,7 +278,7 @@ class ConfigDialog:
         url = self.url_entry.get().strip()
         user = self.user_entry.get().strip()
         password = self.pass_entry.get()
-        section = self.section_entry.get().strip() or "default"
+        section = "default"  # Always use 'default' section
 
         print(f"[DEBUG] URL: {url}")
         print(f"[DEBUG] User: {user}")
