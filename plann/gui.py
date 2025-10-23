@@ -363,7 +363,7 @@ class PlannGUI:
         # Title
         title_label = ttk.Label(
             main_frame,
-            text="📅 Plann AI",
+            text="Plann AI",
             style='Title.TLabel'
         )
         title_label.pack(pady=(0, 10))
@@ -410,7 +410,7 @@ class PlannGUI:
         # Add button
         self.add_button = tk.Button(
             buttons_frame,
-            text="➕ Ajouter",
+            text="[+] Ajouter",
             command=self.add_event,
             bg='#4a9eff',
             fg='white',
@@ -425,7 +425,7 @@ class PlannGUI:
         # Voice button
         self.voice_button = tk.Button(
             buttons_frame,
-            text="🎤 Vocal",
+            text="[Mic] Vocal",
             command=self.voice_input,
             bg='#5cb85c',
             fg='white',
@@ -488,7 +488,7 @@ class PlannGUI:
         # Config button
         config_button = tk.Button(
             bottom_frame,
-            text="⚙️ Configurer",
+            text="[Config]",
             command=self.open_config_dialog,
             bg='#6c757d',
             fg='white',
@@ -503,7 +503,7 @@ class PlannGUI:
         # Clear history button
         clear_button = tk.Button(
             bottom_frame,
-            text="🗑️ Effacer",
+            text="[Effacer]",
             command=self.clear_history,
             bg='#6c757d',
             fg='white',
@@ -589,17 +589,17 @@ votre serveur CalDAV."""
         """Update Ollama connection status"""
         if not self.config_loaded:
             self.status_label.config(
-                text="🔴 Configuration requise",
+                text="[X] Configuration requise",
                 foreground='#d9534f'
             )
         elif self.ollama_available:
             self.status_label.config(
-                text=f"🟢 Connecté à Ollama ({self.model})",
+                text=f"[OK] Connecté à Ollama ({self.model})",
                 foreground='#5cb85c'
             )
         else:
             self.status_label.config(
-                text="🔴 Ollama non disponible",
+                text="[X] Ollama non disponible",
                 foreground='#d9534f'
             )
 
@@ -655,7 +655,7 @@ votre serveur CalDAV."""
             return
 
         # Disable button during processing
-        self.add_button.config(state=tk.DISABLED, text="⏳ Traitement...")
+        self.add_button.config(state=tk.DISABLED, text="[...] Traitement...")
 
         # Process in background thread
         threading.Thread(target=self._process_event, args=(text,), daemon=True).start()
@@ -716,7 +716,7 @@ votre serveur CalDAV."""
 
         finally:
             # Re-enable button
-            self.root.after(0, lambda: self.add_button.config(state=tk.NORMAL, text="➕ Ajouter"))
+            self.root.after(0, lambda: self.add_button.config(state=tk.NORMAL, text="[+] Ajouter"))
 
     def _clear_input(self):
         """Clear text input"""
@@ -737,7 +737,7 @@ votre serveur CalDAV."""
             return
 
         # Disable button
-        self.voice_button.config(state=tk.DISABLED, text="🎤 Écoute...")
+        self.voice_button.config(state=tk.DISABLED, text="[Mic] Écoute...")
 
         # Process in background
         threading.Thread(target=self._voice_input_thread, daemon=True).start()
@@ -777,7 +777,7 @@ votre serveur CalDAV."""
             self.log_message(f"❌ Erreur vocale: {str(e)}", 'error')
 
         finally:
-            self.root.after(0, lambda: self.voice_button.config(state=tk.NORMAL, text="🎤 Vocal"))
+            self.root.after(0, lambda: self.voice_button.config(state=tk.NORMAL, text="[Mic] Vocal"))
 
     def log_message(self, message, tag='info'):
         """Log message to history"""
