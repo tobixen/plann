@@ -157,13 +157,17 @@ class ConfigDialog:
 
         if not url or not user or not password:
             self.test_result_label.config(
-                text="❌ Tous les champs obligatoires doivent être remplis",
+                text="[X] Tous les champs obligatoires doivent être remplis",
                 foreground='red'
             )
             return
 
+        print("\n" + "="*50)
+        print("[DEBUG] Starting connection test...")
+        print("="*50)
+
         self.test_button.config(state=tk.DISABLED, text="Test en cours...")
-        self.test_result_label.config(text="⏳ Test de connexion...", foreground='orange')
+        self.test_result_label.config(text="[...] Test de connexion...", foreground='orange')
         self.dialog.update()
 
         # Test in background
@@ -171,46 +175,71 @@ class ConfigDialog:
 
     def _test_connection_thread(self, url, user, password):
         """Test connection in background thread"""
+        print(f"[DEBUG] Testing connection to: {url}")
+        print(f"[DEBUG] User: {user}")
+
         try:
             import caldav
+            import socket
 
-            # Try to connect
+            # Set a timeout for socket operations
+            socket.setdefaulttimeout(10)
+
+            print("[DEBUG] Creating CalDAV client...")
+
+            # Try to connect with timeout
             client = caldav.DAVClient(
                 url=url,
                 username=user,
                 password=password
             )
 
+            print("[DEBUG] Getting principal...")
             principal = client.principal()
+
+            print("[DEBUG] Getting calendars...")
             calendars = principal.calendars()
+
+            print(f"[DEBUG] Found {len(calendars)} calendar(s)")
 
             if calendars:
                 self._safe_update_widget(
                     lambda: self.test_result_label.config(
-                        text=f"✅ Connexion réussie ! {len(calendars)} calendrier(s) trouvé(s)",
+                        text=f"[OK] Connexion réussie ! {len(calendars)} calendrier(s) trouvé(s)",
                         foreground='green'
                     )
                 )
             else:
                 self._safe_update_widget(
                     lambda: self.test_result_label.config(
-                        text="⚠️ Connexion OK mais aucun calendrier trouvé",
+                        text="[!] Connexion OK mais aucun calendrier trouvé",
                         foreground='orange'
                     )
                 )
 
+        except socket.timeout:
+            print("[DEBUG] Connection timeout!")
+            self._safe_update_widget(
+                lambda: self.test_result_label.config(
+                    text="[X] Timeout : Le serveur ne répond pas (10s)",
+                    foreground='red'
+                )
+            )
+
         except Exception as e:
+            print(f"[DEBUG] Error: {type(e).__name__}: {str(e)}")
             error_msg = str(e)
             if len(error_msg) > 80:
                 error_msg = error_msg[:80] + "..."
             self._safe_update_widget(
                 lambda: self.test_result_label.config(
-                    text=f"❌ Erreur : {error_msg}",
+                    text=f"[X] Erreur : {error_msg}",
                     foreground='red'
                 )
             )
 
         finally:
+            print("[DEBUG] Test finished")
             self._safe_update_widget(
                 lambda: self.test_button.config(state=tk.NORMAL, text="Tester la connexion")
             )
