@@ -1,19 +1,84 @@
 [project]
 name = "plann"
-version = "1.1.dev"
-description = "Plann is a command-line tool for interfacing towards CalDAV calendar servers"
-authors = [{ name = "Tobias Brox", email="tobias@redpill-linpro.com"}]
-license = {text = "GPL-3.0"}
+version = "1.1.dev1"
+description = "Simple command-line CalDAV client and planning tool, for adding and browsing calendar items, todo list items, etc."
+authors = [{ name = "Tobias Brox", email = "t-plann@tobixen.no" }]
+maintainers = [{ name = "Tobias Brox", email = "t-plann@tobixen.no" }]
+license = { text = "GPL-3.0" }
 readme = "README.md"
-urls = { Homepage = "https://plann.no" }
-dependencies = [
-  "caldav>=1.4.0",
-  "Click",
-  "PyYAML",
-  "sortedcontainers"
+requires-python = ">=3.9"
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Environment :: Console",
+    "Intended Audience :: End Users/Desktop",
+    "License :: OSI Approved :: GNU General Public License v3 or later (GPLv3+)",
+    "Operating System :: POSIX",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Office/Business :: Scheduling",
+    "Topic :: Utilities",
 ]
-#dynamic = ["version"]
+keywords = ["caldav", "calendar", "cli", "todo", "planning"]
+dependencies = [
+    "caldav>=1.4.0",
+    "Click",
+    "PyYAML",
+    "sortedcontainers",
+    "tzlocal",
+    "python-dateutil",
+    "icalendar",
+]
+
+[project.urls]
+Homepage = "https://plann.no"
+Repository = "https://github.com/tobixen/plann"
+Documentation = "https://plann.no"
+
+[project.scripts]
+plann = "plann.cli:cli"
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0",
+    "pytest-cov>=4.0",
+    "ruff>=0.1.0",
+    "xandikos",
+]
 
 [build-system]
 requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"
+
+[tool.ruff]
+target-version = "py39"
+line-length = 120
+
+[tool.ruff.lint]
+select = [
+    "E",      # pycodestyle errors
+    "W",      # pycodestyle warnings
+    "F",      # Pyflakes
+    "I",      # isort
+    "UP",     # pyupgrade
+]
+ignore = [
+    "E501",   # line too long (many existing long lines)
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+
+[tool.coverage.run]
+source = ["plann"]
+branch = true
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "if __name__ == .__main__.:",
+]
