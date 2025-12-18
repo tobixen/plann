@@ -1,10 +1,19 @@
-import pytest
+from datetime import datetime, timedelta, timezone
 from unittest.mock import patch
-from caldav import Todo, Calendar
-from plann.lib import _summary,  _procrastinate, _adjust_ical_relations, _add_category, _set_something, add_time_tracking_timew, add_time_tracking, _split_vcal
-from datetime import datetime, timedelta
-from datetime import timezone
 
+import pytest
+from caldav import Calendar, Todo
+
+from plann.lib import (
+    _add_category,
+    _adjust_ical_relations,
+    _procrastinate,
+    _set_something,
+    _split_vcal,
+    _summary,
+    add_time_tracking,
+    add_time_tracking_timew,
+)
 
 utc=timezone.utc
 todo = """BEGIN:VCALENDAR
@@ -33,7 +42,7 @@ def test_summary():
     assert(_summary(t) == "Buy some food and drinks, clean up the place, hang up some baloons")
     t.icalendar_component.pop('DESCRIPTION')
     assert(_summary(t) == "19970901T130000Z-123404@host.com")
-    
+
 @pytest.mark.parametrize("method", [add_time_tracking_timew, add_time_tracking])
 @patch("plann.lib.subprocess.run")
 def test_add_time_tracking_timew(mock_run, method):
@@ -43,7 +52,7 @@ def test_add_time_tracking_timew(mock_run, method):
     obj.data = todo
     obj.parent=Calendar()
     obj.parent.extra_config={'time_tracking': ['timew']}
-    
+
     method(obj, ts1, ts2)
 
     mock_run.assert_called_once()
@@ -107,15 +116,15 @@ def test_adjust_ical_relations():
     assert(t.data == ical_data1)
     _adjust_ical_relations(t, {'CHILD': {'CHILD-A0', 'CHILD-A1', 'CHILD-A2'}}) is True
     assert(t.data != ical_data1)
-    
+
     rels = t.get_relatives(reltypes={'CHILD'}, fetch_objects=False)
 
     assert(rels['CHILD'] == {'CHILD-A0', 'CHILD-A1', 'CHILD-A2'})
-    
+
     ## CHILD should be the only key now
     rels.pop('CHILD')
     assert not rels
-    
+
     rels = t.get_relatives(fetch_objects=False)
     ## should return both parents and children
     ## parent list should be unchanged
@@ -123,12 +132,12 @@ def test_adjust_ical_relations():
     assert(rels['CHILD'] == {'CHILD-A0', 'CHILD-A1', 'CHILD-A2'})
 
 #def test_split_vcals():
-## TODO    
+## TODO
 
 def test_split_vcal():
     ## This VCALENDAR contains three events, but only two separate
     ## event components as one of the events is a recurrence object.
-    ## According to the CalDAV standard it should be wrapped in two VCALENDAR 
+    ## According to the CalDAV standard it should be wrapped in two VCALENDAR
     input = """BEGIN:VCALENDAR
 VERSION:2.0
 PRODID:-//eome//prodid//en_DK

@@ -1,6 +1,6 @@
 [project]
 name = "plann"
-version = "1.1.dev1"
+version = "0.0.0"
 description = "Simple command-line CalDAV client and planning tool, for adding and browsing calendar items, todo list items, etc."
 authors = [{ name = "Tobias Brox", email = "t-plann@tobixen.no" }]
 maintainers = [{ name = "Tobias Brox", email = "t-plann@tobixen.no" }]
@@ -49,9 +49,18 @@ dev = [
     "xandikos",
 ]
 
+[tool.poetry]
+packages = [{include = "plann"}]
+
+[tool.poetry-dynamic-versioning]
+enable = true
+vcs = "git"
+style = "semver"
+pattern = "^v(?P<base>\\d+\\.\\d+\\.\\d+)"
+
 [build-system]
-requires = ["poetry-core"]
-build-backend = "poetry.core.masonry.api"
+requires = ["poetry-core>=2.0.0,<3.0.0", "poetry-dynamic-versioning>=1.0.0,<2.0.0"]
+build-backend = "poetry_dynamic_versioning.backend"
 
 [tool.ruff]
 target-version = "py39"
@@ -68,6 +77,9 @@ select = [
 ignore = [
     "E501",   # line too long (many existing long lines)
 ]
+
+[tool.ruff.lint.isort]
+known-first-party = ["plann"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

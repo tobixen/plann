@@ -1,9 +1,10 @@
-from dataclasses import dataclass
-import zoneinfo
 import datetime
+import re
+import zoneinfo
+from dataclasses import dataclass
+
 import dateutil
 import dateutil.parser
-import re
 
 """
 Most important content:
@@ -19,12 +20,12 @@ The naming of those two are a bit arbitrary and may be changed in a future versi
 
 ## Singleton (aka global variable)
 @dataclass
-class Tz():
+class Tz:
     """
     Singleton class storing timezone preferences
 
     (floating time not supported yet)
-    
+
     "implicit" is the timezone that is implicitly used for timestamps given by the user
     "store" is the timezone used by the storage backend
     """
@@ -35,7 +36,7 @@ class Tz():
     @property
     def implicit_timezone(self):
         return self._implicit_timezone
-    
+
     @property
     def store_timezone(self):
         return self._store_timezone
@@ -91,7 +92,7 @@ def parse_dt(input, return_type=None, for_storage=False):
     if for_storage and hasattr(ret, "astimezone"):
         ret = ret.astimezone(tz.store_timezone)
     return ret
-    
+
 def _parse_dt(input, return_type=None):
     if hasattr(input, 'dt'):
         input = input.dt
@@ -115,7 +116,7 @@ def _parse_dt(input, return_type=None):
         return _ensure_ts(ret)
     elif return_type is datetime.date:
         return ret.date()
-    elif ret.time() == datetime.time(0,0) and len(input)<12 and not '00:00' in input and not '0000' in input:
+    elif ret.time() == datetime.time(0,0) and len(input)<12 and '00:00' not in input and '0000' not in input:
         return ret.date()
     else:
         return _ensure_ts(ret)
@@ -128,7 +129,7 @@ def parse_add_dur(dt, dur, for_storage=False, ts_allowed=False):
       * 3m (three minutes, not months
       * 3.5h
       * 1y1w
-    
+
     It may also be a ISO8601 duration
 
     Returns the dt plus duration.
@@ -166,7 +167,7 @@ def parse_add_dur(dt, dur, for_storage=False, ts_allowed=False):
         return dt.astimezone(tz.store_timezone) if for_storage else dt
     else:
         return diff
-   
+
 
 def parse_timespec(timespec, for_storage=False):
     """parses a timespec and return two timestamps
@@ -175,8 +176,8 @@ def parse_timespec(timespec, for_storage=False):
     https://en.wikipedia.org/wiki/ISO_8601#Time_intervals should be
     accepted, though it may be dependent on
     https://github.com/gweis/isodate/issues/77 or perhaps
-    https://github.com/dateutil/dateutil/issues/1184 
-    
+    https://github.com/dateutil/dateutil/issues/1184
+
     The calendar-cli format (i.e. 2021-01-08 15:00:00+1h) should be accepted
 
     Two timestamps should be accepted.
@@ -199,7 +200,7 @@ def _parse_timespec(timespec):
             isinstance(timespec[0], datetime.date) and
             isinstance(timespec[1], datetime.date)):
         return timespec
-    
+
     ## calendar-cli format, 1998-10-03 15:00+2h
     if '+' in timespec:
         rx = re.match(r'(.*)\+((?:\d+(?:\.\d+)?[smhdwy])+)$', timespec)

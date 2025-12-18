@@ -1,7 +1,8 @@
+from datetime import date, datetime, timedelta, timezone
+
 import pytest
-from datetime import datetime, date, timedelta, timezone
-from plann.lib import tz
-from plann.lib import parse_timespec, parse_dt, parse_add_dur, _ensure_ts
+
+from plann.lib import _ensure_ts, parse_add_dur, parse_dt, parse_timespec, tz
 
 utc = timezone.utc
 
@@ -64,7 +65,7 @@ class TestParseTimestamp:
         if not expected_tz:
             expected_tz = datetime.now().astimezone().tzinfo
         return expected_tz
-        
+
 
     def _stz(self, dt):
         """
@@ -81,7 +82,7 @@ class TestParseTimestamp:
         if dt and isinstance(dt, datetime):
             return dt.astimezone(self._expected_tz(dt))
         return dt
-    
+
     def _testTimeSpec(self, expected):
         for input in expected:
             expv = tuple([self._stz(x) for x in expected[input]])
@@ -89,7 +90,7 @@ class TestParseTimestamp:
 
     def _testRelativeTimeSpec(self, expected):
         for input in expected:
-            ## Slow tests may sometimes span the exact moment when the second changes, so the 
+            ## Slow tests may sometimes span the exact moment when the second changes, so the
             expected_ = self._atz(datetime.now().replace(microsecond=0)) + expected[input]
             assert parse_dt(input) in (expected_, expected_ + timedelta(seconds=1))
 
@@ -130,7 +131,7 @@ class TestParseTimestamp:
             "now": timedelta(hours=0)
         }
         self._testRelativeTimeSpec(expected)
-        
+
     def testTwoTimestamps(self):
         expected = {
             "2007-03-01T13:00:00 2007-03-11T13:30:00":

@@ -1,16 +1,15 @@
-import logging
 import json
+import logging
 import os
 import time
+from fnmatch import fnmatch
 from getpass import getpass
 
 import yaml
-from fnmatch import fnmatch
+
 
 def interactive_config(args, config, remaining_argv):
-    import readline
 
-    new_config = False
     section = 'default'
     backup = {}
     modified = False
@@ -21,7 +20,6 @@ def interactive_config(args, config, remaining_argv):
     if not config or not hasattr(config, 'keys'):
         config = {}
         print("No valid existing configuration found")
-        new_config = True
     if config:
         print("The following sections have been found: ")
         print("\n".join(config.keys()))
@@ -36,7 +34,7 @@ def interactive_config(args, config, remaining_argv):
     else:
         section = 'default'
 
-    if not section in config:
+    if section not in config:
         config[section] = {}
 
     for config_key in ('caldav_url', 'calendar_url', 'caldav_user', 'caldav_pass', 'caldav_proxy', 'ssl_verify_cert', 'language', 'timezone', 'inherits'):
@@ -45,7 +43,7 @@ def interactive_config(args, config, remaining_argv):
             print("Config option caldav_pass - old value: **HIDDEN**")
             value = getpass(prompt="Enter new value (or just enter to keep the old): ")
         else:
-            print("Config option %s - old value: %s" % (config_key, config[section].get(config_key, '(None)')))
+            print("Config option {} - old value: {}".format(config_key, config[section].get(config_key, '(None)')))
             value = input("Enter new value (or just enter to keep the old): ")
 
         if value:
@@ -59,7 +57,7 @@ def interactive_config(args, config, remaining_argv):
         while state == 'start':
             options = []
             if section:
-                options.append(('save', 'save configuration into section %s' % section))
+                options.append(('save', f'save configuration into section {section}'))
             if backup or not section:
                 options.append(('save_other', 'add this new configuration into a new section in the configuration file'))
             if remaining_argv:
@@ -67,7 +65,7 @@ def interactive_config(args, config, remaining_argv):
             options.append(('abort', 'abort without saving'))
             print("CONFIGURATION DONE ...")
             for o in options:
-                print("Type %s if you want to %s" % o)
+                print("Type {} if you want to {}".format(*o))
             cmd = input("Enter a command: ")
             if cmd in ('use', 'abort'):
                 state = 'done'
@@ -82,7 +80,7 @@ def interactive_config(args, config, remaining_argv):
                     section = new_section
                 try:
                     if os.path.isfile(args.config_file):
-                        os.rename(args.config_file, "%s.%s.bak" % (args.config_file, int(time.time())))
+                        os.rename(args.config_file, f"{args.config_file}.{int(time.time())}.bak")
                     with open(args.config_file, 'w') as outfile:
                         json.dump(config, outfile, indent=4)
                 except Exception as e:
@@ -100,9 +98,9 @@ def interactive_config(args, config, remaining_argv):
 def expand_config_section(config, section='default', blacklist=None):
     """
     In the "normal" case, will return [ section ]
-    
+
     We allow:
-    
+
     * * includes all sections in config file
     * "Meta"-sections in the config file with the keyword "contains" followed by a list of section names
     * Recursive "meta"-sections
@@ -122,16 +120,16 @@ def expand_config_section(config, section='default', blacklist=None):
                 blacklist = set()
             blacklist.add(section)
             for subsection in config[section]['contains']:
-                if not subsection in results and not subsection in blacklist:
+                if subsection not in results and subsection not in blacklist:
                     for recursivesubsection in expand_config_section(config, subsection, blacklist):
-                        if not recursivesubsection in results:
+                        if recursivesubsection not in results:
                             results.append(recursivesubsection)
             return results
         else:
             ## Disabled sections should be ignored
             if config.get('section', {}).get('disable', False):
                 return []
-            
+
             ## NORMAL CASE - return [ section ]
             return [ section ]
     ## section name is a glob pattern

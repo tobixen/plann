@@ -1,12 +1,15 @@
-from plann import panic_planning
 from datetime import datetime, timedelta
 from unittest import mock
-from caldav import Todo,Event
+
+from caldav import Event, Todo
 from caldav.lib.vcal import create_ical
+
+from plann import panic_planning
+
 
 def datetime_(*largs, **kwargs):
     ret = datetime(*largs, **kwargs)
-    if not 'tzinfo' in kwargs:
+    if 'tzinfo' not in kwargs:
         ret = ret.astimezone()
     return ret
 
@@ -30,25 +33,26 @@ def test_timeline():
     assert foo['end'] == datetime_(year=2025, month=2, day=26, hour=20, minute=30)
     foo = timeline.get(datetime_(year=2025, month=2, day=27, hour=12, minute=35))
     assert foo['begin'] == datetime_(year=2025, month=2, day=26, hour=20, minute=40)
-    assert not 'end' in foo
+    assert 'end' not in foo
     foo = timeline.get(datetime_(year=2020, month=2, day=27, hour=12, minute=35))
     assert foo['end'] == datetime_(year=2025, month=2, day=25, hour=20, minute=00)
-    assert not 'begin' in foo
+    assert 'begin' not in foo
     (opening, slack_balance) = timeline.find_opening(last_possibility=datetime_(year=2025, month=3, day=25, hour=20), duration=timedelta(days=2))
     assert slack_balance == timedelta(0)
-    assert not 'end' in opening
+    assert 'end' not in opening
     (opening, slack_balance) = timeline.find_opening(last_possibility=datetime_(year=2025, month=2, day=28, hour=20), duration=timedelta(days=2))
     assert slack_balance > timedelta(0)
-    assert not 'begin' in opening
+    assert 'begin' not in opening
     timeline.pad_slack(end=datetime_(year=2025, month=2, day=26, hour=12, minute=45), duration=timedelta(seconds=3600))
     timeline.pad_slack(end=datetime_(year=2025, month=2, day=26, hour=22, minute=45), duration=timedelta(days=2))
 
 def test_timeline_add():
-    t = lambda hour: datetime_(year=2025, month=2, day=25, hour=hour)
+    def t(hour):
+        return datetime_(year=2025, month=2, day=25, hour=hour)
     timeline = panic_planning.TimeLine()
-    
+
     assert len(timeline) == 0
-    
+
     timeline.add(begin=t(14), end=t(15), obj='14')
     assert len(timeline) == 2
     assert timeline[0]['begin'] == t(14)
@@ -63,7 +67,7 @@ def test_timeline_add():
     assert timeline[2]['begin'] == t(14)
     assert timeline[2]['obj'] == '14'
     assert timeline[3]['begin'] == t(15)
-    
+
     timeline.add(begin=t(13), end=t(14), obj='13')
     assert len(timeline) == 4
     assert timeline[0]['begin'] == t(12)
@@ -82,7 +86,7 @@ def create_obj(comp_class='VTODO', duehour=None, **data):
     compclass={'VEVENT': Event, 'VTODO': Todo}
     ical = create_ical(**data)
     return compclass[data.get('objtype', 'VEVENT')](client=None, url=f"https://example.com/{data['uid']}", data=ical)
-    
+
 def test_timeline_suggestion():
     pri1 = create_obj(uid=1, priority=1, duehour=12)
     pri2 = create_obj(uid=2, priority=1, duehour=10)
@@ -102,6 +106,6 @@ def test_timeline_suggestion():
     ## parents should always be handled after children
     pri3.icalendar_component.add('RELATED_TO', 'https://example.com/2', parameters={'RELTYPE': 'CHILD'})
     pri2.icalendar_component.add('RELATED_TO', 'https://example.com/3', parameters={'RELTYPE': 'PARENT'})
-    
+
     timeline = panic_planning.timeline_suggestion(ctx, hours_per_day=23)
-    #['x' for x in assert 
+    #['x' for x in assert

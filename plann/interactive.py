@@ -14,15 +14,29 @@ spending lots of efforts micro-managing my tasks rather than actually
 doing them.
 """
 
-import click
-import re
 import os
-import tempfile
+import re
 import subprocess
-from plann.template import Template
-from plann.lib import _list, _adjust_relations, _summary, _procrastinate, _process_set_arg, _set_something, _icalendar_component, _relationship_text, _split_vcal, _now, add_time_tracking
-from plann.timespec import _ensure_ts, parse_add_dur
+import tempfile
+
+import click
 from icalendar.prop import vRecur
+
+from plann.lib import (
+    _adjust_relations,
+    _list,
+    _now,
+    _process_set_arg,
+    _procrastinate,
+    _relationship_text,
+    _set_something,
+    _split_vcal,
+    _summary,
+    add_time_tracking,
+)
+from plann.template import Template
+from plann.timespec import _ensure_ts, parse_add_dur
+
 
 def command_edit(obj, command, interactive=True):
     if command == 'ignore':
@@ -49,7 +63,7 @@ def command_edit(obj, command, interactive=True):
             if 'with family' in command:
                 with_params['with_family'] = true
         ## TODO: we probably shouldn't be doing this interactively here?
-        parent = _procrastinate([obj], command.split(' ')[1], **with_params)
+        _procrastinate([obj], command.split(' ')[1], **with_params)
     elif command == 'complete':
         obj.complete(handle_rrule=True)
     elif command == 'cancel':
@@ -73,12 +87,11 @@ def command_edit(obj, command, interactive=True):
         add_time_tracking(obj)
     elif command == 'pdb':
         if interactive:
-            comp = obj.icalendar_component
             click.echo("icalendar component available as comp")
             click.echo("caldav object available as obj")
             click.echo("do the necessary changes and press c to continue normal code execution")
             click.echo("happy hacking")
-        import pdb; pdb.set_trace()
+        breakpoint()
     else:
         if interactive:
             click.echo(f"unknown instruction '{command}' - ignoring")
@@ -136,14 +149,14 @@ def _set_relations_from_text_list(calendar, some_list, parent=None, indent=0):
             else:
                 return j
         return None
-    
+
     def get_obj(line):
         """Check the uuid on the line and return the caldav object"""
         uid = line.lstrip().split(':')[0]
         if not uid:
             raise NotImplementedError("No uid - what now?")
         return calendar.object_by_uid(uid)
-    
+
     i=0
     children = []
     while i<len(some_list):
@@ -181,7 +194,7 @@ def _set_relations_from_text_list(calendar, some_list, parent=None, indent=0):
             children.append(get_obj(some_list[i]))
             i+=1
             continue
-        
+
         ## TODO: look through all the conditions above.  should we ever be here?
         raise NotImplementedError("We should not be here - please raise an issue at https://github.com/tobixen/plann or reach out to bugs@plann.no")
     for c in children:
@@ -279,7 +292,7 @@ def _mass_interactive_edit(objs, default='ignore'):
         ## TODO: BUG: does not work if the source data comes from multiple calendars!
         ## (possible fix: make a dict from uid to calendar(s))
         _command_line_edit(line, interactive=True, calendar=objs[0].parent)
-    
+
 def interactive_split_task(obj, partially_complete=False, too_big=True):
     comp = obj.icalendar_component
     summary = comp.get('summary') or comp.get('description') or comp.get('uid')
@@ -326,7 +339,7 @@ def _editor(sometext):
         tmpfile.write(sometext)
         fn = tmpfile.name
     editor = os.environ.get("VISUAL") or os.environ.get("EDITOR") or ""
-    if not '/' in editor:
+    if '/' not in editor:
         for path in os.environ.get("PATH", "").split(os.pathsep):
             full_path = os.path.join(path, editor)
             if os.path.exists(full_path) and os.access(full_path, os.X_OK):
@@ -335,8 +348,8 @@ def _editor(sometext):
     for ed in (editor, '/usr/bin/vim', '/usr/bin/vi', '/usr/bin/emacs', '/usr/bin/nano', '/usr/bin/pico', '/bin/vi'):
         if os.path.isfile(ed) and os.access(ed, os.X_OK):
             break
-    foo = subprocess.run([ed, fn])
-    with open(fn, "r") as tmpfile:
+    subprocess.run([ed, fn])
+    with open(fn) as tmpfile:
         ret = tmpfile.read()
     os.unlink(fn)
     return ret

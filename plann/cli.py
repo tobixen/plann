@@ -18,15 +18,31 @@ plann is a "next generation" reimplementation of calendar-cli
 ## `from plann import ...`
 
 import os
-import caldav
 import sys
-from plann.config import config_section, read_config, expand_config_section
-from plann.metadata import metadata
-from plann.commands import _select, _edit, _cats, _check_for_panic, _add_todo, _add_event, _agenda, _check_due, _dismiss_panic, _split_huge_tasks, _split_high_pri_tasks, _set_task_attribs
-from plann.lib import find_calendars, attr_txt_one, attr_txt_many, attr_time, attr_int, _list, _split_vcal, _split_vcals
-from plann.lib import add_time_tracking as add_time_tracking_
-from plann.timespec import tz, parse_dt, _now
+
+import caldav
+
+from plann.commands import (
+    _add_event,
+    _add_todo,
+    _agenda,
+    _cats,
+    _check_due,
+    _check_for_panic,
+    _dismiss_panic,
+    _edit,
+    _select,
+    _set_task_attribs,
+    _split_high_pri_tasks,
+    _split_huge_tasks,
+)
+from plann.config import config_section, expand_config_section, read_config
 from plann.interactive import _abort
+from plann.lib import _list, _split_vcal, _split_vcals, attr_int, attr_time, attr_txt_many, attr_txt_one, find_calendars
+from plann.lib import add_time_tracking as add_time_tracking_
+from plann.metadata import metadata
+from plann.timespec import _now, parse_dt, tz
+
 __version__ = metadata["version"]
 
 import click
@@ -71,13 +87,12 @@ def cli(ctx, **kwargs):
     """
     ## The cli function will prepare a context object, a dict containing the
     ## caldav_client, principal and calendar
-    
+
     ctx.ensure_object(dict)
     ## TODO: add all relevant connection parameters for the DAVClient as options
     ## TODO: logic to read the config file and edit kwargs from config file
     ## TODO: delayed communication with caldav server (i.e. if --help is given to subcommand)
     ## TODO: catch errors, present nice error messages
-    conns = []
     ctx.obj['calendars'] = find_calendars(kwargs, kwargs['raise_errors'])
     for flag in ('show_native_timezone', 'store_timezone', 'implicit_timezone'):
         setattr(tz, flag, kwargs[flag])
@@ -100,8 +115,8 @@ def list_calendars(ctx):
         output = "Accessible calendars found:\n"
         calendar_info = [(x.get_display_name(), x.url) for x in ctx.obj['calendars']]
         max_display_name = max([len(x[0]) for x in calendar_info])
-        format_str= "%%-%ds %%s" % max_display_name
-        click.echo_via_pager(output + "\n".join([format_str % x for x in calendar_info]) + "\n")
+        lines = [f"{name:<{max_display_name}} {url}" for name, url in calendar_info]
+        click.echo_via_pager(output + "\n".join(lines) + "\n")
 
 def _set_attr_options_(func, verb, desc=""):
     """
@@ -176,7 +191,7 @@ def select(*largs, **kwargs):
 @select.command()
 @click.pass_context
 @click.option('startnow/track', help="the event starts now vs track the original timespan", default=True)
-def add_time_tracking(startnow):
+def add_time_tracking(ctx, startnow):
     """
     Track time spent on events/tasks
     """
@@ -192,7 +207,7 @@ def add_time_tracking(startnow):
     if not len(objs):
         _abort("No items selected for tracking")
     for x in objs:
-        add_time_tracking_(obj, start_time)
+        add_time_tracking_(x, start_time)
 
 @select.command()
 @click.pass_context
@@ -387,7 +402,7 @@ def ical(ctx, ical_data, ical_file):
             ## TODO: this may not be an event - should make a Calendar.save_object method
             c.save_event(ical)
 
-    
+
 @add.command()
 @click.argument('summary', nargs=-1)
 @_set_attr_options(verb='set')
@@ -427,9 +442,9 @@ def agenda(ctx):
     Convenience command, prints an agenda
 
     This command is slightly redundant, same results may be obtained by running those two commands in series:
-    
+
       `select --event --start=now --end=+7d --limit=16 list`
-    
+
       `select --todo --sort-key '{DTSTART:?{DUE:?(0000)?}?%F %H:%M:%S}' --sort-key '{PRIORITY:?0}' --end=+7d --limit=16 list --bottom-up`
 
     agenda is for convenience only and takes no options or parameters.

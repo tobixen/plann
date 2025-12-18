@@ -9,14 +9,27 @@ TODO: Sort all this mess.  Split out things that are interactive?
 """
 
 import datetime
-import caldav
 import logging
 import subprocess
 from collections import defaultdict
-from plann.template import Template
-from plann.timespec import tz, _now, _ensure_ts, parse_dt, parse_add_dur, parse_timespec
+
+import caldav
+import click  ## TODO - this should be removed, eventually
 import icalendar
-import click ## TODO - this should be removed, eventually
+
+from plann.template import Template
+from plann.timespec import (
+    _ensure_ts,
+    _now,
+    parse_add_dur,
+    parse_dt,
+)
+from plann.timespec import (
+    parse_timespec as parse_timespec,
+)
+from plann.timespec import (
+    tz as tz,
+)
 
 ## TODO: maybe find those attributes through the icalendar library? icalendar.cal.singletons, icalendar.cal.multiple, etc
 attr_txt_one = ['location', 'description', 'geo', 'organizer', 'summary', 'class', 'rrule', 'status']
@@ -30,7 +43,7 @@ def _split_vcal(ical):
     """
     ical_cal = icalendar.Calendar.from_ical(ical)
     split_by_uid = {}
-    
+
     ## TODO: ical_cal.copy() gives an empty calendar without
     ## subcomponents.  Bug or feature?  If this behaviour changes,
     ## this needs rewriting.
@@ -39,11 +52,11 @@ def _split_vcal(ical):
     for subcomponent in ical_cal.subcomponents:
         if isinstance(subcomponent, icalendar.Timezone):
             ical_cal_stripped.add_component(subcomponent)
-        
+
     for subcomponent in ical_cal.subcomponents:
         if not isinstance(subcomponent, icalendar.Timezone):
             uid = subcomponent['UID']
-            if not uid in split_by_uid:
+            if uid not in split_by_uid:
                 split_by_uid[uid] = ical_cal_stripped.copy()
                 ## TODO: depends on the copy issue mentioned above
                 for tz in ical_cal_stripped.subcomponents:
@@ -81,8 +94,8 @@ def find_calendars(args, raise_errors):
             ret = meth(**kwargs)
             assert(ret)
             return ret
-        except:
-            logging.error("Problems fetching calendar information: %s - skipping" % errmsg)
+        except Exception:
+            logging.error(f"Problems fetching calendar information: {errmsg} - skipping")
             if raise_errors:
                 raise
             else:
@@ -124,7 +137,7 @@ def find_calendars(args, raise_errors):
                 calendars.append(calendar)
         for calendar_name in list_(args.get('calendar_name')):
             tries += 1
-            calendar = _try(principal.calendar, {'name': calendar_name}, '%s : calendar "%s"' % (conn_params['url'], calendar_name))
+            calendar = _try(principal.calendar, {'name': calendar_name}, '{} : calendar "{}"'.format(conn_params['url'], calendar_name))
             calendars.append(calendar)
         if not calendars and tries == 0:
             calendars = _try(principal.calendars, {}, "conn_params['url'] - all calendars")
@@ -301,11 +314,11 @@ def _adjust_ical_relations(obj, relations_wanted={}):
     iobj = _icalendar_component(obj)
     mutated = defaultdict(dict)
     for rel_type in relations_wanted:
-        if not rel_type in rels and relations_wanted[rel_type]:
+        if rel_type not in rels and relations_wanted[rel_type]:
             mutated['added'][rel_type] = set(rels[rel_type])
         if set(rels[rel_type]) != set(relations_wanted[rel_type]):
             mutated['removed'][rel_type] = set(rels[rel_type]) - set(relations_wanted[rel_type])
-            mutated['added'][rel_type] = set(relations_wanted[rel_type]) - set(rels[rel_type]) 
+            mutated['added'][rel_type] = set(relations_wanted[rel_type]) - set(rels[rel_type])
         rels[rel_type] = relations_wanted[rel_type]
     if not mutated:
         return {}
@@ -371,7 +384,7 @@ def _relships_by_type(obj, reltype_wanted=None):
     for reltype in rels_by_type:
         for other in rels_by_type[reltype]:
             ret[reltype].append(other)
-            
+
             ## Consistency check ... TODO ... look more into breakages
             ## TODO: make functionality for scanning through all relationships in the calendar
             other_rels = other.get_relatives(fetch_objects=False)
@@ -384,13 +397,13 @@ def _relships_by_type(obj, reltype_wanted=None):
                 logging.error(f"Inconsistency issue in relationships - has to be manually resolved (UID={obj.icalendar_component_UID}, backrels: {back_rel_types})")
                 ## Inconsistency has to be manually fixed: more than one related-to property pointing from other to obj
             if len(back_rel_types) == 0:
-                logging.error(f"Inconsistency issue in relationships - will be automatically fixed: no related-to property pointing from other to obj")
+                logging.error("Inconsistency issue in relationships - will be automatically fixed: no related-to property pointing from other to obj")
                 ## adding the missing back rel
                 other.icalendar_component.add('RELATED-TO', str(obj.icalendar_component['UID']), parameters={'RELTYPE': backreltypes[reltype]})
                 other.save()
             else:
                 if back_rel_types != { backreltypes[reltype] }:
-                    logging.error(f"Inconsistency issue in relationships - has to be manually resolved. Object and other points to each other, but reltype does not match")
+                    logging.error("Inconsistency issue in relationships - has to be manually resolved. Object and other points to each other, but reltype does not match")
     return ret
 
 def _relationship_text(obj, reltype_wanted=None):
@@ -441,7 +454,7 @@ def _set_something(obj, arg, value):
         for val in value:
             obj.set_relation(reltype=arg, other=val)
     elif arg == 'duration':
-        obj.set_duration(duration)
+        obj.set_duration(value)
     elif arg in ('due', 'dtend'): ## TODO: dtstart!
         getattr(obj, f"set_{arg}")(value, move_dtstart=True, check_dependent=True)
     elif arg == 'category':
@@ -463,7 +476,7 @@ def _list(objs, ics=False, template="{DTSTART:?{DUE:?(date missing)?}?%F %H:%M:%
     TODO: if there are parent/child-relationships that aren't bidrectionally linked, we may get problems
     """
     if indent>32:
-        raise NotImplemented("too deep hierarchies, or circular links")
+        raise NotImplementedError("too deep hierarchies, or circular links")
     if ics:
         if not objs:
             return
@@ -489,7 +502,7 @@ def _list(objs, ics=False, template="{DTSTART:?{DUE:?(date missing)?}?%F %H:%M:%
             continue
 
         uid = obj.icalendar_component['UID']
-        if uid in uids and not 'RECURRENCE-ID' in obj.icalendar_component:
+        if uid in uids and 'RECURRENCE-ID' not in obj.icalendar_component:
             continue
         else:
             uids.add(uid)
@@ -527,7 +540,7 @@ def _list(objs, ics=False, template="{DTSTART:?{DUE:?(date missing)?}?%F %H:%M:%
         for p in above:
             ## The item should be part of a sublist.  Find and add the top-level item, and the full indented list under there - recursively.
             puid = p.icalendar_component['UID']
-            if not puid in uids:
+            if puid not in uids:
                 output.extend(_list([p], template=template, top_down=top_down, bottom_up=bottom_up, indent=indent, echo=False, uids=uids, filter=filter))
     if echo:
         click.echo_via_pager("\n".join(output))

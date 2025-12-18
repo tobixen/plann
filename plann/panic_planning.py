@@ -1,7 +1,9 @@
-from dataclasses import dataclass
 from datetime import datetime, timedelta
+
 from sortedcontainers import SortedKeyList
+
 from plann.lib import _ensure_ts, _now
+
 
 class TimeLine(SortedKeyList):
     """
@@ -77,7 +79,7 @@ class TimeLine(SortedKeyList):
                     if foodur > duration:
                         return (foo, slack_balance)
                     slack_balance += foodur
-            if not 'begin' in foo or not 'end' in foo:
+            if 'begin' not in foo or 'end' not in foo:
                 return (foo, slack_balance)
             end = foo['begin']-timedelta(seconds=1)
 
@@ -114,9 +116,9 @@ def timeline_suggestion(ctx, hours_per_day=4, timeline_end=None):
     tasks = [x for x in objs if 'BEGIN:VTODO' in x.data]
     assert len(events) + len(tasks) == len(objs)
     tasks = [x for x in tasks if ('\nDUE' in x.data or '\nDURATION' in x.data) and '\nDTSTART' in x.data]
-    
+
     for event in events:
-        if not 'BEGIN:VEVENT' in event.data:
+        if 'BEGIN:VEVENT' not in event.data:
             continue
         ## TODO ... we should handle overlapping events a bit better than just ignoring AssertionErrors
         try:
@@ -146,4 +148,4 @@ def timeline_suggestion(ctx, hours_per_day=4, timeline_end=None):
         if slackbalance<timedelta(0):
             timeline.pad_slack(begin, -slackbalance)
             slackbalance=timedelta(0)
-    return timeline    
+    return timeline

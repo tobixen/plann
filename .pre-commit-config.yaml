@@ -1,0 +1,48 @@
+repos:
+ - repo: https://github.com/astral-sh/ruff-pre-commit
+   rev: v0.8.4
+   hooks:
+    # Run the linter with auto-fix on commit
+    - id: ruff
+      args:
+       - "--fix"
+      stages: [pre-commit]
+    # Run the formatter on commit
+    - id: ruff-format
+      stages: [pre-commit]
+
+ - repo: https://github.com/pre-commit/pre-commit-hooks
+   rev: v5.0.0
+   hooks:
+    - id: trailing-whitespace
+      stages: [pre-commit]
+    - id: end-of-file-fixer
+      stages: [pre-commit]
+    - id: check-yaml
+      stages: [pre-commit]
+    - id: check-toml
+      stages: [pre-commit]
+    - id: check-ast
+      stages: [pre-commit]
+    - id: mixed-line-ending
+      args: [--fix=lf]
+      stages: [pre-commit]
+
+ - repo: local
+   hooks:
+    # Run ruff check without fixes on push (to catch any issues)
+    - id: ruff-check-push
+      name: Ruff check (no fixes)
+      entry: ruff check
+      language: system
+      types: [python]
+      pass_filenames: false
+      stages: [pre-push]
+    # Run full test suite on push
+    - id: pytest-push
+      name: Run pytest
+      entry: python -m pytest
+      language: system
+      pass_filenames: false
+      always_run: true
+      stages: [pre-push]

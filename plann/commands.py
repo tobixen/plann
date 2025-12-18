@@ -1,17 +1,41 @@
-import os
-import caldav
 #import isodate
 import datetime
 import logging
 import re
-import sys
+
+import caldav
+
 ## TODO: can we remove the click-dependency?
 import click
-from plann.template import Template
+
+from plann.interactive import (
+    _abort,
+    _editor,
+    _get_obj_from_line,
+    _interactive_ical_edit,
+    _interactive_relation_edit,
+    _mass_interactive_edit,
+    _mass_reprioritize,
+    _strip_line,
+    command_edit,
+    interactive_split_task,
+)
+from plann.lib import (
+    _add_category,
+    _list,
+    _process_set_arg,
+    _procrastinate,
+    _relships_by_type,
+    _set_something,
+    _summary,
+    attr_txt_many,
+    childlike,
+    parentlike,
+)
 from plann.panic_planning import timeline_suggestion
-from plann.timespec import _now, _ensure_ts, parse_dt, parse_add_dur, parse_timespec, tz
-from plann.lib import _summary, _procrastinate, _relships_by_type, _summary, _relationship_text, _adjust_relations, parentlike, childlike, _remove_reverse_relations, _process_set_arg, attr_txt_one, attr_txt_many, attr_time, attr_int, _set_something, _list, _add_category
-from plann.interactive import command_edit, _interactive_ical_edit, _interactive_relation_edit, _set_relations_from_text_list, interactive_split_task, _editor, _command_line_edit, interactive_split_task, _mass_interactive_edit, _mass_reprioritize, _get_obj_from_line, _abort, _strip_line
+from plann.template import Template
+from plann.timespec import _ensure_ts, _now, parse_add_dur, parse_dt, parse_timespec, tz
+
 
 def _select(ctx, interactive=False, mass_interactive=False, **kwargs):
     """
@@ -28,7 +52,7 @@ def _select(ctx, interactive=False, mass_interactive=False, **kwargs):
                 template="{UID}: {SUMMARY:?{DESCRIPTION:?(no summary given)?}?} (STATUS={STATUS:-})"))
             edited = _editor("## delete things that should not be selected:\n" + select_list)
             for objectline in edited.split("\n"):
-                foo = objectline.split(': ')
+                objectline.split(': ')
                 obj = _get_obj_from_line(objectline, objs[0].parent)
                 if obj:
                     ctx.obj['objs'].append(obj)
@@ -49,7 +73,7 @@ def __select(ctx, extend_objects=False, all=None, uid=[], abort_on_missing_uid=N
     ctx.obj['objs'] = objs
 
     ## TODO: move all search/filter/select logic to caldav library?
-    
+
     ## handle all/none options
     if all is False: ## means --none.
         return
@@ -139,8 +163,8 @@ def __select(ctx, extend_objects=False, all=None, uid=[], abort_on_missing_uid=N
                         else:
                             ret_objs.append(obj)
             if isinstance(obj, caldav.Todo) and not pinned_tasks:
-                children = _relships_by_type(obj, 'CHILD').get('CHILD',[])
-                if not any(x.icalendar_comp.get('STATUS', '')!='CANCELLED' for x in parents if isinstance(x, event.Event)):
+                _relships_by_type(obj, 'CHILD').get('CHILD',[])
+                if not any(x.icalendar_comp.get('STATUS', '')!='CANCELLED' for x in parents if isinstance(x, caldav.Event)):
                     ret_objs.append(obj)
         ctx.obj['objs'] = ret_objs
 
@@ -155,11 +179,14 @@ def __select(ctx, extend_objects=False, all=None, uid=[], abort_on_missing_uid=N
             reverse = False
         ## if the key contains {}, it should be considered to be a template
         if '{' in skey:
-            fkey = lambda obj: Template(skey).format(**obj.icalendar_component)
+            def fkey(obj):
+                return Template(skey).format(**obj.icalendar_component)
         elif skey == 'get_duration()':
-            fkey = lambda obj: obj.get_duration()
+            def fkey(obj):
+                return obj.get_duration()
         else:
-            fkey = lambda obj: obj.icalendar_component.get(skey)
+            def fkey(obj):
+                return obj.icalendar_component.get(skey)
         ctx.obj['objs'].sort(key=fkey, reverse=reverse)
 
     ## OPTIMIZE TODO: this is also suboptimal, if ctx.obj is a very long list
@@ -176,7 +203,7 @@ def __select(ctx, extend_objects=False, all=None, uid=[], abort_on_missing_uid=N
         if dtstart and dtend and isinstance(dtstart.dt, datetime.datetime) != isinstance(dtend.dt, datetime.datetime):
             logging.error(f"task with uuid {comp['uid']} has non-matching types on dtstart and dtend/due, setting both to timestamps")
             comp['dtstart'].dt = datetime.datetime(dtstart.dt.year, dtstart.dt.month, dtstart.dt.day)
-            comp['dtend'].dt = datetime.datetime(dtend.dt.year, dtend.dt.month, dtend.dt.day) 
+            comp['dtend'].dt = datetime.datetime(dtend.dt.year, dtend.dt.month, dtend.dt.day)
         elif dtstart and dtend and dtstart.dt > dtend.dt:
             logging.error(f"task with uuid {comp['uid']} as dtstart after dtend/due")
 
@@ -188,7 +215,7 @@ def __select(ctx, extend_objects=False, all=None, uid=[], abort_on_missing_uid=N
             comp = obj.icalendar_component
             attribs = list(comp.keys())
             for attr in attribs:
-                if not attr in ('DUE', 'DTEND', 'DTSTART', 'DTSTAMP', 'UID', 'RRULE', 'SEQUENCE', 'EXDATE', 'STATUS', 'CLASS'):
+                if attr not in ('DUE', 'DTEND', 'DTSTART', 'DTSTAMP', 'UID', 'RRULE', 'SEQUENCE', 'EXDATE', 'STATUS', 'CLASS'):
                     del comp[attr]
                 if attr == 'SUMMARY':
                     comp[attr] = freebusyhack
@@ -262,7 +289,7 @@ def _edit(ctx, add_category=None, cancel=None, interactive_ical=False, interacti
             click.echo("caldav object available as obj")
             click.echo("do the necessary changes and press c to continue normal code execution")
             click.echo("happy hacking")
-            import pdb; pdb.set_trace()
+            breakpoint()
         for arg in ctx.obj['set_args']:
             _set_something(obj, arg, ctx.obj['set_args'][arg])
         if add_category:
@@ -291,7 +318,7 @@ def _check_for_panic(ctx, hours_per_day, output=True, print_timeline=True, fix_t
     timeline_end = parse_dt(timeline_end, datetime.datetime)
     if include_all_events:
         ## Remove events from the list to prevent duplicates ...
-        ctx.obj['objs'] = [x for x in ctx.obj['objs'] if not 'BEGIN:VEVENT' in x.data]
+        ctx.obj['objs'] = [x for x in ctx.obj['objs'] if 'BEGIN:VEVENT' not in x.data]
         ## ... and then add all events
         _select(ctx, event=True, start=timeline_start, end=timeline_end, extend_objects=True)
     possible_timeline = timeline_suggestion(ctx, hours_per_day=hours_per_day, timeline_end=timeline_end)
@@ -301,7 +328,7 @@ def _check_for_panic(ctx, hours_per_day, output=True, print_timeline=True, fix_t
         if isinstance(obj, str):
             return obj
         return _summary(obj)
-        
+
     if (print_timeline):
         click.echo("Calculated timeline suggestion:")
         for foo in possible_timeline:
@@ -371,12 +398,12 @@ def _add_todo(ctx, **kwargs):
     """
     Creates a new task with given SUMMARY
 
-    Examples: 
+    Examples:
 
     plann add todo "fix all known bugs in plann"
     plann add todo --set-due=2050-12-10 "release plann version 42.0.0"
     """
-    if not 'status' in kwargs:
+    if 'status' not in kwargs:
         kwargs['status'] = 'NEEDS-ACTION'
     kwargs['summary'] = " ".join(kwargs['summary'])
     _process_set_args(ctx, kwargs)
@@ -461,7 +488,7 @@ def _dismiss_panic(ctx, hours_per_day, lookahead='60d'):
             comp = obj.icalendar_component
             summary = _summary(comp)
             due = obj.get_due()
-            dtstart = _ensure_ts(comp.get('dtstart') or comp.get('due'))
+            _ensure_ts(comp.get('dtstart') or comp.get('due'))
             click.echo(f"Should have started: {item['begin']:%F %H:%M:%S %Z} - Due: {due:%F %H:%M:%S %Z}: {summary}")
 
         if priority == 1:
@@ -476,7 +503,7 @@ def _dismiss_panic(ctx, hours_per_day, lookahead='60d'):
         else:
             procrastination_time = f"{procrastination_time.seconds//3600+1}h"
         default_procrastination_time = procrastination_time
-        procrastination_time = click.prompt(f"Push the due-date with ... (press O for one-by-one, E for edit all, P for reprioritize)", default=procrastination_time)
+        procrastination_time = click.prompt("Push the due-date with ... (press O for one-by-one, E for edit all, P for reprioritize)", default=procrastination_time)
         if procrastination_time == 'O':
             for item in first_low_pri_tasks:
                 _interactive_edit(item['obj'])
@@ -491,7 +518,7 @@ def _dismiss_panic(ctx, hours_per_day, lookahead='60d'):
 
         if other_low_pri_tasks:
             click.echo(f"There are {len(other_low_pri_tasks)} later pri>={priority} tasks selected which should maybe probably be considered to be postponed a bit as well")
-            procrastination_time = click.prompt(f"Push the due-date for those with ...", default='0h')
+            procrastination_time = click.prompt("Push the due-date for those with ...", default='0h')
             if procrastination_time not in ('0', '0h', '0m', '0d', 0):
                 _procrastinate([x['obj'] for x in other_low_pri_tasks], procrastination_time, check_dependent='interactive', err_callback=click.echo, confirm_callback=click.confirm)
 
@@ -510,7 +537,7 @@ def _split_high_pri_tasks(ctx, threshold=2, max_lookahead='60d', limit_lookahead
         if obj.icalendar_component.get('PRIORITY') and obj.icalendar_component.get('PRIORITY') <= threshold:
             ## TODO: get_relatives refactoring
             relations = obj.get_relatives(fetch_objects=False)
-            if not 'CHILD' in relations:
+            if 'CHILD' not in relations:
                 interactive_split_task(obj, too_big=False)
 
 def _set_task_attribs(ctx):
@@ -534,7 +561,7 @@ def _set_task_attribs(ctx):
         ## add all non-duplicated objects from objs to objs_
         uids_ = {x.icalendar_component['UID'] for x in objs_}
         for obj in objs or []:
-            if not obj.icalendar_component['UID'] in uids_:
+            if obj.icalendar_component['UID'] not in uids_:
                 obj.load()
                 objs_.append(obj)
         objs = objs_
@@ -554,7 +581,7 @@ def _set_task_attribs(ctx):
                 click.echo("List of existing categories in use (if any):")
                 click.echo("\n".join(cats))
             click.echo(f"For each task, {help_text}")
-            click.echo(f'(or enter "completed!" with bang but without quotes if the task is already done)')
+            click.echo('(or enter "completed!" with bang but without quotes if the task is already done)')
             for obj in objs:
                 comp = obj.icalendar_component
                 summary = _summary(comp)
@@ -573,7 +600,7 @@ def _set_task_attribs(ctx):
                     comp.add(something_, value)
                     if hasattr(comp[something], 'dt'):
                         if not comp[something].dt.tzinfo:
-                            comp[something].dt = com[something].dt.astimezone(tz.store_timezone)
+                            comp[something].dt = comp[something].dt.astimezone(tz.store_timezone)
                 obj.save()
             click.echo()
         return objs

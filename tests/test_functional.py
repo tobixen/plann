@@ -4,30 +4,37 @@
 
 ## TODO: tests with multiple source calendars.  Some of the interactive edit-through-editor functions will probably break.
 
-from xandikos.web import XandikosBackend, XandikosApp
-import plann.lib
-from plann.lib import find_calendars, _adjust_relations, _adjust_ical_relations
-from plann.cli import _add_todo, _select, _list, _check_for_panic
-from plann.interactive import _interactive_relation_edit, _interactive_edit, _mass_interactive_edit, command_edit, _mass_reprioritize
-from plann.panic_planning import timeline_suggestion
-from caldav import Todo
-import aiohttp
-import aiohttp.web
-import threading
-import requests
-from unittest.mock import MagicMock, patch
 import asyncio
 import os
-import signal
 import tempfile
+import threading
 import time
+from unittest.mock import MagicMock, patch
+
+import aiohttp
+import aiohttp.web
+import requests
+from xandikos.web import XandikosApp, XandikosBackend
+
+from plann.cli import _add_todo, _check_for_panic, _list, _select
+from plann.interactive import (
+    _interactive_edit,
+    _interactive_relation_edit,
+    _mass_interactive_edit,
+    _mass_reprioritize,
+    command_edit,
+)
+from plann.lib import _adjust_ical_relations, _adjust_relations, find_calendars
+from plann.panic_planning import timeline_suggestion
 from tests.test_panic import datetime_
+
 
 class InterruptXandikosServer:
     def graceful_exit_with_pdb(self):
-        import pdb; pdb.set_trace()
+        breakpoint()
         self.graceful_exit()
-    graceful_exit_ = lambda: 1
+    def graceful_exit_():
+        return 1
 
 interrupt_xandikos_server_singleton = InterruptXandikosServer()
 
@@ -53,7 +60,7 @@ def start_xandikos_server_foobar():
     asyncio.get_event_loop = _new_get_event_loop
 
     ## Start xandikos in a thread
-    thread = threading.Thread(target=run_simple_server, kwargs={'current_user_principal': '/sometestuser', 'directory': '/tmp/xandikos/', 'autocreate': True})
+    thread = threading.Thread(target=run_simple_server, kwargs={'current_user_principal': '/sometestuser', 'directory': '/tmp/xandikos/', 'autocreate': True})  # noqa: F821
     thread.start()
     assert thread.is_alive()
     return {
@@ -67,7 +74,7 @@ def start_xandikos_server_fork():
     ## It's simple to fork out a xandikos server, but somehow I can't get it to work with pytest
     pid = os.fork()
     if not pid:
-        run_simple_server(current_user_principal='/sometestuser', directory='/tmp/xandikos/', autocreate=True)
+        run_simple_server(current_user_principal='/sometestuser', directory='/tmp/xandikos/', autocreate=True)  # noqa: F821
     else:
         return {
             'caldav_user': 'sometestuser',
@@ -126,7 +133,7 @@ def stop_xandikos_server(server_params):
     def silly_request():
         try:
             requests.get(server_params["caldav_url"])
-        except:
+        except Exception:
             pass
     threading.Thread(target=silly_request).start()
     i = 0
@@ -143,7 +150,8 @@ def stop_xandikos_server(server_params):
 
     server_params['serverdir'].__exit__(None, None, None)
 
-passthrough = lambda x: x
+def passthrough(x):
+    return x
 
 ## TODO: Rather than one monolithic test going through various aspects,
 ## we should make many small tests and reset the calendar server to some known
@@ -229,7 +237,7 @@ def test_plann():
         assert foo['end'] == datetime_(year=2012, month=12, day=20, hour=23, minute=15)
 
         ## panic planning, timeline_suggestion with timeline_end
-        ## Those two tasks should be neatly stacked up 
+        ## Those two tasks should be neatly stacked up
         assert len(ctx.obj['objs'])==2
         timeline = timeline_suggestion(ctx, timeline_end=datetime_(year=2011, month=11, day=11, hour=11, minute=11), hours_per_day=24)
         assert(timeline.count() == 2)
@@ -239,7 +247,7 @@ def test_plann():
         foo = timeline.get(datetime_(year=2011, month=11, day=11, hour=10, minute=10))
         assert foo['begin'] == datetime_(year=2011, month=11, day=11, hour=9, minute=11)
         assert foo['end'] == datetime_(year=2011, month=11, day=11, hour=10, minute=11)
-        
+
         ## fix_timeline feature
         ## This will create events that are children of the tasks.
         ## (Those events contains a suggested timeslot for doing the task
@@ -263,7 +271,7 @@ def test_plann():
         e1 = [x for x in ctx.obj['objs'] if x.icalendar_component['summary'] == 'make plann good'][0]
         e2 = [x for x in ctx.obj['objs'] if x.icalendar_component['summary'] == 'fix some bugs in plann'][0]
         uide1 = str(e1.icalendar_component['uid'])
-        uide2 = str(e1.icalendar_component['uid'])
+        str(e1.icalendar_component['uid'])
 
         ## Testing the _adjust_relations
         todo1.load()
@@ -301,13 +309,13 @@ def test_plann():
         todo2.load()
         assert(not _adjust_ical_relations(todo1, {'CHILD': {uid2}, 'PARENT': set()}))
         assert(not _adjust_ical_relations(todo2, {'PARENT': {uid1}, 'CHILD': set()}))
-        
+
         ## Testing the interactive relation edit - if doing nothing in the
         ## editor, the algorithm should change nothing.
         _select(ctx, todo=True)
         cal_pre_interactive_relation_edit = "\n".join([x.data for x in ctx.obj['objs']])
         with patch('plann.interactive._editor', new=passthrough) as _editor:
-            _interactive_relation_edit((ctx.obj['objs']))
+            _interactive_relation_edit(ctx.obj['objs'])
 
         for obj in ctx.obj['objs']:
             obj.load()
@@ -362,7 +370,7 @@ def test_plann():
         assert(dag(todo2, 'CHILD') == {})
         assert(dag(todo3, 'CHILD') == {uid4: {uid5: {}}})
         assert(dag(todo5, 'PARENT') == {uid4: {uid3: {}}})
-    
+
         ## This should not throw one into the debugger
         #list_td = _list(ctx.obj['objs'], top_down=True, echo=False)
 
@@ -422,4 +430,4 @@ def test_plann():
         stop_xandikos_server(conn_details)
 
 ## TODO:
-## Things to be tested: lib._procrastinate, cli._select, cli._cats, cli._list, cli._interactive_edit, cli._set_something, cli._interactive_ical_edit, cli._edit, cli._check_for_panic, _add_todo, _agenda, _check_due, 
+## Things to be tested: lib._procrastinate, cli._select, cli._cats, cli._list, cli._interactive_edit, cli._set_something, cli._interactive_ical_edit, cli._edit, cli._check_for_panic, _add_todo, _agenda, _check_due,

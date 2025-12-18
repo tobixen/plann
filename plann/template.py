@@ -6,11 +6,13 @@ googling a bit, and didn't find anything like this out there ... but
 I'm sure there must exist something like this?"""
 
 import datetime
-import string
 import re
+import string
+
 from plann.timespec import tz
 
-class NoValue():
+
+class NoValue:
     def __getattr__(self, attr):
         return self
     def __getitem__(self, attr):
@@ -20,7 +22,7 @@ class NoValue():
     def __format__(self, spec):
         try:
             return "".__format__(spec)
-        except:
+        except Exception:
             return ""
 
 no_value = NoValue()
@@ -31,11 +33,11 @@ class Template(string.Formatter):
 
     def format(self, *pargs, **kwargs):
         return super().format(self.template, *pargs, **kwargs)
-    
+
     def get_value(self, key, args, kwds):
         try:
             ret = string.Formatter.get_value(self, key, args, kwds)
-        except:
+        except Exception:
             return no_value
         if hasattr(ret, 'dt'):
             ret = ret.dt
@@ -51,5 +53,5 @@ class Template(string.Formatter):
                 value = rx.group(1)
         try:
             return string.Formatter.format_field(self, value, format_spec)
-        except:
+        except Exception:
             return string.Formatter.format_field(self, value, "")
