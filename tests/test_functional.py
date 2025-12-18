@@ -13,7 +13,7 @@ from unittest.mock import MagicMock, patch
 
 import aiohttp
 import aiohttp.web
-import requests
+import niquests as requests
 from xandikos.web import XandikosApp, XandikosBackend
 
 from plann.cli import _add_todo, _check_for_panic, _list, _select
