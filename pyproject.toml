@@ -41,17 +41,15 @@ Documentation = "https://plann.no"
 [project.scripts]
 plann = "plann.cli:cli"
 
-[project.optional-dependencies]
-dev = [
-    "niquests",
-    "pytest>=7.0",
-    "pytest-cov>=4.0",
-    "ruff>=0.1.0",
-    "xandikos",
-]
-
 [tool.poetry]
 packages = [{include = "plann"}]
+
+[tool.poetry.group.dev.dependencies]
+niquests = "*"
+pytest = ">=7.0"
+pytest-cov = ">=4.0"
+ruff = ">=0.1.0"
+xandikos = "*"
 
 [tool.poetry-dynamic-versioning]
 enable = true
