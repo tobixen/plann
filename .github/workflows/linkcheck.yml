@@ -12,6 +12,7 @@ jobs:
       with:
         fail: true
         args: >-
+          --config .lychee.toml
           --timeout 10
           --max-retries 2
           '**/*.md'
