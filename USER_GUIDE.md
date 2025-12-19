@@ -158,5 +158,4 @@ plann select --todo --category computer-work --overdue edit --postpone=5d
 
 ## See also
 
-[NEW_CLI.md](NEW_CLI.md) is a longer, but possibly less up-to-date document containing some visions of the new `plann`-command.
 [NEXT_LEVEL.md](NEXT_LEVEL.md) describes some of my visions on what a good calendaring system should be capable of, and does an attempt on mapping this down to the icalendar standard.

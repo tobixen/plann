@@ -230,4 +230,4 @@ See USAGE.MD for further instructions on how to use `plann`.
 
 ## Roadmap
 
-See [`NEXT_LEVEL.md`](NEXT_LEVEL.md)and [`NEW_CLI.md`](NEW_CLI.md) for the direction the project is heading.
+See [`NEXT_LEVEL.md`](NEXT_LEVEL.md) for the direction the project is heading.

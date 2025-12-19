@@ -124,5 +124,5 @@ Those two ways of striking out things have fundamentally different meanings - th
 
 ## The new plann interface
 
-This section has been moved to a separate document, [`NEW_CLI.md`](NEW_CLI.md)
+See [USER_GUIDE.md](USER_GUIDE.md) for documentation on the plann command line interface.
 
