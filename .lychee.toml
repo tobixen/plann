@@ -1,10 +1,10 @@
 # Lychee link checker configuration
 # https://lychee.cli.rs/
 
-# Exclude patterns (regex)
+# Exclude patterns (regex matching full URL)
 exclude = [
     # Example/placeholder URLs in documentation
-    "some\\.davical\\.server",
+    ".*some\\.davical\\.server.*",
     # External site with expired SSL certificate (not under our control)
-    "bedework\\.org",
+    ".*bedework\\.org.*",
 ]
