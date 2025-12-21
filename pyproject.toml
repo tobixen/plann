@@ -44,12 +44,16 @@ plann = "plann.cli:cli"
 [tool.poetry]
 packages = [{include = "plann"}]
 
+[tool.poetry.dependencies]
+python = ">=3.9,<4"
+
 [tool.poetry.group.dev.dependencies]
 niquests = "*"
 pytest = ">=7.0"
 pytest-cov = ">=4.0"
 ruff = ">=0.1.0"
 xandikos = "*"
+deptry = {version = ">=0.24.0", python = ">=3.10"}
 
 [tool.poetry-dynamic-versioning]
 enable = true
@@ -93,3 +97,6 @@ exclude_lines = [
     "pragma: no cover",
     "if __name__ == .__main__.:",
 ]
+
+[tool.deptry.per_rule_ignores]
+DEP002 = ["tzlocal"]  # Used indirectly by icalendar/caldav

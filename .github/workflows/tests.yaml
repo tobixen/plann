@@ -37,6 +37,11 @@ jobs:
       with:
         args: check .
 
+    - name: Check dependencies with deptry
+      if: matrix.python-version != '3.9'
+      run: |
+        poetry run deptry .
+
     - name: Run tests
       run: |
         poetry run pytest
