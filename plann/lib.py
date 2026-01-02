@@ -110,6 +110,9 @@ def find_calendars(args, raise_errors):
             if key == 'user':
                 key = 'username'
             conn_params[key] = args[k]
+    # Pass features parameter directly to DAVClient if specified
+    if args.get('features'):
+        conn_params['features'] = args['features']
     extra_params = {}
     if 'extra_params' in conn_params:
         extra_params = conn_params.pop('extra_params')
