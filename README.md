@@ -20,24 +20,27 @@ The commands and options will be described further down, however examples often 
 
 ## Installation
 
-`plann` depends on several python libraries, e.g. [icalendar](https://pypi.org/project/icalendar/), [caldav](https://pypi.org/project/caldav/), etc. 
-
-### Virtual Environment Install
-
-This installs `plann` and all its dependencies in the virtual environment you create.
-To run it, you have to activate this virtual environment in your current shell.
-
-1. Clone this repo, cd to `plann`
-2. `python3 -m venv .venv`
-3. `source .venv/bin/activate` (See [venv documentation](https://docs.python.org/3/library/venv.html))
-4. `python3 setup.py install`
+`plann` depends on several python libraries, e.g. [icalendar](https://pypi.org/project/icalendar/), [caldav](https://pypi.org/project/caldav/), etc.
 
 ### Systemwide Install
 
-This installs `plann` and all its dependencies system-wide.
+1. Clone this repo, cd to `plann`
+2. `sudo make install`
+
+### User Install
+
+Installs `plann` under `~/.local/` (no root required):
 
 1. Clone this repo, cd to `plann`
-2. `sudo ./setup.py install`
+2. `make install`
+
+### Development Install
+
+For development work using Poetry:
+
+1. Clone this repo, cd to `plann`
+2. `make dev`
+3. Run via `poetry run plann`
 
 ## Support
 

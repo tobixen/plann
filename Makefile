@@ -1,6 +1,6 @@
 # plann Makefile
 
-.PHONY: help install dev test lint clean install-completion install-completion-user install-completion-system
+.PHONY: help install dev test lint clean install-completion install-completion-user install-completion-system uninstall
 
 PYTHON ?= python3
 VENV = venv
@@ -10,9 +10,13 @@ COMPLETION_DIR_SYSTEM = /usr/share/bash-completion/completions
 help:
 	@echo "plann - Command-line interface to calendars"
 	@echo ""
+	@echo "Installation:"
+	@echo "  sudo make install                  Install system-wide"
+	@echo "  make install                       Install for current user"
+	@echo "  make uninstall                     Uninstall plann"
+	@echo ""
 	@echo "Development:"
-	@echo "  make install                       Install package"
-	@echo "  make dev                           Install in development mode"
+	@echo "  make dev                           Install in development mode (Poetry)"
 	@echo "  make test                          Run tests"
 	@echo "  make lint                          Run linter"
 	@echo "  make clean                         Clean build artifacts"
@@ -29,9 +33,25 @@ venv:
 		$(VENV)/bin/pip install --upgrade pip; \
 	fi
 
-# Install package (Poetry project)
+# Install package via pip
+# When run as root (sudo make install), installs system-wide with --break-system-packages.
+# When run as a normal user, installs to the user's home directory with --user.
 install:
-	@poetry install
+	@if [ "$$(id -u)" = "0" ]; then \
+		echo "Installing plann system-wide..."; \
+		pip install --break-system-packages .; \
+	else \
+		echo "Installing plann for current user..."; \
+		pip install --user .; \
+	fi
+
+# Uninstall plann
+uninstall:
+	@if [ "$$(id -u)" = "0" ]; then \
+		pip uninstall --break-system-packages -y plann; \
+	else \
+		pip uninstall -y plann; \
+	fi
 
 # Install in development mode
 dev:
