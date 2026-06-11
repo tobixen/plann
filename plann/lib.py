@@ -17,6 +17,11 @@ import caldav
 import click  ## TODO - this should be removed, eventually
 import icalendar
 
+try:
+    from caldav.config import extract_conn_params_from_section
+except ImportError:  ## caldav <= 3.2.1 has it as a private function
+    from caldav.config import _extract_conn_params_from_section as extract_conn_params_from_section
+
 from plann.template import Template
 from plann.timespec import (
     _ensure_ts,
@@ -78,78 +83,32 @@ def _split_vcals(ical):
     return icals
 
 def find_calendars(args, raise_errors):
-    def list_(obj):
-        """
-        For backward compatibility, a string rather than a list can be given as
-        calendar_url, calendar_name.  Make it into a list.
-        """
-        if not obj:
-            obj = []
-        if isinstance(obj, str) or isinstance(obj, bytes):
-            obj = [ obj ]
-        return obj
+    """
+    Find calendars from a dict of connection parameters - typically a config
+    file section or the command line arguments.  The connection keys are
+    caldav_-prefixed (caldav_url, caldav_user, caldav_pass, ...), optionally
+    accompanied by `features` and the calendar_url/calendar_name filters.
 
-    def _try(meth, kwargs, errmsg):
-        try:
-            ret = meth(**kwargs)
-            assert(ret)
-            return ret
-        except Exception:
-            logging.error(f"Problems fetching calendar information: {errmsg} - skipping")
-            if raise_errors:
-                raise
-            else:
-                return None
-
-    conn_params = {}
-    for k in args:
-        if k.startswith('caldav_') and args[k]:
-            key = k[7:]
-            if key == 'pass':
-                key = 'password'
-            if key == 'user':
-                key = 'username'
-            conn_params[key] = args[k]
-    # Pass features parameter directly to DAVClient if specified
-    if args.get('features'):
-        conn_params['features'] = args['features']
-    extra_params = {}
-    if 'extra_params' in conn_params:
-        extra_params = conn_params.pop('extra_params')
-    calendars = []
-    ## TODO: test this more thoroughly.
-    ## The code above is supposed to remote the `caldav_`-prefix
-    ## Stil the lines below was added to fix
-    ## https://github.com/pycalendar/plann/issues/11, credits to @bergercookie
-    if 'caldav_url' in conn_params:
-        conn_params['url'] = conn_params.pop('caldav_url')
-    if conn_params:
-        client = caldav.DAVClient(**conn_params)
-        principal = _try(client.principal, {}, conn_params['url'])
-        if not principal:
-            return []
-        calendars = []
-        tries = 0
-        for calendar_url in list_(args.get('calendar_url')):
-            if '/' in calendar_url:
-                calendar = principal.calendar(cal_url=calendar_url)
-            else:
-                calendar = principal.calendar(cal_id=calendar_url)
-            tries += 1
-            if _try(calendar.get_display_name, {}, calendar.url):
-                calendars.append(calendar)
-        for calendar_name in list_(args.get('calendar_name')):
-            tries += 1
-            calendar = _try(principal.calendar, {'name': calendar_name}, '{} : calendar "{}"'.format(conn_params['url'], calendar_name))
-            calendars.append(calendar)
-        if not calendars and tries == 0:
-            calendars = _try(principal.calendars, {}, "conn_params['url'] - all calendars")
-
+    Connection parameter extraction (including resolving the URL from a
+    `features` server profile when no caldav_url is given) and the calendar
+    lookup itself are delegated to the caldav library.
+    """
+    conn_params = extract_conn_params_from_section(args)
+    if not conn_params:
+        return []
+    calendars = caldav.get_calendars(
+        check_config_file=False,
+        environment=False,
+        raise_errors=raise_errors,
+        calendar_url=args.get('calendar_url'),
+        calendar_name=args.get('calendar_name'),
+        **conn_params,
+    )
+    extra_params = args.get('caldav_extra_params')
     if extra_params:
         for cal in calendars:
             cal.extra_params = extra_params
-
-    return calendars or []
+    return calendars
 
 def _icalendar_component(obj):
     try:

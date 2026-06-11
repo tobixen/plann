@@ -31,7 +31,59 @@ STATUS:NEEDS-ACTION
 END:VTODO
 END:VCALENDAR"""
 
-## find_calendars tested in test_functional.py
+## find_calendars also tested in test_functional.py
+
+class TestFindCalendars:
+    """The heavy lifting (connection parameter extraction, URL resolution
+    from features, calendar lookup) is delegated to the caldav library -
+    these tests only verify the plann-side glue."""
+
+    ## auto-connect hints instead of a caldav_url - the caldav library
+    ## resolves the URL from these.  (A dict rather than a profile name like
+    ## "ecloud" to keep the test independent of compatibility_hints, and a
+    ## username without @ to avoid triggering RFC6764 network discovery)
+    features = {'auto-connect.url': {'domain': 'calendar.example.com', 'scheme': 'https', 'basepath': '/dav'}}
+
+    def _find_calendars(self, args):
+        from plann.lib import find_calendars
+        with patch('caldav.davclient.DAVClient.principal') as principal:
+            cal = object()
+            principal.return_value.calendars.return_value = [cal]
+            principal.return_value.get_calendars.return_value = [cal]
+            return find_calendars(args, raise_errors=True), cal
+
+    def test_explicit_url(self):
+        calendars, cal = self._find_calendars({
+            'caldav_url': 'https://calendar.example.com/dav',
+            'caldav_user': 'user', 'caldav_pass': 'hunter2'})
+        assert calendars == [cal]
+
+    def test_features_without_url(self):
+        """A config section without caldav_url should work when the URL can
+        be derived from the features (auto-connect.url hints)."""
+        calendars, cal = self._find_calendars({
+            'caldav_user': 'user', 'caldav_pass': 'hunter2',
+            'features': self.features})
+        assert calendars == [cal]
+
+    def test_no_connection_params(self):
+        calendars, cal = self._find_calendars({})
+        assert calendars == []
+
+    def test_extra_params(self):
+        class FakeCalendar:
+            pass
+        from plann.lib import find_calendars
+        with patch('caldav.davclient.DAVClient.principal') as principal:
+            cal = FakeCalendar()
+            principal.return_value.calendars.return_value = [cal]
+            principal.return_value.get_calendars.return_value = [cal]
+            calendars = find_calendars({
+                'caldav_url': 'https://calendar.example.com/dav',
+                'caldav_extra_params': {'time_tracking': ['timew']}},
+                raise_errors=True)
+        assert calendars == [cal]
+        assert cal.extra_params == {'time_tracking': ['timew']}
 
 def test_summary():
     t = Todo()

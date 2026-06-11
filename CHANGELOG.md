@@ -3,6 +3,16 @@
 The format of this file is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), 
 and I do try to adhere to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+
+* A config section carrying `features` but no `caldav_url` crashed with `KeyError: 'url'`.  The caldav library resolves the URL from the server profile given in `features`, so no URL is needed.  (This also requires a caldav release newer than 3.2.1 - with older caldav versions such a section is silently skipped instead of crashing.)
+
+### Changed
+
+* Config file parsing, connection parameter extraction and calendar lookup are now delegated to the caldav library instead of being duplicated in plann.  (The caldav library adopted this code from plann a while back; plann was still carrying its own copy.)  Visible side effects: environment variable references like `${SOME_VAR}` or `${SOME_VAR:-default}` in config values are now expanded, and a `features` key is resolved through the caldav library's profile lookup.
+
 ## [v1.1.1] - 2026-05-28
 
 ### Added

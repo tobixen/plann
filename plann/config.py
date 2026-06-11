@@ -2,10 +2,15 @@ import json
 import logging
 import os
 import time
-from fnmatch import fnmatch
 from getpass import getpass
 
-import yaml
+## The config handling logic originated in plann and has been adopted by the
+## caldav library - use the caldav implementation rather than carrying a copy.
+## (The redundant aliases mark config_section and expand_config_section as
+## intentional re-exports, they are used by cli.py)
+from caldav.config import config_section as config_section
+from caldav.config import expand_config_section as expand_config_section
+from caldav.config import read_config as _read_config
 
 
 def interactive_config(args, config, remaining_argv):
@@ -93,81 +98,14 @@ def interactive_config(args, config, remaining_argv):
         config['default'] = config[section]
     return config
 
-## TODO TODO TODO - write test code for all the corner cases
-## TODO TODO TODO - write documentation of config format
-def expand_config_section(config, section='default', blacklist=None):
-    """
-    In the "normal" case, will return [ section ]
-
-    We allow:
-
-    * * includes all sections in config file
-    * "Meta"-sections in the config file with the keyword "contains" followed by a list of section names
-    * Recursive "meta"-sections
-    * Glob patterns (work_* for all sections starting with work_)
-    * Glob patterns in "meta"-sections
-    """
-    ## Optimizating for a special case.  The results should be the same without this optimization.
-    if section == '*':
-        return [x for x in config if not config[x].get('disable', False)]
-
-    ## If it's not a glob-pattern ...
-    if set(section).isdisjoint(set('[*?')):
-        ## If it's referring to a "meta section" with the "contains" keyword
-        if 'contains' in config[section]:
-            results = []
-            if not blacklist:
-                blacklist = set()
-            blacklist.add(section)
-            for subsection in config[section]['contains']:
-                if subsection not in results and subsection not in blacklist:
-                    for recursivesubsection in expand_config_section(config, subsection, blacklist):
-                        if recursivesubsection not in results:
-                            results.append(recursivesubsection)
-            return results
-        else:
-            ## Disabled sections should be ignored
-            if config.get('section', {}).get('disable', False):
-                return []
-
-            ## NORMAL CASE - return [ section ]
-            return [ section ]
-    ## section name is a glob pattern
-    matching_sections = [x for x in config if fnmatch(x, section)]
-    results = set()
-    for s in matching_sections:
-        if set(s).isdisjoint(set('[*?')):
-            results.update(expand_config_section(config, s))
-        else:
-            ## Section names shouldn't contain []?* ... but in case they do ... don't recurse
-            results.add(s)
-    return results
-
-def config_section(config, section='default'):
-    if section in config and 'inherits' in config[section]:
-        ret = config_section(config, config[section]['inherits'])
-    else:
-        ret = {}
-    if section in config:
-        ret.update(config[section])
-    return ret
-
 def read_config(fn, interactive_error=False):
-    ## This can probably be refactored into fewer lines ...
+    """
+    Thin wrapper around the caldav library's read_config.  The caldav
+    version raises ValueError on a broken config file - plann should
+    rather log the problem and carry on.
+    """
     try:
-        try:
-            with open(fn, 'rb') as config_file:
-                return json.load(config_file)
-        except json.decoder.JSONDecodeError:
-            try:
-                with open(fn, 'rb') as config_file:
-                    return yaml.load(config_file, yaml.Loader)
-            except yaml.scanner.ScannerError:
-                logging.error(f"config file {fn!r} exists but is neither valid json nor yaml.  Check the syntax.")
-
-    except FileNotFoundError:
-        ## File not found
-        logging.info("no config file found")
+        return _read_config(fn) or {}
     except ValueError:
         if interactive_error:
             logging.error("error in config file.  Be aware that the interactive configuration will ignore and overwrite the current broken config file", exc_info=True)

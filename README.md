@@ -142,6 +142,9 @@ The file may look like this:
   }
 }
 ```
+
+A `features` key may be given to enable server-specific compatibility workarounds, referring to a server profile in the caldav library's `compatibility_hints` module (e.g. `"features": "ecloud"`).  For servers with a known profile, `caldav_url` may even be omitted - the caldav library will derive the URL from the profile.
+
 A configuration with multiple sections may look like this:
 
 ```json
