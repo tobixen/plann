@@ -45,9 +45,11 @@ class TestFindCalendars:
     features = {'auto-connect.url': {'domain': 'calendar.example.com', 'scheme': 'https', 'basepath': '/dav'}}
 
     def _find_calendars(self, args):
+        class FakeCalendar:
+            pass
         from plann.lib import find_calendars
         with patch('caldav.davclient.DAVClient.principal') as principal:
-            cal = object()
+            cal = FakeCalendar()
             principal.return_value.calendars.return_value = [cal]
             principal.return_value.get_calendars.return_value = [cal]
             return find_calendars(args, raise_errors=True), cal
@@ -70,7 +72,10 @@ class TestFindCalendars:
         calendars, cal = self._find_calendars({})
         assert calendars == []
 
-    def test_extra_params(self):
+    def test_extra_config(self):
+        """The extra_config section key (used i.a. for the time tracking
+        integration, cf. add_time_tracking) should be attached to all
+        calendars found, defaulting to an empty dict."""
         class FakeCalendar:
             pass
         from plann.lib import find_calendars
@@ -80,10 +85,15 @@ class TestFindCalendars:
             principal.return_value.get_calendars.return_value = [cal]
             calendars = find_calendars({
                 'caldav_url': 'https://calendar.example.com/dav',
-                'caldav_extra_params': {'time_tracking': ['timew']}},
+                'extra_config': {'time_tracking': ['timew']}},
                 raise_errors=True)
-        assert calendars == [cal]
-        assert cal.extra_params == {'time_tracking': ['timew']}
+            assert calendars == [cal]
+            assert cal.extra_config == {'time_tracking': ['timew']}
+
+            calendars = find_calendars(
+                {'caldav_url': 'https://calendar.example.com/dav'},
+                raise_errors=True)
+            assert calendars[0].extra_config == {}
 
 def test_summary():
     t = Todo()
@@ -103,7 +113,9 @@ def test_add_time_tracking_timew(mock_run, method):
     obj = Todo()
     obj.data = todo
     obj.parent=Calendar()
-    obj.parent.extra_config={'time_tracking': ['timew']}
+    ## "timewarrior" as in the config file documentation - "timew" and
+    ## "Timewarrior" should also be accepted
+    obj.parent.extra_config={'time_tracking': ['timewarrior']}
 
     method(obj, ts1, ts2)
 

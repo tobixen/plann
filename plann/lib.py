@@ -104,10 +104,10 @@ def find_calendars(args, raise_errors):
         calendar_name=args.get('calendar_name'),
         **conn_params,
     )
-    extra_params = args.get('caldav_extra_params')
-    if extra_params:
-        for cal in calendars:
-            cal.extra_params = extra_params
+    ## Non-connection configuration (i.a. the time tracking integration,
+    ## cf. add_time_tracking) is attached to the calendar objects
+    for cal in calendars:
+        cal.extra_config = args.get('extra_config', {})
     return calendars
 
 def _icalendar_component(obj):
@@ -133,7 +133,7 @@ def add_time_tracking_timew(obj, start=None, end=None):
     tags = ['plann-export']
 
     if 'categories' in comp:
-        for cat in comp.pop('categories').cats:
+        for cat in comp['categories'].cats:
             tags.append(f'category:{cat}')
     tags.append(f'uid:{comp["uid"]}')
     tags.append(f'summary:{_summary(obj)}')
@@ -152,12 +152,8 @@ def add_time_tracking_timew(obj, start=None, end=None):
         subprocess.run(["timew", "start"] + tags)
 
 def add_time_tracking(obj, start=None, end=None):
-    time_tracking = None
     comp = _icalendar_component(obj)
-    if hasattr(obj.parent, 'extra_config'):
-        cfg = obj.parent.extra_config
-        if 'time_tracking' in cfg:
-            time_tracking = cfg['time_tracking']
+    time_tracking = getattr(obj.parent, 'extra_config', {}).get('time_tracking')
     if time_tracking is None:
         raise NotImplementedError('Time tracking is so far not supported internally in plann, only through external tools, and only timewarrior as for now.  You have to set `time_tracking=timewarrior` in your calendar configuration')
 
@@ -168,7 +164,7 @@ def add_time_tracking(obj, start=None, end=None):
 
     for tt in time_tracking:
         ## TODO: this must be done in a more clever way if introducing more time tracking types
-        if tt == 'timew':
+        if tt in ('timewarrior', 'Timewarrior', 'timew'):
             add_time_tracking_timew(obj, start, end)
         else:
             raise NotImplementedError('Only time tracking through taskw supported so far')
