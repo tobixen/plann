@@ -224,14 +224,15 @@ list_type = list
 @select.command()
 @click.option('--ics/--no-ics', default=False, help="Output in ics format")
 @click.option('--template', default="{DTSTART:?{DUE:?(date missing)?}?%F %H:%M:%S %Z}: {SUMMARY:?{DESCRIPTION:?(no summary given)?}?}")
+@click.option('--separator', default="\n", help="String to separate the listed items with (defaults to a newline)")
 @click.option('--top-down/--flat-list', help="Check relations and list the relations in a hierarchical way")
 @click.option('--bottom-up/--flat-list', help="List parents (dependencies) in a hierarchical way (cannot be combined with top-down)")
 @click.pass_context
-def list(ctx, ics, template, top_down=False, bottom_up=False):
+def list(ctx, ics, template, separator="\n", top_down=False, bottom_up=False):
     """
     Print out a list of tasks/events/journals
     """
-    return _list(ctx.obj['objs'], ics, template, top_down=top_down, bottom_up=bottom_up)
+    return _list(ctx.obj['objs'], ics, template, top_down=top_down, bottom_up=bottom_up, separator=separator)
 
 
 @select.command()

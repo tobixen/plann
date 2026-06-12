@@ -226,8 +226,18 @@ def _interactive_edit(obj):
         return
     dtstart = _ensure_ts(dtstart)
     click.echo(f"pri={pri} {dtstart:%F %H:%M:%S %Z} - {due:%F %H:%M:%S %Z}: {summary}")
-    input = click.prompt("postpone <n>d / ignore / part(ially-complete) / complete / split / cancel / set foo=bar / edit / family / pdb?", default='ignore')
-    command_edit(obj, input, interactive=True)
+    input = click.prompt("postpone <n>d / ignore / part(ially-complete) / complete / split / cancel / set foo=bar / edit / family / start / pdb?", default='ignore')
+    try:
+        command_edit(obj, input, interactive=True)
+    except NotImplementedError as e:
+        ## e.g. `start` when extra_config.time_tracking is not configured -
+        ## the prompt advertises the command, so report why it did not work
+        ## rather than tearing down the rest of the session with a traceback
+        click.echo(f"Could not run '{input}': {e}")
+        return
+    if input == 'start':
+        ## time tracking has been started - re-prompt so a follow-up command can be given for the same task
+        _interactive_edit(obj)
 
 def _mass_reprioritize(objs):
     text = """\

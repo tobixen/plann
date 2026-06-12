@@ -5,6 +5,11 @@ and I do try to adhere to [Semantic Versioning](https://semver.org/spec/v2.0.0.h
 
 ## [Unreleased]
 
+### Added
+
+* `select ... list --separator=...` to join the listed items with something other than a newline.  (Ported from the archived development branch.)
+* The interactive edit prompt now advertises the `start` command (kicks off time tracking for the task) and re-prompts afterwards so a follow-up command can be given for the same task.  (Ported from the archived development branch.)
+
 ### Fixed
 
 * A config section carrying `features` but no `caldav_url` crashed with `KeyError: 'url'`.  The caldav library resolves the URL from the server profile given in `features`, so no URL is needed.  (This also requires a caldav release newer than 3.2.1 - with older caldav versions such a section is silently skipped instead of crashing.)
