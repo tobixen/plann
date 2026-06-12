@@ -226,8 +226,11 @@ def _interactive_edit(obj):
         return
     dtstart = _ensure_ts(dtstart)
     click.echo(f"pri={pri} {dtstart:%F %H:%M:%S %Z} - {due:%F %H:%M:%S %Z}: {summary}")
-    input = click.prompt("postpone <n>d / ignore / part(ially-complete) / complete / split / cancel / set foo=bar / edit / family / pdb?", default='ignore')
+    input = click.prompt("postpone <n>d / ignore / part(ially-complete) / complete / split / cancel / set foo=bar / edit / family / start / pdb?", default='ignore')
     command_edit(obj, input, interactive=True)
+    if input == 'start':
+        ## time tracking has been started - re-prompt so a follow-up command can be given for the same task
+        _interactive_edit(obj)
 
 def _mass_reprioritize(objs):
     text = """\

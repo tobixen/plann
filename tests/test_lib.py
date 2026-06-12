@@ -124,6 +124,34 @@ def test_add_time_tracking_timew(mock_run, method):
     assert cmd_arr[0:5] == ['timew', 'track', '2020-02-20T20:02', '-', '2020-02-20T20:20']
 
 
+def test_list_separator():
+    """_list joins output with newlines by default, but the separator
+    should be configurable."""
+    from plann.lib import _list
+    with patch('plann.lib.click.echo_via_pager') as pager:
+        _list(['a', 'b', 'c'])
+        pager.assert_called_once_with('a\nb\nc')
+    with patch('plann.lib.click.echo_via_pager') as pager:
+        _list(['a', 'b', 'c'], separator=' | ')
+        pager.assert_called_once_with('a | b | c')
+
+
+def test_interactive_edit_start():
+    """The interactive 'start' command kicks off time tracking and then
+    re-prompts, so a follow-up command can be given for the same task."""
+    from plann.interactive import _interactive_edit
+    obj = Todo()
+    obj.data = todo
+    prompts = iter(['start', 'ignore'])
+    with patch('plann.interactive.add_time_tracking') as att:
+        with patch.object(obj, 'save'):
+            with patch('click.echo'):
+                with patch('click.prompt', side_effect=lambda *a, **k: next(prompts)) as prompt:
+                    _interactive_edit(obj)
+    att.assert_called_once_with(obj)
+    assert prompt.call_count == 2
+
+
 def test_add_set_category():
     t = Todo()
     t.data = todo
