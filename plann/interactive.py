@@ -35,7 +35,7 @@ from plann.lib import (
     add_time_tracking,
 )
 from plann.template import Template
-from plann.timespec import _ensure_ts, parse_add_dur
+from plann.timespec import DURATION_UNITS, _ensure_ts, parse_add_dur
 
 
 def _pdb_edit(obj, interactive=True):
@@ -391,7 +391,7 @@ def _get_obj_from_line(line, calendar):
     return obj
 
 def _command_line_edit(line, calendar, interactive=True):
-    regexp = re.compile("((?:set [^ ]*=[^ ]*)|(?:postpone (?:[0-9]+[smhdwy]|20[0-9][0-9]-[0-9][0-9]-[0-9][0-9]))|[^ ]*) (.*)$")
+    regexp = re.compile(rf"((?:set [^ ]*=[^ ]*)|(?:postpone (?:[0-9]+[{DURATION_UNITS}]|20[0-9][0-9]-[0-9][0-9]-[0-9][0-9]))|[^ ]*) (.*)$")
     line = _strip_line(line)
     if not line:
         return

@@ -19,6 +19,21 @@ while parse_timespec doesn't.
 The naming of those two are a bit arbitrary and may be changed in a future version of the library.  Old names will then continue working as legacy aliases.
 """
 
+## The relative-duration mini-grammar (e.g. "2h", "1y1w", "+2.5h").  Historically
+## this [smhdwy] unit set was duplicated in four places (parse_add_dur,
+## _parse_timespec, commands.__select and interactive._command_line_edit); it lives
+## here now so adding a new unit (e.g. months) only touches one spot.
+DURATION_UNITS = "smhdwy"
+## A single magnitude+unit token (signed/decimal), with the remainder captured in
+## group 3 so callers can tokenize a multi-unit duration one component at a time.
+DURATION_TOKEN_RE = re.compile(rf'([+-]?\d+(?:\.\d+)?)([{DURATION_UNITS}])(.*)')
+## A complete bare duration such as "1y1w2h" (one capturing group around the whole).
+DURATION_RE = re.compile(rf'((?:\d+(?:\.\d+)?[{DURATION_UNITS}])+)')
+
+def is_duration(text):
+    """True if the whole string is a bare relative duration like "1y1w2h"."""
+    return bool(re.fullmatch(DURATION_RE, text))
+
 ## Singleton (aka global variable)
 @dataclass
 class Tz:
@@ -153,7 +168,7 @@ def parse_add_dur(dt, dur, for_storage=False, ts_allowed=False):
     }
     diff = datetime.timedelta(0)
     while dur:
-        rx = re.match(r'([+-]?\d+(?:\.\d+)?)([smhdwy])(.*)', dur)
+        rx = DURATION_TOKEN_RE.match(dur)
         if not rx:
             if ts_allowed:
                 return parse_dt(dur)
@@ -212,7 +227,7 @@ def _parse_timespec(timespec):
 
     ## calendar-cli format, 1998-10-03 15:00+2h
     if '+' in timespec:
-        rx = re.match(r'(.*)\+((?:\d+(?:\.\d+)?[smhdwy])+)$', timespec)
+        rx = re.match(rf'(.*)\+{DURATION_RE.pattern}$', timespec)
         if rx:
             start = parse_dt(rx.group(1))
             end = parse_add_dur(start, rx.group(2))

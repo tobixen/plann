@@ -19,7 +19,6 @@ from plann.interactive import (
     _mass_reprioritize,
     _pdb_edit,
     _strip_line,
-    command_edit,
     interactive_split_task,
 )
 from plann.lib import (
@@ -36,7 +35,7 @@ from plann.lib import (
 )
 from plann.panic_planning import timeline_suggestion
 from plann.template import Template
-from plann.timespec import _ensure_ts, _now, parse_add_dur, parse_dt, parse_timespec, tz
+from plann.timespec import DURATION_RE, _ensure_ts, _now, parse_add_dur, parse_dt, parse_timespec, tz
 
 
 def _select(ctx, interactive=False, mass_interactive=False, **kwargs):
@@ -114,7 +113,7 @@ def __select(ctx, extend_objects=False, all=None, uid=[], abort_on_missing_uid=N
         if kwargs_.get('start'):
             kwargs['start'] = parse_dt(kwargs['start'])
         if kwargs_.get('end') and not isinstance(kwargs_.get('end'), datetime.date):
-            rx = re.match(r'\+((\d+(\.\d+)?[smhdwy])+)', kwargs['end'])
+            rx = re.match(rf'\+{DURATION_RE.pattern}', kwargs['end'])
             if rx:
                 kwargs['end'] = parse_add_dur(kwargs.get('start', datetime.datetime.now()), rx.group(1))
             else:
