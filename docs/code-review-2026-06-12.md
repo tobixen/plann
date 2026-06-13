@@ -372,3 +372,43 @@ then the remaining crash-on-edge-case items **#6-#15**. The duplication of
 
 > Note: filename uses `2026-06-12` per request; the review was actually run
 > 2026-06-13.
+
+---
+
+## Fix status (updated 2026-06-13)
+
+| # | Title | Status | Notes |
+|---|-------|--------|-------|
+| 1 | `add-time-tracking` crashes — missing `--` on option | ✅ Fixed | `cli.py:192` |
+| 2 | `--no-pinned-tasks --todo` raises `NameError`/`AttributeError` | ✅ Fixed | `commands.py:160-162` |
+| 3 | `_relationship_text` only shows first relation type | ✅ Fixed | `lib.py:377` — `return` dedented |
+| 4 | `_list(..., ics=True)` skips filter on first object | ✅ Fixed | `lib.py:441` |
+| 5 | Inverted condition in `interactive_split_task` — never postpones | ✅ Fixed | `interactive.py:336` |
+| 6 | Year duration ~15 days (missing `*24`) | ✅ Fixed | `timespec.py` — corrected constant; `y` branch now uses `relativedelta` |
+| 7 | `parse_add_dur` year branch crashes on `date` / Feb 29 | ✅ Fixed | `timespec.py` — `relativedelta(years=n)` handles both |
+| 8 | Multi-unit duration loses all but last unit (no `dt`) | ✅ Fixed | `timespec.py` — accumulate `diff` instead of overwriting |
+| 9 | Event-only guard in `add-time-tracking` never fires | ✅ Fixed | `cli.py:202` — fixed `all()` |
+| 10 | `timeline_suggestion` crashes on all-day / DTEND-less events | ✅ Fixed | `panic_planning.py:112` |
+| 11 | `interactive check-due --limit` is a string, not int | ✅ Fixed | `cli.py:519` — added `type=int` |
+| 12 | `obj.icalendar_component_UID` crashes in inconsistency-log path | ✅ Fixed | `lib.py:355` |
+| 13 | Leftover `breakpoint()` in `_procrastinate` | ⏸ On hold | `lib.py:241-244` |
+| 14 | `time_tracking` string iterated char-by-char | ✅ Fixed | `lib.py:165` — wrap scalar in list |
+| 15 | `dismiss-panic` double-prefixes lookahead (`++60d`) | ✅ Fixed | `cli.py:538` + `commands.py:466` |
+| C1 | `_interactive_edit` duplicated in `commands.py` (stale copy) | ❌ TODO | Cleanup |
+| C2 | `pdb` hand-off block duplicated | ❌ TODO | Cleanup |
+| C3 | Inline summary fallback duplicates `_summary` | ❌ TODO | Cleanup |
+| C4 | `get_obj` / `_get_obj_from_line` duplicate parsers | ❌ TODO | Cleanup |
+| C5 | Duration grammar encoded in 4 places | ❌ TODO | Cleanup |
+| C6 | Component-type detection by raw-string sniffing | ❌ TODO | Cleanup |
+| C7 | `category` vs `categories` special-cased in 5 places | ❌ TODO | Cleanup |
+| C8 | `interactive_config` key list hardcoded / diverged | ❌ TODO | Cleanup |
+| C9 | `extra_config` smuggled as monkey-patched attribute | ❌ TODO | Cleanup |
+| C10 | `_editor` re-implements `shutil.which` | ❌ TODO | Cleanup |
+| C11 | `_split_vcals` hand-rolls VCALENDAR parsing | ❌ TODO | Cleanup |
+| E1 | `find_calendars()` called unconditionally (even `--help`) | ❌ TODO | Efficiency |
+| E2 | `Template(skey)` rebuilt on every sort comparison | ❌ TODO | Efficiency |
+| E3 | `_relships_by_type` N×R round-trips in `list --top-down` | ❌ TODO | Efficiency |
+| E4 | `_set_task_attribs` issues a fresh server `_select` per attribute | ❌ TODO | Efficiency |
+| E5 | `--uid` resolution keeps querying after a hit | ❌ TODO | Efficiency |
+| D1 | `raise NotImplementedError` unreachable at `timespec.py:229` | ❌ TODO | Dead code |
+| D2 | `'with family'` checked twice in `command_edit` | ❌ TODO | Dead code |

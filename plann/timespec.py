@@ -4,6 +4,7 @@ import zoneinfo
 from dataclasses import dataclass
 
 import dateparser
+from dateutil.relativedelta import relativedelta
 
 """
 Most important content:
@@ -148,8 +149,9 @@ def parse_add_dur(dt, dur, for_storage=False, ts_allowed=False):
     time_units = {
         's': 1, 'm': 60, 'h': 3600,
         'd': 86400, 'w': 604800,
-        'y': 1314000
+        'y': 31536000
     }
+    diff = datetime.timedelta(0)
     while dur:
         rx = re.match(r'([+-]?\d+(?:\.\d+)?)([smhdwy])(.*)', dur)
         if not rx:
@@ -160,12 +162,16 @@ def parse_add_dur(dt, dur, for_storage=False, ts_allowed=False):
         i = float(rx.group(1))
         u = rx.group(2)
         dur = rx.group(3)
-        if u=='y' and dt:
-            dt = datetime.datetime.combine(datetime.date(dt.year+int(i), dt.month, dt.day), dt.time(), tzinfo=dt.tzinfo)
-        else:
-            diff = datetime.timedelta(0, i*time_units[u])
+        if u=='y':
             if dt:
-                dt = dt + diff
+                dt = dt + relativedelta(years=int(i))
+            else:
+                diff += datetime.timedelta(seconds=int(i)*time_units['y'])
+        else:
+            component = datetime.timedelta(0, i*time_units[u])
+            diff += component
+            if dt:
+                dt = dt + component
     if dt:
         return dt.astimezone(tz.store_timezone) if for_storage else dt
     else:

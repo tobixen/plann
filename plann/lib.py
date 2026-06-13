@@ -162,6 +162,8 @@ def add_time_tracking(obj, start=None, end=None):
         start = comp.start
         end = comp.end
 
+    if isinstance(time_tracking, str):
+        time_tracking = [time_tracking]
     for tt in time_tracking:
         ## TODO: this must be done in a more clever way if introducing more time tracking types
         if tt in ('timewarrior', 'Timewarrior', 'timew'):
@@ -352,7 +354,7 @@ def _relships_by_type(obj, reltype_wanted=None):
                     back_rel_types.add(back_rel_type)
 
             if len(back_rel_types) > 1:
-                logging.error(f"Inconsistency issue in relationships - has to be manually resolved (UID={obj.icalendar_component_UID}, backrels: {back_rel_types})")
+                logging.error(f"Inconsistency issue in relationships - has to be manually resolved (UID={obj.icalendar_component['UID']}, backrels: {back_rel_types})")
                 ## Inconsistency has to be manually fixed: more than one related-to property pointing from other to obj
             if len(back_rel_types) == 0:
                 logging.error("Inconsistency issue in relationships - will be automatically fixed: no related-to property pointing from other to obj")
@@ -374,7 +376,7 @@ def _relationship_text(obj, reltype_wanted=None):
         for relobj in rels[reltype]:
             objs.append(_summary(relobj))
         ret.append(reltype + "\n" + "\n".join(objs) + "\n")
-        return "\n".join(ret)
+    return "\n".join(ret)
 
 ## TODO - this needs to be better documented.  What's the difference between _process_set_arg and _set_something?  Do they overlap?  Are they intended to be used together?
 def _process_set_arg(arg, value, keep_category=False):
@@ -436,12 +438,11 @@ def _list(objs, ics=False, template="{DTSTART:?{DUE:?(date missing)?}?%F %H:%M:%
     if indent>32:
         raise NotImplementedError("too deep hierarchies, or circular links")
     if ics:
-        if not objs:
+        accepted = [obj for obj in objs if filter(obj)]
+        if not accepted:
             return
-        icalendar = objs.pop(0).icalendar_instance
-        for obj in objs:
-            if not filter(obj):
-                continue
+        icalendar = accepted[0].icalendar_instance
+        for obj in accepted[1:]:
             icalendar.subcomponents.extend(obj.icalendar_instance.subcomponents)
         click.echo(icalendar.to_ical())
         return
