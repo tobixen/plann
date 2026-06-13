@@ -12,10 +12,12 @@ from plann.interactive import (
     _abort,
     _editor,
     _get_obj_from_line,
+    _interactive_edit,
     _interactive_ical_edit,
     _interactive_relation_edit,
     _mass_interactive_edit,
     _mass_reprioritize,
+    _pdb_edit,
     _strip_line,
     command_edit,
     interactive_split_task,
@@ -223,30 +225,6 @@ def _cats(ctx):
             categories.update(cats.cats)
     return categories
 
-def _interactive_edit(obj):
-    if 'BEGIN:VEVENT' in obj.data:
-        objtype = 'event'
-    elif 'BEGIN:VTODO' in obj.data:
-        objtype = 'todo'
-    elif 'BEGIN:VJOURNAL' in obj.data:
-        objtype = 'journal'
-    else:
-        assert False
-    if objtype != 'todo':
-        raise NotImplementedError("interactive editing only implemented for tasks")
-    comp = obj.icalendar_component
-    summary = _summary(comp)
-    dtstart = comp.get('DTSTART')
-    pri = comp.get('PRIORITY', 0)
-    due = obj.get_due()
-    if not dtstart or not due:
-        click.echo(f"task without dtstart or due found, please run set-task-attribs subcommand.  Ignoring {summary}")
-        return
-    dtstart = _ensure_ts(dtstart)
-    click.echo(f"pri={pri} {dtstart:%F %H:%M:%S %Z} - {due:%F %H:%M:%S %Z}: {summary}")
-    input = click.prompt("postpone <n>d / ignore / part(ially-complete) / complete / split / cancel / set foo=bar / edit / family / pdb?", default='ignore')
-    command_edit(obj, input, interactive=True)
-
 def _edit(ctx, add_category=None, cancel=None, interactive_ical=False, interactive_relations=False, mass_interactive_default='ignore', mass_interactive=False, interactive=False, complete=None, complete_recurrence_mode='safe', postpone=None, postpone_with_children=None, interactive_reprioritize=False, **kwargs):
     """
     Edits a task/event/journal
@@ -280,11 +258,7 @@ def _edit(ctx, add_category=None, cancel=None, interactive_ical=False, interacti
             _interactive_edit(obj)
         comp = obj.icalendar_component
         if kwargs.get('pdb'):
-            click.echo("icalendar component available as comp")
-            click.echo("caldav object available as obj")
-            click.echo("do the necessary changes and press c to continue normal code execution")
-            click.echo("happy hacking")
-            breakpoint()
+            _pdb_edit(obj)
         for arg in ctx.obj['set_args']:
             _set_something(obj, arg, ctx.obj['set_args'][arg])
         if add_category:

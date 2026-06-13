@@ -394,10 +394,10 @@ then the remaining crash-on-edge-case items **#6-#15**. The duplication of
 | 13 | Leftover `breakpoint()` in `_procrastinate` | ⏸ On hold | `lib.py:241-244` |
 | 14 | `time_tracking` string iterated char-by-char | ✅ Fixed | `lib.py:165` — wrap scalar in list |
 | 15 | `dismiss-panic` double-prefixes lookahead (`++60d`) | ✅ Fixed | `cli.py:538` + `commands.py:466` |
-| C1 | `_interactive_edit` duplicated in `commands.py` (stale copy) | ❌ TODO | Cleanup |
-| C2 | `pdb` hand-off block duplicated | ❌ TODO | Cleanup |
-| C3 | Inline summary fallback duplicates `_summary` | ❌ TODO | Cleanup |
-| C4 | `get_obj` / `_get_obj_from_line` duplicate parsers | ❌ TODO | Cleanup |
+| C1 | `_interactive_edit` duplicated in `commands.py` (stale copy) | ✅ Fixed | Deleted copy, import canonical from `interactive` |
+| C2 | `pdb` hand-off block duplicated | ✅ Fixed | Extracted `_pdb_edit(obj)` in `interactive.py` |
+| C3 | Inline summary fallback duplicates `_summary` | ✅ Fixed | `interactive.py:301` uses `_summary(obj)` |
+| C4 | `get_obj` / `_get_obj_from_line` duplicate parsers | ✅ Fixed | Deleted `get_obj` closure, use `_get_obj_from_line` |
 | C5 | Duration grammar encoded in 4 places | ❌ TODO | Cleanup |
 | C6 | Component-type detection by raw-string sniffing | ❌ TODO | Cleanup |
 | C7 | `category` vs `categories` special-cased in 5 places | ❌ TODO | Cleanup |

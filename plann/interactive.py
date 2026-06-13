@@ -38,6 +38,15 @@ from plann.template import Template
 from plann.timespec import _ensure_ts, parse_add_dur
 
 
+def _pdb_edit(obj, interactive=True):
+    comp = obj.icalendar_component  # noqa: F841 — visible in pdb session
+    if interactive:
+        click.echo("icalendar component available as comp")
+        click.echo("caldav object available as obj")
+        click.echo("do the necessary changes and press c to continue normal code execution")
+        click.echo("happy hacking")
+    breakpoint()
+
 def command_edit(obj, command, interactive=True):
     if command == 'ignore':
         return
@@ -86,12 +95,7 @@ def command_edit(obj, command, interactive=True):
         ## TODO - experimental and very incomplete!
         add_time_tracking(obj)
     elif command == 'pdb':
-        if interactive:
-            click.echo("icalendar component available as comp")
-            click.echo("caldav object available as obj")
-            click.echo("do the necessary changes and press c to continue normal code execution")
-            click.echo("happy hacking")
-        breakpoint()
+        _pdb_edit(obj, interactive=interactive)
     else:
         if interactive:
             click.echo(f"unknown instruction '{command}' - ignoring")
@@ -150,13 +154,6 @@ def _set_relations_from_text_list(calendar, some_list, parent=None, indent=0):
                 return j
         return None
 
-    def get_obj(line):
-        """Check the uuid on the line and return the caldav object"""
-        uid = line.lstrip().split(':')[0]
-        if not uid:
-            raise NotImplementedError("No uid - what now?")
-        return calendar.object_by_uid(uid)
-
     i=0
     children = []
     while i<len(some_list):
@@ -185,13 +182,22 @@ def _set_relations_from_text_list(calendar, some_list, parent=None, indent=0):
                 if new_indent < line_indent and new_indent != indent:
                     raise NotImplementedError("unexpected indentation 2")
                 j+=1
-            _set_relations_from_text_list(calendar, some_list[i:j], parent=get_obj(some_list[i-1]), indent=line_indent)
+            ## _get_obj_from_line returns None for a blank or comment line.
+            ## Passing that on as the parent would make _adjust_relations
+            ## strip the PARENT relation off every child below it, so abort
+            ## rather than silently mutating the user's data.
+            parent_obj = _get_obj_from_line(some_list[i-1], calendar)
+            if parent_obj is None:
+                raise NotImplementedError(f"no task found on the line above the indented section: {some_list[i-1]!r}")
+            _set_relations_from_text_list(calendar, some_list[i:j], parent=parent_obj, indent=line_indent)
             i=j
             continue
 
         ## Unindented line.  Should be a direct child under parent
         if line_indent == indent:
-            children.append(get_obj(some_list[i]))
+            obj = _get_obj_from_line(some_list[i], calendar)
+            if obj is not None:
+                children.append(obj)
             i+=1
             continue
 
@@ -305,7 +311,7 @@ def _mass_interactive_edit(objs, default='ignore'):
 
 def interactive_split_task(obj, partially_complete=False, too_big=True):
     comp = obj.icalendar_component
-    summary = comp.get('summary') or comp.get('description') or comp.get('uid')
+    summary = _summary(obj)
     estimate = obj.get_duration()
     tbm = ""
     if too_big:
