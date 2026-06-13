@@ -398,7 +398,7 @@ then the remaining crash-on-edge-case items **#6-#15**. The duplication of
 | C2 | `pdb` hand-off block duplicated | ✅ Fixed | Extracted `_pdb_edit(obj)` in `interactive.py` |
 | C3 | Inline summary fallback duplicates `_summary` | ✅ Fixed | `interactive.py:301` uses `_summary(obj)` |
 | C4 | `get_obj` / `_get_obj_from_line` duplicate parsers | ✅ Fixed | Deleted `get_obj` closure, use `_get_obj_from_line` |
-| C5 | Duration grammar encoded in 4 places | ❌ TODO | Cleanup |
+| C5 | Duration grammar encoded in 4 places | ✅ Fixed | `timespec.py` exports `DURATION_UNITS`/`DURATION_RE`/`DURATION_TOKEN_RE`/`is_duration`; all 4 sites use them |
 | C6 | Component-type detection by raw-string sniffing | ❌ TODO | Cleanup |
 | C7 | `category` vs `categories` special-cased in 5 places | ❌ TODO | Cleanup |
 | C8 | `interactive_config` key list hardcoded / diverged | ❌ TODO | Cleanup |

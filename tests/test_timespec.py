@@ -3,6 +3,7 @@ from datetime import date, datetime, timedelta, timezone
 import pytest
 
 from plann.lib import _ensure_ts, parse_add_dur, parse_dt, parse_timespec, tz
+from plann.timespec import DURATION_RE, is_duration
 
 utc = timezone.utc
 
@@ -188,9 +189,47 @@ class TestNaturalLanguage:
         result = parse_dt("Monday")
         assert result.weekday() == 0  # Monday
 
+    def test_relative_future(self):
+        tz.implicit_timezone = "Europe/Oslo"
+        result = parse_dt("in 2 days")
+        expected = (datetime.now().astimezone() + timedelta(days=2)).date()
+        got = result.date() if isinstance(result, datetime) else result
+        assert got == expected
+
+    def test_yesterday_via_timespec(self):
+        """Natural-language dates should also flow through parse_timespec()."""
+        tz.implicit_timezone = "Europe/Oslo"
+        start, end = parse_timespec("yesterday")
+        expected = (datetime.now().astimezone() - timedelta(days=1)).date()
+        got = start.date() if isinstance(start, datetime) else start
+        assert got == expected
+        assert end is None
+
     def test_invalid_raises(self):
         with pytest.raises(ValueError):
             parse_dt("not a date at all !!!!")
+
+
+class TestDurationGrammar:
+    """The [smhdwy] relative-duration grammar is centralised in timespec.py."""
+
+    @pytest.mark.parametrize("text,expected", [
+        ("1y1w2h", True),
+        ("2.5h", True),
+        ("30m", True),
+        ("1s", True),
+        ("yesterday", False),
+        ("2021-01-08", False),
+        ("3M", False),   # months not part of the grammar (yet)
+        ("", False),
+    ])
+    def test_is_duration(self, text, expected):
+        assert is_duration(text) == expected
+
+    def test_duration_re_is_shared(self):
+        """The same compiled regex backs is_duration() and the suffix matcher."""
+        assert DURATION_RE.fullmatch("1y1w2h")
+        assert not DURATION_RE.fullmatch("1y1w2x")
 
 
 def test_ensure_ts():
