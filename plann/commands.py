@@ -158,8 +158,8 @@ def __select(ctx, extend_objects=False, all=None, uid=[], abort_on_missing_uid=N
                         else:
                             ret_objs.append(obj)
             if isinstance(obj, caldav.Todo) and not pinned_tasks:
-                _relships_by_type(obj, 'CHILD').get('CHILD',[])
-                if not any(x.icalendar_comp.get('STATUS', '')!='CANCELLED' for x in parents if isinstance(x, caldav.Event)):
+                children = _relships_by_type(obj, 'CHILD').get('CHILD',[])
+                if not any(x.icalendar_component.get('STATUS', '')!='CANCELLED' for x in children if isinstance(x, caldav.Event)):
                     ret_objs.append(obj)
         ctx.obj['objs'] = ret_objs
 

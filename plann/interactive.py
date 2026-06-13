@@ -333,7 +333,7 @@ def interactive_split_task(obj, partially_complete=False, too_big=True):
         new_summary = click.prompt("Summary of the parent task?", default=obj.icalendar_component['SUMMARY'])
         obj.icalendar_component['SUMMARY'] = new_summary
         postpone = click.prompt("Should we postpone the parent task?", default='0h')
-        if postpone in ('0h', '0'): ## TODO: regexp?
+        if postpone not in ('0h', '0'): ## TODO: regexp?
             _procrastinate([obj], postpone, check_dependent='interactive', err_callback=click.echo, confirm_callback=click.confirm)
         obj.save()
 

@@ -109,7 +109,8 @@ def timeline_suggestion(ctx, hours_per_day=4, timeline_end=None):
         comp = event.icalendar_component
         if comp.get('STATUS', '') == 'CANCELLED':
             continue
-        if 'RELATED-TO' in comp and event.get_dtend()>_now():
+        dtend = event.get_dtend()
+        if 'RELATED-TO' in comp and dtend is not None and _ensure_ts(dtend)>_now():
             rels = event.get_relatives(fetch_objects=False)
             for rel in rels['PARENT']:
                 event_parents.append(str(rel))

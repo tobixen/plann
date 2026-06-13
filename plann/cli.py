@@ -189,7 +189,7 @@ def select(*largs, **kwargs):
 
 @select.command()
 @click.pass_context
-@click.option('startnow/track', help="the event starts now vs track the original timespan", default=True)
+@click.option('--startnow/--track', help="the event starts now vs track the original timespan", default=True)
 def add_time_tracking(ctx, startnow):
     """
     Track time spent on events/tasks
@@ -199,7 +199,7 @@ def add_time_tracking(ctx, startnow):
         start_time = _now()
     else:
         start_time = None
-    if not startnow and not all (x for x in objs if isinstance(x, caldav.calendarobjectresource.Event)):
+    if not startnow and not all(isinstance(x, caldav.Event) for x in objs):
         _abort("original timespan is only allowed for events - and you've selected tasks or journals")
     if len(objs)>1 and startnow:
         _abort("Only one event/task can be started at the time")
@@ -516,7 +516,7 @@ def manage_tasks(ctx):
     _agenda(ctx)
 
 @interactive.command()
-@click.option('--limit', help='If more than limit overdue tasks are found, probably we should do a mass procrastination rather than going through one and one task')
+@click.option('--limit', type=int, help='If more than limit overdue tasks are found, probably we should do a mass procrastination rather than going through one and one task')
 @click.option('--lookahead', help='Look-ahead time - check tasks that needs to be completed in the near future', default='+16h')
 @click.pass_context
 def check_due(ctx, limit, lookahead):
@@ -535,7 +535,7 @@ def dismiss_panic(ctx, hours_per_day, lookahead='60d'):
     Search for panic points, checks if they can be solved by
     procrastinating tasks, comes up with suggestions
     """
-    return _dismiss_panic(ctx, hours_per_day, f"+{lookahead}")
+    return _dismiss_panic(ctx, hours_per_day, lookahead)
 
 
 @interactive.command()
