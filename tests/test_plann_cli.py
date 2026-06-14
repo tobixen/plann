@@ -8,7 +8,80 @@ from click.testing import CliRunner
 import plann.cli as cli_mod
 import plann.commands as commands_mod
 from plann.cli import _LazyCalendars, cli, edit
-from plann.commands import _process_add_args, _sort_key_function
+from plann.commands import _process_add_args, _set_task_attribs, _sort_key_function, _todos_missing
+
+
+def _make_todo(uid, *, category=False, due=False, priority=False, dtstart=False):
+    lines = ["UID:" + uid, "SUMMARY:task " + uid, "STATUS:NEEDS-ACTION"]
+    if category:
+        lines.append("CATEGORIES:work")
+    if dtstart:
+        lines.append("DTSTART:20250101T100000Z")
+    if due:
+        lines.append("DUE:20250102T100000Z")
+    if priority:
+        lines.append("PRIORITY:5")
+    obj = Todo()
+    obj.data = (
+        "BEGIN:VCALENDAR\nVERSION:2.0\nPRODID:-//Example Corp.//CalDAV Client//EN\n"
+        "BEGIN:VTODO\n" + "\n".join(lines) + "\nEND:VTODO\nEND:VCALENDAR"
+    )
+    return obj
+
+
+class _FakeCtx:
+    def __init__(self):
+        self.obj = {'calendars': [], 'objs': []}
+
+
+def test_todos_missing():
+    """_todos_missing keeps only the tasks where the property is absent."""
+    with_cat = _make_todo('a', category=True)
+    without_cat = _make_todo('b')
+    result = _todos_missing([with_cat, without_cat], 'categories')
+    assert [str(o.icalendar_component['UID']) for o in result] == ['b']
+
+
+def test_set_task_attribs_fetches_once():
+    """set-task-attribs must fetch the task list once and filter client-side
+    per attribute, not issue a fresh server select per attribute (code review
+    E4)."""
+    ## fully-specified todos => nothing is missing => no interactive prompting
+    todos = [_make_todo(uid, category=True, due=True, priority=True, dtstart=True)
+             for uid in ('a', 'b', 'c')]
+    calls = []
+
+    def fake_select(ctx, **kwargs):
+        calls.append(kwargs)
+        ctx.obj['objs'] = list(todos)
+
+    ctx = _FakeCtx()
+    with patch.object(commands_mod, '_select', fake_select):
+        _set_task_attribs(ctx)
+    assert len(calls) == 1, f"expected a single fetch, got {len(calls)}"
+
+
+def test_set_task_attribs_prompts_missing_attribute():
+    """A task missing only a category is prompted for it (and only it), and
+    the entered category is saved - the single-fetch refactor still drives the
+    interactive flow."""
+    ## has due/priority/dtstart, lacks only a category
+    todo = _make_todo('a', due=True, priority=True, dtstart=True)
+
+    def fake_select(ctx, **kwargs):
+        ctx.obj['objs'] = [todo]
+
+    ctx = _FakeCtx()
+    with patch.object(commands_mod, '_select', fake_select), \
+         patch.object(todo, 'save') as save, \
+         patch('plann.commands.click.echo'), \
+         patch('plann.commands.click.prompt', return_value='work') as prompt:
+        _set_task_attribs(ctx)
+
+    ## exactly one prompt (the missing category), and it got persisted
+    assert prompt.call_count == 1
+    save.assert_called_once()
+    assert 'work' in todo.data
 
 _TODO = """BEGIN:VCALENDAR
 VERSION:2.0

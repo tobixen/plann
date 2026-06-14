@@ -31,6 +31,7 @@ dependencies = [
     "dateparser>=1.2",
     "python-dateutil",
     "icalendar",
+    "icalendar_searcher",
 ]
 
 [project.urls]

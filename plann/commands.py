@@ -7,6 +7,7 @@ import caldav
 
 ## TODO: can we remove the click-dependency?
 import click
+from icalendar_searcher import Searcher
 
 from plann.interactive import (
     _abort,
@@ -228,13 +229,35 @@ def __select(ctx, extend_objects=False, all=None, uid=[], abort_on_missing_uid=N
                 if attr == 'SUMMARY':
                     comp[attr] = freebusyhack
 
-def _cats(ctx):
+def _categories_in_use(objs):
     categories = set()
-    for obj in ctx.obj['objs']:
+    for obj in objs:
         cats = obj.icalendar_component.get('categories')
         if cats:
             categories.update(cats.cats)
     return categories
+
+def _cats(ctx):
+    return _categories_in_use(ctx.obj['objs'])
+
+def _todos_missing(objs, prop):
+    """Return the objects from ``objs`` that have no ``prop`` property set.
+
+    Client-side filtering via icalendar_searcher's ``undef`` operator - the
+    same semantics the caldav library uses for the server-side ``no_<prop>``
+    search, so we can fetch the task list once and filter locally rather than
+    issuing one server query per attribute (code review E4)."""
+    searcher = Searcher(todo=True)
+    searcher.add_property_filter(prop, None, operator="undef")
+
+    def _missing(obj):
+        ## "undef" only catches a property that is absent altogether.  An
+        ## empty value is no value, and RFC 5545 PRIORITY:0 means "undefined
+        ## priority" - plann treats it that way everywhere else, so those
+        ## tasks must still be offered for editing.
+        return searcher.check_component(obj) or not obj.icalendar_component.get(prop)
+
+    return [obj for obj in objs if _missing(obj)]
 
 def _edit(ctx, cancel=None, interactive_ical=False, interactive_relations=False, mass_interactive_default='ignore', mass_interactive=False, interactive=False, complete=None, complete_recurrence_mode='safe', postpone=None, postpone_with_children=None, interactive_reprioritize=False, **kwargs):
     """
@@ -550,40 +573,36 @@ def _set_task_attribs(ctx):
     """
     actual implementation of set_task_attribs
     """
-    ## Tasks missing a category
     LIMIT = 16
 
+    ## Fetch the pending todos once, then filter client-side per attribute -
+    ## rather than issuing a fresh server select for each attribute (E4).
+    _select(ctx=ctx, todo=True, sort_key=['{DTSTART:?{DUE:?(0000)?}?%F %H:%M:%S}', '{PRIORITY:?0?}'])
+    todos = list(ctx.obj['objs'])
+
     def _set_something_(something, help_text, help_url=None, default=None, objs=None):
-        cond = {f"no_{something}": True}
         something_ = _comma_list_canonical(something) if _is_comma_list_attr(something) else something
         if something == 'duration':
             something_ = 'dtstart'
-            cond['no_dtstart'] = True
-        _select(ctx=ctx, todo=True, limit=LIMIT, sort_key=['{DTSTART:?{DUE:?(0000)?}?%F %H:%M:%S}', '{PRIORITY:?0?}'], **cond)
-        ## Doing some client-side filtering due to calendar servers that don't support the RFC properly
-        ## TODO: "Incompatibility workarounds" should be moved to the caldav library
-        objs_ = [x for x in ctx.obj['objs'] if not x.icalendar_component.get(something_)]
+        objs_ = _todos_missing(todos, something_)
 
         ## add all non-duplicated objects from objs to objs_
         uids_ = {x.icalendar_component['UID'] for x in objs_}
         for obj in objs or []:
             if obj.icalendar_component['UID'] not in uids_:
-                obj.load()
                 objs_.append(obj)
         objs = objs_
+        if something == 'duration':
+            objs = [x for x in objs if x.icalendar_component.get('due')]
 
         if objs:
-            if something == 'duration':
-                objs = [x for x in objs if x.icalendar_component.get('due')]
-            num = len(objs)
-            if num == LIMIT:
-                num = f"{LIMIT} or more"
+            capped = len(objs) > LIMIT
+            objs = objs[:LIMIT]
+            num = f"{LIMIT} or more" if capped else len(objs)
             click.echo(f"There are {num} tasks with no {something} set.")
             click.echo(help_url)
             if something == 'category':
-                _select(ctx=ctx, todo=True)
-                cats = list(_cats(ctx))
-                cats.sort()
+                cats = sorted(_categories_in_use(todos))
                 click.echo("List of existing categories in use (if any):")
                 click.echo("\n".join(cats))
             click.echo(f"For each task, {help_text}")
