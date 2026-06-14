@@ -7,6 +7,7 @@ and I do try to adhere to [Semantic Versioning](https://semver.org/spec/v2.0.0.h
 
 ### Added
 
+* `edit --add-categories`, `--add-resource` and `--add-resources` options (alongside the existing `--add-category`).  The plural forms (`--add-categories`/`--add-resources`) split the value on comma; the singular forms (`--add-category`/`--add-resource`) keep a comma literal - so you do not have to remember whether to use singular or plural.
 * `select ... list --separator=...` to join the listed items with something other than a newline.  (Ported from the archived development branch.)
 * The interactive edit prompt now advertises the `start` command (kicks off time tracking for the task) and re-prompts afterwards so a follow-up command can be given for the same task.  (Ported from the archived development branch.)
 
@@ -18,6 +19,9 @@ and I do try to adhere to [Semantic Versioning](https://semver.org/spec/v2.0.0.h
 
 ### Changed
 
+* `edit --set-resources` now splits its value on comma, the same way `--set-categories` always has; `--set-resources a,b` now sets two resources rather than one resource literally named `a,b`.
+* `edit --set-category` is now flagged as deprecated in its `--help`: it *appends* rather than replaces (the name does not convey this).  Use `--add-category` to append or `--set-categories` to replace.
+* (internal) The `category`/`categories` (and now `resources`) handling on the edit path is driven by a single `COMMA_LIST_ATTRS` registry rather than being special-cased in several places.
 * Config file parsing, connection parameter extraction and calendar lookup are now delegated to the caldav library instead of being duplicated in plann.  (The caldav library adopted this code from plann a while back; plann was still carrying its own copy.)  Visible side effects: environment variable references like `${SOME_VAR}` or `${SOME_VAR:-default}` in config values are now expanded, and a `features` key is resolved through the caldav library's profile lookup.
 
 ## [v1.1.1] - 2026-05-28

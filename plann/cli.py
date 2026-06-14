@@ -40,7 +40,18 @@ from plann.commands import (
 )
 from plann.config import config_section, expand_config_section, read_config
 from plann.interactive import _abort
-from plann.lib import _caldav_objclass, _list, _split_vcal, _split_vcals, attr_int, attr_time, attr_txt_many, attr_txt_one, find_calendars
+from plann.lib import (
+    COMMA_LIST_ATTRS,
+    _caldav_objclass,
+    _list,
+    _split_vcal,
+    _split_vcals,
+    attr_int,
+    attr_time,
+    attr_txt_many,
+    attr_txt_one,
+    find_calendars,
+)
 from plann.lib import add_time_tracking as add_time_tracking_
 from plann.timespec import _now, parse_dt, tz
 
@@ -129,6 +140,12 @@ def _set_attr_options_(func, verb, desc=""):
     if verb == 'no-':
         for foo in attr_txt_one + attr_txt_many + attr_time + attr_int:
             func = click.option(f"--{verb}{foo}/--has-{foo}", default=None, help=f"{desc} ical attribute {foo}")(func)
+    elif verb == 'add-':
+        ## append-options, only for the comma-list properties, in both the
+        ## plural (comma-split) and singular (comma-literal) form
+        for plural, singular in COMMA_LIST_ATTRS.items():
+            for foo in (singular, plural):
+                func = click.option(f"--{verb}{foo}", help=f"{desc} ical attribute {plural}", multiple=True)(func)
     else:
         if verb == 'set-':
             attr__one = attr_txt_one + attr_time + attr_int
@@ -136,8 +153,18 @@ def _set_attr_options_(func, verb, desc=""):
             attr__one = attr_txt_one
         for foo in attr__one:
             func = click.option(f"--{verb}{foo}", help=f"{desc} ical attribute {foo}")(func)
-        for foo in attr_txt_many + ['categories']: ## TODO: category is the oddball, not categories
-            func = click.option(f"--{verb}{foo}", help=f"{desc} ical attribute {foo}", multiple=True)(func)
+        ## the extra 'categories' gives the plural form for the comma-list
+        ## attributes (attr_txt_many carries the singular 'category' as that is
+        ## the substring-search form; see lib.COMMA_LIST_ATTRS)
+        singular_to_plural = {s: p for p, s in COMMA_LIST_ATTRS.items()}
+        for foo in attr_txt_many + ['categories']:
+            help_text = f"{desc} ical attribute {foo}"
+            if verb == 'set-' and foo in singular_to_plural:
+                ## e.g. --set-category: kept for backwards compatibility, but it
+                ## *appends* rather than replaces, which the name does not convey
+                help_text = (f"{desc} ical attribute {foo} (DEPRECATED - this appends; use "
+                             f"--add-{foo} to append or --set-{singular_to_plural[foo]} to replace)")
+            func = click.option(f"--{verb}{foo}", help=help_text, multiple=True)(func)
     return func
 
 def _set_attr_options(verb="", desc=""):
@@ -272,7 +299,6 @@ def delete(ctx, multi_delete, **kwargs):
 ## TODO: reconsider the naming of the attributes and functions - --mass-interactive should probably be --interactive-editor - and the interactive reprioritization function needs to be renamed
 @select.command()
 @click.option('--pdb/--no-pdb', default=None, help="Interactive edit through pdb (experts only)")
-@click.option('--add-category', default=None, help="Add a category (equivalent with --set-category, while --set-categories will overwrite existing categories))", multiple=True)
 @click.option('--postpone', help="Add something to the DTSTART and DTEND/DUE")
 @click.option('--postpone-with-children', help="Add something to the DTSTART and DTEND/DUE for this and children")
 @click.option('--interactive-ical/--no-interactive-ical', help="Edit the ical interactively")
@@ -285,6 +311,7 @@ def delete(ctx, multi_delete, **kwargs):
 @click.option('--complete/--uncomplete', default=None, help="Mark task(s) as completed")
 @click.option('--complete-recurrence-mode', default='safe', help="Completion of recurrent tasks, mode to use - can be 'safe', 'thisandfuture' or '' (see caldav library for details)")
 @_set_attr_options(verb='set')
+@_set_attr_options(verb='add', desc='append to')
 @click.pass_context
 def edit(*largs, **kwargs):
     """

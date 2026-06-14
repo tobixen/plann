@@ -6,9 +6,11 @@ from caldav import Calendar, Todo
 
 from plann.lib import (
     _add_category,
+    _add_comma_list,
     _adjust_ical_relations,
     _caldav_objclass,
     _component_type,
+    _process_set_arg,
     _procrastinate,
     _set_something,
     _split_vcal,
@@ -172,17 +174,60 @@ def test_interactive_edit_start():
     assert prompt.call_count == 2
 
 
+def _comma_list_set(obj, prop):
+    """Read a comma-list property (CATEGORIES single-line vCategory, or
+    RESOURCES multi-line list) back as a set of strings."""
+    val = obj.icalendar_component.get(prop)
+    if val is None:
+        return set()
+    if hasattr(val, 'cats'):
+        return {str(x) for x in val.cats}
+    if isinstance(val, list):
+        return {str(x) for x in val}
+    return {str(val)}
+
+
 def test_add_set_category():
     t = Todo()
     t.data = todo
     _add_category(t, 'foo')
     assert 'CATEGORIES:foo' in t.data
+    assert _comma_list_set(t, 'CATEGORIES') == {'foo'}
     _add_category(t, 'bar')
-    set(t.icalendar_component['CATEGORIES'].cats) == {'foo', 'bar'}
+    assert _comma_list_set(t, 'CATEGORIES') == {'foo', 'bar'}
+    ## singular "category" appends ...
     _set_something(t, 'category', 'zoo')
-    set(t.icalendar_component['CATEGORIES'].cats) == {'foo', 'bar', 'zoo'}
+    assert _comma_list_set(t, 'CATEGORIES') == {'foo', 'bar', 'zoo'}
+    ## ... while plural "categories" replaces (and splits on comma)
     _set_something(t, 'categories', 'zoo,bar')
-    set(t.icalendar_component['CATEGORIES'].cats) == {'bar', 'zoo'}
+    assert _comma_list_set(t, 'CATEGORIES') == {'zoo', 'bar'}
+
+
+def test_add_set_resources():
+    """RESOURCES is the other RFC 5545 comma-list property and should behave
+    like CATEGORIES: append via _add_comma_list, replace via plural set."""
+    t = Todo()
+    t.data = todo
+    _add_comma_list(t, 'resources', ['Projector'])
+    _add_comma_list(t, 'resources', ['Easel', 'Screen'])
+    assert _comma_list_set(t, 'RESOURCES') == {'Projector', 'Easel', 'Screen'}
+    ## plural "resources" replaces
+    _set_something(t, 'resources', ['Whiteboard'])
+    assert _comma_list_set(t, 'RESOURCES') == {'Whiteboard'}
+
+
+def test_process_set_arg_comma_list():
+    """Plural forms split a lone comma value; singular forms keep it literal.
+    Resources must get the same treatment as categories (previously it did not
+    split)."""
+    ## plural: comma-split
+    assert _process_set_arg('categories', ('a,b',), keep_category=True) == {'categories': ['a', 'b']}
+    assert _process_set_arg('resources', ('a,b',), keep_category=True) == {'resources': ['a', 'b']}
+    ## singular: comma kept literal (one token)
+    assert _process_set_arg('category', ('a,b',), keep_category=True) == {'category': ['a,b']}
+    ## without keep_category, the singular alias is canonicalised to plural
+    ## (replace semantics, used by the create path -> save_todo(categories=...))
+    assert _process_set_arg('category', ('a,b',), keep_category=False) == {'categories': ['a,b']}
 
 ## _hasreltype is skipped as for now (too small and only used in _procrastinate)
 

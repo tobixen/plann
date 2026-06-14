@@ -400,7 +400,7 @@ then the remaining crash-on-edge-case items **#6-#15**. The duplication of
 | C4 | `get_obj` / `_get_obj_from_line` duplicate parsers | ✅ Fixed | Deleted `get_obj` closure, use `_get_obj_from_line` |
 | C5 | Duration grammar encoded in 4 places | ✅ Fixed | `timespec.py` exports `DURATION_UNITS`/`DURATION_RE`/`DURATION_TOKEN_RE`/`is_duration`; all 4 sites use them |
 | C6 | Component-type detection by raw-string sniffing | ✅ Fixed | `lib.py` exports `_component_type`/`_caldav_objclass`; all object/raw sites use them |
-| C7 | `category` vs `categories` special-cased in 5 places | ❌ TODO | Cleanup |
+| C7 | `category` vs `categories` special-cased in 5 places | ✅ Fixed | `lib.COMMA_LIST_ATTRS` registry + helpers; edit path centralised; also generalised to `resources` and added `--add-categories`/`--add-resource`/`--add-resources`; `--set-category` deprecated. Select-by `--category`(substring)/`--categories`(exact) left intact (caldav search semantics) |
 | C8 | `interactive_config` key list hardcoded / diverged | ❌ TODO | Cleanup |
 | C9 | `extra_config` smuggled as monkey-patched attribute | ❌ TODO | Cleanup |
 | C10 | `_editor` re-implements `shutil.which` | ✅ Fixed | `interactive.py` — uses `shutil.which`, raises clear error if no editor found |

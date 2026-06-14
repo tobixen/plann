@@ -38,9 +38,80 @@ from plann.timespec import (
 
 ## TODO: maybe find those attributes through the icalendar library? icalendar.cal.singletons, icalendar.cal.multiple, etc
 attr_txt_one = ['location', 'description', 'geo', 'organizer', 'summary', 'class', 'rrule', 'status']
-attr_txt_many = ['category', 'comment', 'contact', 'resources', 'parent', 'child'] ## category is an odd-ball, it should be categories - but we need a lot more test code before we can change that.
+## NOTE: "category" (singular) looks like an odd-ball next to the plural
+## "resources", but it is intentional: in a *search* the singular form means a
+## substring match and the plural "categories" an exact match (this distinction
+## is implemented in the caldav library / icalendar-searcher).  For *editing*,
+## the singular/plural pair is a comma-literal/comma-split convenience handled
+## through COMMA_LIST_ATTRS below.
+attr_txt_many = ['category', 'comment', 'contact', 'resources', 'parent', 'child']
 attr_time = ['dtstamp', 'dtstart', 'due', 'dtend', 'duration']
 attr_int = ['priority']
+
+## RFC 5545 "comma-token list" properties: multi-valued text properties whose
+## value is a comma-separated list of short tokens.  Exposed on the CLI in both
+## plural (comma-split, exact) and singular (comma-literal, substring) form.
+## Maps the plural canonical property name -> the singular alias.  Adding a new
+## such property here is all it takes for the edit machinery to handle it.
+COMMA_LIST_ATTRS = {
+    'categories': 'category',
+    'resources': 'resource',
+}
+_COMMA_LIST_SINGULARS = {singular: plural for plural, singular in COMMA_LIST_ATTRS.items()}
+
+def _is_comma_list_attr(name):
+    return name in COMMA_LIST_ATTRS or name in _COMMA_LIST_SINGULARS
+
+def _comma_list_is_plural(name):
+    return name in COMMA_LIST_ATTRS
+
+def _comma_list_canonical(name):
+    """The plural canonical property name for a comma-list attr (either form)."""
+    return name if name in COMMA_LIST_ATTRS else _COMMA_LIST_SINGULARS[name]
+
+def _comma_list_tokens(name, value):
+    """Normalise a CLI/interactive value into a list of tokens.
+
+    A bare string (interactive ``set cat=a,b``) is always split on comma.  A
+    tuple/list (click ``multiple=True``) is split only for the *plural* form and
+    only when a lone value contains a comma - so ``--add-category a,b`` keeps the
+    literal ``a,b`` while ``--add-categories a,b`` yields ``a`` and ``b``.
+    """
+    if hasattr(value, 'split'):
+        return value.split(',')
+    value = list(value)
+    if _comma_list_is_plural(name) and len(value) == 1 and ',' in value[0]:
+        return value[0].split(',')
+    return value
+
+def _comma_list_existing(comp, canonical):
+    """Existing tokens of a comma-list property as a plain list of strings.
+
+    Handles icalendar storing CATEGORIES as a single ``vCategory`` (``.cats``)
+    but RESOURCES as a list of ``vText`` (one property per value).
+    """
+    if canonical not in comp:
+        return []
+    val = comp.pop(canonical)
+    if hasattr(val, 'cats'):
+        return [str(x) for x in val.cats]
+    if isinstance(val, list):
+        return [str(x) for x in val]
+    return [str(val)]
+
+def _add_comma_list(obj, canonical, tokens):
+    """Append ``tokens`` to a comma-list property (e.g. CATEGORIES, RESOURCES)."""
+    comp = _icalendar_component(obj)
+    existing = _comma_list_existing(comp, canonical)
+    existing.extend(tokens)
+    comp.add(canonical, existing)
+
+def _set_comma_list(obj, canonical, tokens):
+    """Replace a comma-list property with ``tokens``."""
+    comp = _icalendar_component(obj)
+    if canonical in comp:
+        comp.pop(canonical)
+    comp.add(canonical, tokens)
 
 def _split_vcal(ical):
     """
@@ -139,15 +210,13 @@ def _caldav_objclass(ical):
     return caldav.Event
 
 def _add_category(obj, category):
-    comp = _icalendar_component(obj)
-    if 'categories' in comp:
-        cats = comp.pop('categories').cats
-    else:
-        cats = []
-    if hasattr(category, 'split'):
-        category = category.split(',')
-    cats.extend(category)
-    comp.add('categories', cats)
+    """Append one or more categories.
+
+    Back-compat wrapper around the generic comma-list helper; ``category`` may
+    be a comma-separated string or a list/tuple of categories.
+    """
+    tokens = category.split(',') if hasattr(category, 'split') else list(category)
+    _add_comma_list(obj, 'categories', tokens)
 
 def add_time_tracking_timew(obj, start=None, end=None):
     comp = _icalendar_component(obj)
@@ -412,13 +481,13 @@ def _process_set_arg(arg, value, keep_category=False):
             k,v = split1.split('=')
             rrule[k] = v
         ret[arg] = rrule
-    elif arg in ('category', 'categories'):
-        if hasattr(value, 'split'):
-            value = value.split(',')
-        elif len(value) == 1 and arg == 'categories' and ',' in value[0]:
-            value = value[0].split(',')
-        if not keep_category:
-            arg = 'categories'
+    elif _is_comma_list_attr(arg):
+        value = _comma_list_tokens(arg, value)
+        ## Without keep_category the singular alias is canonicalised to its
+        ## plural (replace) form - used by the create path, which forwards
+        ## set_args straight to caldav's save_todo(categories=...) etc.
+        if not keep_category and not _comma_list_is_plural(arg):
+            arg = _comma_list_canonical(arg)
         ret[arg] = value
     else:
         ret[arg] = value
@@ -438,8 +507,14 @@ def _set_something(obj, arg, value):
         obj.set_duration(value)
     elif arg in ('due', 'dtend'): ## TODO: dtstart!
         getattr(obj, f"set_{arg}")(value, move_dtstart=True, check_dependent=True)
-    elif arg == 'category':
-        _add_category(obj, value)
+    elif _is_comma_list_attr(arg):
+        ## a list (already processed by _process_set_arg) or a raw comma string
+        tokens = _comma_list_tokens(arg, value)
+        canonical = _comma_list_canonical(arg)
+        if _comma_list_is_plural(arg):
+            _set_comma_list(obj, canonical, tokens)   ## plural -> replace
+        else:
+            _add_comma_list(obj, canonical, tokens)   ## singular -> append
     else:
         if arg in comp:
             comp.pop(arg)

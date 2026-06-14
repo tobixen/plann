@@ -22,8 +22,11 @@ from plann.interactive import (
     interactive_split_task,
 )
 from plann.lib import (
-    _add_category,
+    _add_comma_list,
+    _comma_list_canonical,
+    _comma_list_tokens,
     _component_type,
+    _is_comma_list_attr,
     _list,
     _process_set_arg,
     _procrastinate,
@@ -225,13 +228,14 @@ def _cats(ctx):
             categories.update(cats.cats)
     return categories
 
-def _edit(ctx, add_category=None, cancel=None, interactive_ical=False, interactive_relations=False, mass_interactive_default='ignore', mass_interactive=False, interactive=False, complete=None, complete_recurrence_mode='safe', postpone=None, postpone_with_children=None, interactive_reprioritize=False, **kwargs):
+def _edit(ctx, cancel=None, interactive_ical=False, interactive_relations=False, mass_interactive_default='ignore', mass_interactive=False, interactive=False, complete=None, complete_recurrence_mode='safe', postpone=None, postpone_with_children=None, interactive_reprioritize=False, **kwargs):
     """
     Edits a task/event/journal
     """
     ## TODO: consolidate with command_edit
     if 'recurrence_mode' in kwargs:
         complete_recurrence_mode = kwargs.pop('recurrence_mode')
+    add_args = _process_add_args(kwargs)
     _process_set_args(ctx, kwargs, keep_category=True)
     if interactive_ical:
         _interactive_ical_edit(ctx.obj['objs'])
@@ -261,8 +265,8 @@ def _edit(ctx, add_category=None, cancel=None, interactive_ical=False, interacti
             _pdb_edit(obj)
         for arg in ctx.obj['set_args']:
             _set_something(obj, arg, ctx.obj['set_args'][arg])
-        if add_category:
-            _add_category(obj, add_category)
+        for canonical, tokens in add_args:
+            _add_comma_list(obj, canonical, tokens)
         if complete:
             obj.complete(handle_rrule=complete_recurrence_mode, rrule_mode=complete_recurrence_mode)
         elif complete is False:
@@ -349,6 +353,20 @@ def _check_for_panic(ctx, hours_per_day, output=True, print_timeline=True, fix_t
             _add_event(ctx, summary=summary, timespec=f"{begin} {end}", set_status='TENTATIVE', first_calendar=True, set_parent=[uid])
 
     return possible_timeline
+
+def _process_add_args(kwargs):
+    """Pop the --add-<attr> options out of kwargs and return a list of
+    ``(canonical_property, tokens)`` pairs to append.  Only comma-list
+    properties (categories, resources) have add-options; the plural form splits
+    on comma, the singular form keeps the comma literal."""
+    ret = []
+    for key in [k for k in kwargs if k.startswith('add_')]:
+        value = kwargs.pop(key)
+        attr = key[4:]
+        if not value or not _is_comma_list_attr(attr):
+            continue
+        ret.append((_comma_list_canonical(attr), _comma_list_tokens(attr, value)))
+    return ret
 
 def _process_set_args(ctx, kwargs, keep_category=False):
     ctx.obj['set_args'] = {}
@@ -529,7 +547,7 @@ def _set_task_attribs(ctx):
 
     def _set_something_(something, help_text, help_url=None, default=None, objs=None):
         cond = {f"no_{something}": True}
-        something_ = 'categories' if something == 'category' else something
+        something_ = _comma_list_canonical(something) if _is_comma_list_attr(something) else something
         if something == 'duration':
             something_ = 'dtstart'
             cond['no_dtstart'] = True
@@ -570,8 +588,8 @@ def _set_task_attribs(ctx):
                     obj.complete()
                     obj.save()
                     continue
-                if something == 'category':
-                    comp.add(something_, value.split(','))
+                if _is_comma_list_attr(something):
+                    comp.add(something_, _comma_list_tokens(something, value))
                 elif something == 'due':
                     _procrastinate([obj], parse_dt(value, datetime.datetime), check_dependent='interactive', err_callback=click.echo, confirm_callback=click.confirm)
                 elif something == 'duration':
