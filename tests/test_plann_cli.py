@@ -1,7 +1,13 @@
 ## Check https://click.palletsprojects.com/en/8.1.x/testing/
 
-from plann.cli import edit
+from plann.cli import cli, edit
 from plann.commands import _process_add_args
+
+
+def test_configure_command_registered():
+    """The interactive configuration is wired into the click CLI as
+    `plann configure` (code review C8 re-wiring)."""
+    assert 'configure' in cli.commands
 
 
 def _option_names(cmd):

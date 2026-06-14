@@ -90,6 +90,7 @@ The caldav URL should be something like i.e. http://some.davical.server/caldav.p
 The list may not be complete.  `--help` should give a more complete overview.
 
 * list-calendars: lists the calendars that plann can see
+* configure: interactive configuration mode (EXPERIMENTAL/under-tested) - prompts for connection parameters and writes them to the config file
 * agenda: Convenience command, lists upcoming events and tasks
 * add: adds new events/items to todo lists/calendars
 * select: select/search/filter tasks/events to list/modify/mark complete and so forth
@@ -142,6 +143,8 @@ The file may look like this:
   }
 }
 ```
+
+The file can be written by hand, or generated interactively with `plann configure` (experimental/under-tested - here be dragons).
 
 A `features` key may be given to enable server-specific compatibility workarounds, referring to a server profile in the caldav library's `compatibility_hints` module (e.g. `"features": "ecloud"`).  For servers with a known profile, `caldav_url` may even be omitted - the caldav library will derive the URL from the profile.
 

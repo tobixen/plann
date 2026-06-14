@@ -38,7 +38,7 @@ from plann.commands import (
     _split_high_pri_tasks,
     _split_huge_tasks,
 )
-from plann.config import config_section, expand_config_section, read_config
+from plann.config import config_section, expand_config_section, interactive_config, read_config
 from plann.interactive import _abort
 from plann.lib import (
     COMMA_LIST_ATTRS,
@@ -103,6 +103,10 @@ def cli(ctx, **kwargs):
     ## TODO: delayed communication with caldav server (i.e. if --help is given to subcommand)
     ## TODO: catch errors, present nice error messages
     ctx.obj['calendars'] = find_calendars(kwargs, kwargs['raise_errors'])
+    ## stashed for the `configure` subcommand (and any other command that needs
+    ## to know which config file / section the user pointed at)
+    ctx.obj['config_file'] = kwargs['config_file']
+    ctx.obj['config_section'] = kwargs['config_section']
     for flag in ('show_native_timezone', 'store_timezone', 'implicit_timezone'):
         setattr(tz, flag, kwargs[flag])
     if not kwargs['skip_config']:
@@ -126,6 +130,20 @@ def list_calendars(ctx):
         max_display_name = max([len(x[0]) for x in calendar_info])
         lines = [f"{name:<{max_display_name}} {url}" for name, url in calendar_info]
         click.echo_via_pager(output + "\n".join(lines) + "\n")
+
+@cli.command()
+@click.pass_context
+def configure(ctx):
+    """
+    Interactive configuration mode (EXPERIMENTAL - under-tested, here be dragons).
+
+    Prompts for connection parameters and writes them to the config file.
+    """
+    config_file = ctx.obj['config_file']
+    sections = ctx.obj['config_section']
+    section = sections[0] if sections else 'default'
+    config = read_config(config_file, interactive_error=True) or {}
+    interactive_config(config, config_file, config_section=section)
 
 def _set_attr_options_(func, verb, desc=""):
     """
