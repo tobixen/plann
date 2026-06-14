@@ -246,5 +246,3 @@ def _parse_timespec(timespec):
             return (parse_dt(f"{split_by_space[0]} {split_by_space[1]}"), parse_dt(f"{split_by_space[2]} {split_by_space[3]}"))
         else:
             raise ValueError(f"couldn't parse time interval {timespec}")
-
-    raise NotImplementedError("possibly a ISO time interval")

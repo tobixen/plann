@@ -23,6 +23,7 @@ from plann.interactive import (
 )
 from plann.lib import (
     _add_category,
+    _component_type,
     _list,
     _process_set_arg,
     _procrastinate,
@@ -286,7 +287,7 @@ def _check_for_panic(ctx, hours_per_day, output=True, print_timeline=True, fix_t
     timeline_end = parse_dt(timeline_end, datetime.datetime)
     if include_all_events:
         ## Remove events from the list to prevent duplicates ...
-        ctx.obj['objs'] = [x for x in ctx.obj['objs'] if 'BEGIN:VEVENT' not in x.data]
+        ctx.obj['objs'] = [x for x in ctx.obj['objs'] if _component_type(x) != 'VEVENT']
         ## ... and then add all events
         _select(ctx, event=True, start=timeline_start, end=timeline_end, extend_objects=True)
     possible_timeline = timeline_suggestion(ctx, hours_per_day=hours_per_day, timeline_end=timeline_end)

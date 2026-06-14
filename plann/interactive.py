@@ -16,6 +16,7 @@ doing them.
 
 import os
 import re
+import shutil
 import subprocess
 import tempfile
 
@@ -24,6 +25,7 @@ from icalendar.prop import vRecur
 
 from plann.lib import (
     _adjust_relations,
+    _component_type,
     _list,
     _now,
     _process_set_arg,
@@ -69,8 +71,8 @@ def command_edit(obj, command, interactive=True):
                 with_params['with_family'] = true
             if 'with children' in command:
                 with_params['with_children'] = true
-            if 'with family' in command:
-                with_params['with_family'] = true
+            if 'with parent' in command:
+                with_params['with_parent'] = true
         ## TODO: we probably shouldn't be doing this interactively here?
         _procrastinate([obj], command.split(' ')[1], **with_params)
     elif command == 'complete':
@@ -212,15 +214,7 @@ def _abort(message):
     raise click.Abort(message)
 
 def _interactive_edit(obj):
-    if 'BEGIN:VEVENT' in obj.data:
-        objtype = 'event'
-    elif 'BEGIN:VTODO' in obj.data:
-        objtype = 'todo'
-    elif 'BEGIN:VJOURNAL' in obj.data:
-        objtype = 'journal'
-    else:
-        assert False
-    if objtype != 'todo':
+    if _component_type(obj) != 'VTODO':
         raise NotImplementedError("interactive editing only implemented for tasks")
     comp = obj.icalendar_component
     summary = _summary(comp)
@@ -354,16 +348,12 @@ def _editor(sometext):
     with tempfile.NamedTemporaryFile(mode='w', encoding='UTF-8', delete=False) as tmpfile:
         tmpfile.write(sometext)
         fn = tmpfile.name
-    editor = os.environ.get("VISUAL") or os.environ.get("EDITOR") or ""
-    if '/' not in editor:
-        for path in os.environ.get("PATH", "").split(os.pathsep):
-            full_path = os.path.join(path, editor)
-            if os.path.exists(full_path) and os.access(full_path, os.X_OK):
-                editor = full_path
-                break
-    for ed in (editor, '/usr/bin/vim', '/usr/bin/vi', '/usr/bin/emacs', '/usr/bin/nano', '/usr/bin/pico', '/bin/vi'):
-        if os.path.isfile(ed) and os.access(ed, os.X_OK):
-            break
+    candidates = (os.environ.get("VISUAL"), os.environ.get("EDITOR"),
+                  'vim', 'vi', 'emacs', 'nano', 'pico')
+    ed = next((found for c in candidates if c and (found := shutil.which(c))), None)
+    if not ed:
+        os.unlink(fn)
+        raise FileNotFoundError("no usable editor found; set the EDITOR or VISUAL environment variable")
     subprocess.run([ed, fn])
     with open(fn) as tmpfile:
         ret = tmpfile.read()

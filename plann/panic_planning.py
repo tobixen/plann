@@ -2,7 +2,7 @@ from datetime import datetime, timedelta
 
 from sortedcontainers import SortedKeyList
 
-from plann.lib import _ensure_ts, _now
+from plann.lib import _component_type, _ensure_ts, _now
 
 
 class TimeLine(SortedKeyList):
@@ -103,7 +103,7 @@ class TimeLine(SortedKeyList):
 def timeline_suggestion(ctx, hours_per_day=4, timeline_end=None):
     timeline = TimeLine()
     objs = ctx.obj['objs']
-    events = [x for x in objs if 'BEGIN:VEVENT' in x.data]
+    events = [x for x in objs if _component_type(x) == 'VEVENT']
     event_parents = []
     for event in events:
         comp = event.icalendar_component
@@ -114,13 +114,11 @@ def timeline_suggestion(ctx, hours_per_day=4, timeline_end=None):
             rels = event.get_relatives(fetch_objects=False)
             for rel in rels['PARENT']:
                 event_parents.append(str(rel))
-    tasks = [x for x in objs if 'BEGIN:VTODO' in x.data]
+    tasks = [x for x in objs if _component_type(x) == 'VTODO']
     assert len(events) + len(tasks) == len(objs)
     tasks = [x for x in tasks if ('\nDUE' in x.data or '\nDURATION' in x.data) and '\nDTSTART' in x.data]
 
     for event in events:
-        if 'BEGIN:VEVENT' not in event.data:
-            continue
         ## TODO ... we should handle overlapping events a bit better than just ignoring AssertionErrors
         try:
             timeline.add_event(event)

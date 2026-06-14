@@ -40,7 +40,7 @@ from plann.commands import (
 )
 from plann.config import config_section, expand_config_section, read_config
 from plann.interactive import _abort
-from plann.lib import _list, _split_vcal, _split_vcals, attr_int, attr_time, attr_txt_many, attr_txt_one, find_calendars
+from plann.lib import _caldav_objclass, _list, _split_vcal, _split_vcals, attr_int, attr_time, attr_txt_many, attr_txt_one, find_calendars
 from plann.lib import add_time_tracking as add_time_tracking_
 from plann.timespec import _now, parse_dt, tz
 
@@ -401,7 +401,7 @@ def ical(ctx, ical_data, ical_file):
         for c in ctx.obj['calendars']:
             ## TODO: there is a TODO-comment in add_object that objclass should not be mandatory.
             ## when that one has been fixed, remove this additional logic
-            objclass = caldav.Todo if "BEGIN:VTODO" in ical else (caldav.Journal if "BEGIN:VJOURNAL" in ical else caldav.Event)
+            objclass = _caldav_objclass(ical)
             c.add_object(objclass, ical)
 
 @add.command()
