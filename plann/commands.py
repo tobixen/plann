@@ -117,6 +117,14 @@ def __select(ctx, extend_objects=False, all=None, uid=[], abort_on_missing_uid=N
             kwargs[kw] = kwargs_[kw]
 
     ## uid(s)
+    ## NB: we deliberately query every calendar and collect every match rather
+    ## than stopping at the first hit - the same UID may legitimately exist in
+    ## more than one calendar (e.g. a copied event/task), and the caller may
+    ## want to act on all of them.  This costs one lookup per (uid, calendar),
+    ## but that is inherent to "find this UID in any of my calendars": to know
+    ## whether a UID is in a calendar you have to ask that calendar.  Do not
+    ## "optimise" this into a break-on-first-match - it would silently drop the
+    ## cross-calendar duplicates.
     missing_uids = []
     for uid_ in uid:
         cnt = 0
