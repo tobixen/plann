@@ -71,6 +71,40 @@ list_type = list
 ## See https://click.palletsprojects.com/en/8.0.x/api/#click.ParamType and
 ## /usr/lib/*/site-packages/click/types.py on how to do this.
 
+class _LazyCalendars:
+    """A list-like wrapper that defers calendar discovery until first use.
+
+    Discovery hits the network (one connect per configured calendar), so we
+    only want to pay for it when a command actually uses the calendars - not
+    when click merely runs the group callback to e.g. show subcommand help
+    (code review E1).  Supports the handful of operations the commands use:
+    iteration, ``len()``, indexing and truthiness.
+    """
+    def __init__(self, discover):
+        self._discover = discover
+        self._resolved = None
+
+    @property
+    def _calendars(self):
+        if self._resolved is None:
+            self._resolved = self._discover()
+        return self._resolved
+
+    def __iter__(self):
+        return iter(self._calendars)
+
+    def __len__(self):
+        return len(self._calendars)
+
+    def __getitem__(self, index):
+        return self._calendars[index]
+
+    def __bool__(self):
+        return bool(self._calendars)
+
+    def extend(self, more):
+        self._calendars.extend(more)
+
 @click.group()
 @click.version_option(None, "--version", "-V", package_name="plann")
 ## TODO: interactive config building
@@ -100,21 +134,29 @@ def cli(ctx, **kwargs):
     ctx.ensure_object(dict)
     ## TODO: add all relevant connection parameters for the DAVClient as options
     ## TODO: logic to read the config file and edit kwargs from config file
-    ## TODO: delayed communication with caldav server (i.e. if --help is given to subcommand)
     ## TODO: catch errors, present nice error messages
-    ctx.obj['calendars'] = find_calendars(kwargs, kwargs['raise_errors'])
+    ## Calendar discovery talks to the network; defer it (E1) so commands that
+    ## never touch the server - notably `plann <subcommand> --help` - don't
+    ## connect to every configured calendar.
+    ctx.obj['calendars'] = _LazyCalendars(lambda: _discover_calendars(kwargs))
     ## stashed for the `configure` subcommand (and any other command that needs
     ## to know which config file / section the user pointed at)
     ctx.obj['config_file'] = kwargs['config_file']
     ctx.obj['config_section'] = kwargs['config_section']
     for flag in ('show_native_timezone', 'store_timezone', 'implicit_timezone'):
         setattr(tz, flag, kwargs[flag])
+
+def _discover_calendars(kwargs):
+    """Find calendars from the command-line connection options and, unless
+    --skip-config is given, from every selected config-file section."""
+    calendars = find_calendars(kwargs, kwargs['raise_errors'])
     if not kwargs['skip_config']:
         config = read_config(kwargs['config_file'])
         if config:
             for meta_section in kwargs['config_section']:
                 for section in expand_config_section(config, meta_section):
-                    ctx.obj['calendars'].extend(find_calendars(config_section(config, section), raise_errors=kwargs['raise_errors']))
+                    calendars.extend(find_calendars(config_section(config, section), raise_errors=kwargs['raise_errors']))
+    return calendars
 
 @cli.command()
 @click.pass_context

@@ -1,6 +1,9 @@
 ## Check https://click.palletsprojects.com/en/8.1.x/testing/
 
-from plann.cli import cli, edit
+from click.testing import CliRunner
+
+import plann.cli as cli_mod
+from plann.cli import _LazyCalendars, cli, edit
 from plann.commands import _process_add_args
 
 
@@ -8,6 +11,43 @@ def test_configure_command_registered():
     """The interactive configuration is wired into the click CLI as
     `plann configure` (code review C8 re-wiring)."""
     assert 'configure' in cli.commands
+
+
+def test_lazy_calendars_resolves_once():
+    """_LazyCalendars defers discovery until first use, then caches it."""
+    calls = []
+
+    def discover():
+        calls.append(1)
+        return ['a', 'b']
+
+    lazy = _LazyCalendars(discover)
+    assert calls == []          ## not resolved just by constructing
+    assert len(lazy) == 2       ## first access triggers discovery
+    assert list(lazy) == ['a', 'b']
+    assert lazy[0] == 'a'
+    assert bool(lazy) is True
+    assert calls == [1]         ## resolved exactly once
+
+
+def test_calendar_discovery_deferred_for_help():
+    """Showing subcommand --help must not trigger calendar discovery (which
+    talks to the network), even with a caldav_url given (code review E1)."""
+    calls = []
+    orig = cli_mod.find_calendars
+
+    def spy(*a, **k):
+        calls.append(1)
+        return orig(*a, **k)
+
+    cli_mod.find_calendars = spy
+    try:
+        res = CliRunner().invoke(
+            cli, ['--skip-config', '--caldav-url', 'http://example.invalid/', 'select', '--help'])
+        assert res.exit_code == 0, res.output
+        assert calls == [], "discovery should be deferred when only showing help"
+    finally:
+        cli_mod.find_calendars = orig
 
 
 def _option_names(cmd):

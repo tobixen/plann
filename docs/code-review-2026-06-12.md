@@ -404,8 +404,8 @@ then the remaining crash-on-edge-case items **#6-#15**. The duplication of
 | C8 | `interactive_config` key list hardcoded / diverged | ✅ Fixed | Was also dead code (orphaned since the argparse→click migration). Re-wired as `plann configure`; connection prompt keys derived from `caldav.config.CONNKEYS` (asserts no drift); fixed `ssl_verify_cert`→`caldav_ssl_verify_cert`, added `features`/`calendar_name`/`extra_config.time_tracking`, dropped never-read `language`/`timezone` |
 | C9 | `extra_config` smuggled as monkey-patched attribute | ❌ TODO | Cleanup |
 | C10 | `_editor` re-implements `shutil.which` | ✅ Fixed | `interactive.py` — uses `shutil.which`, raises clear error if no editor found |
-| C11 | `_split_vcals` hand-rolls VCALENDAR parsing | ❌ TODO | Cleanup |
-| E1 | `find_calendars()` called unconditionally (even `--help`) | ❌ TODO | Efficiency |
+| C11 | `_split_vcals` hand-rolls VCALENDAR parsing | ✅ Fixed | Now `icalendar.Calendar.from_ical(ical, multiple=True)`; handles CRLF (the LF-only scanner returned nothing on CRLF input). Tests added |
+| E1 | `find_calendars()` called unconditionally (even `--help`) | ✅ Fixed | Discovery deferred via `_LazyCalendars` wrapper; `plann <subcommand> --help` no longer connects |
 | E2 | `Template(skey)` rebuilt on every sort comparison | ❌ TODO | Efficiency |
 | E3 | `_relships_by_type` N×R round-trips in `list --top-down` | ❌ TODO | Efficiency |
 | E4 | `_set_task_attribs` issues a fresh server `_select` per attribute | ❌ TODO | Efficiency |

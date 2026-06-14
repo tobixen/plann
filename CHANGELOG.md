@@ -14,6 +14,8 @@ and I do try to adhere to [Semantic Versioning](https://semver.org/spec/v2.0.0.h
 
 ### Fixed
 
+* `add ical` with several concatenated VCALENDAR objects no longer silently ignores them all when the data uses CRLF line endings (the RFC 5545 canonical form): the split is now done by the icalendar library instead of a hand-rolled LF-only string scan.
+* Showing help for a subcommand (e.g. `plann select --help`) no longer connects to every configured calendar; calendar discovery is deferred until a command actually needs it.
 * A config section carrying `features` but no `caldav_url` crashed with `KeyError: 'url'`.  The caldav library resolves the URL from the server profile given in `features`, so no URL is needed.  (This also requires a caldav release newer than 3.2.1 - with older caldav versions such a section is silently skipped instead of crashing.)
 * The time tracking integration (`"extra_config": {"time_tracking": ["timewarrior"]}` in a config section) did not work: the configuration was attached to the calendar objects under a different attribute name than the time tracking code read, and only the value `timew` was accepted - not `timewarrior` as the error message suggested.  (Fixes ported from the archived development branch.)
 * Exporting an event/task to timewarrior no longer removes the categories from the object.

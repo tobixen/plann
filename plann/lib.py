@@ -145,15 +145,12 @@ def _split_vcal(ical):
 def _split_vcals(ical):
     """
     This method will take a string with multiple VCALENDAR entries and
-    split it into a list
+    split it into a list (one ical string per VCALENDAR).
+
+    Delegates the parsing to icalendar (which understands CRLF line endings
+    and line folding) rather than scanning the raw string by hand.
     """
-    ical = ical.strip()
-    icals = []
-    while ical.startswith("BEGIN:VCALENDAR\n"):
-        pos = ical.find("\nEND:VCALENDAR") + 14
-        icals.append(ical[:pos])
-        ical = ical[pos:].lstrip()
-    return icals
+    return [cal.to_ical().decode() for cal in icalendar.Calendar.from_ical(ical, multiple=True)]
 
 def find_calendars(args, raise_errors):
     """

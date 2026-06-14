@@ -288,8 +288,47 @@ def test_adjust_ical_relations():
     assert(rels['PARENT'] == {'PARENT-A0', 'PARENT-A2', 'PARENT-B0', 'PARENT-B2'})
     assert(rels['CHILD'] == {'CHILD-A0', 'CHILD-A1', 'CHILD-A2'})
 
-#def test_split_vcals():
-## TODO
+def _one_vcal(uid):
+    return (
+        "BEGIN:VCALENDAR\n"
+        "VERSION:2.0\n"
+        "PRODID:-//Example Corp.//CalDAV Client//EN\n"
+        "BEGIN:VEVENT\n"
+        f"UID:{uid}\n"
+        "SUMMARY:event {uid}\n"
+        "DTSTART:20250101T100000Z\n"
+        "END:VEVENT\n"
+        "END:VCALENDAR"
+    )
+
+
+def test_split_vcals():
+    """Multiple concatenated VCALENDAR streams are split into one entry each."""
+    from icalendar import Calendar
+
+    from plann.lib import _split_vcals
+
+    joined = _one_vcal("a") + "\n" + _one_vcal("b") + "\n" + _one_vcal("c")
+    output = _split_vcals(joined)
+    assert len(output) == 3
+    ## each piece must round-trip as a standalone single-event VCALENDAR
+    uids = []
+    for piece in output:
+        cal = Calendar.from_ical(piece)
+        events = [c for c in cal.subcomponents if c.name == 'VEVENT']
+        assert len(events) == 1
+        uids.append(str(events[0]['UID']))
+    assert uids == ['a', 'b', 'c']
+
+
+def test_split_vcals_crlf():
+    """CRLF line endings (RFC 5545 canonical) must split too - the previous
+    hand-rolled LF-only scanner silently returned nothing (code review C11)."""
+    from plann.lib import _split_vcals
+
+    joined = (_one_vcal("a") + "\n" + _one_vcal("b")).replace("\n", "\r\n")
+    assert len(_split_vcals(joined)) == 2
+
 
 def test_split_vcal():
     ## This VCALENDAR contains three events, but only two separate
