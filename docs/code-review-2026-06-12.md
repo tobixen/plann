@@ -406,7 +406,7 @@ then the remaining crash-on-edge-case items **#6-#15**. The duplication of
 | C10 | `_editor` re-implements `shutil.which` | ✅ Fixed | `interactive.py` — uses `shutil.which`, raises clear error if no editor found |
 | C11 | `_split_vcals` hand-rolls VCALENDAR parsing | ✅ Fixed | Now `icalendar.Calendar.from_ical(ical, multiple=True)`; handles CRLF (the LF-only scanner returned nothing on CRLF input). Tests added |
 | E1 | `find_calendars()` called unconditionally (even `--help`) | ✅ Fixed | Discovery deferred via `_LazyCalendars` wrapper; `plann <subcommand> --help` no longer connects |
-| E2 | `Template(skey)` rebuilt on every sort comparison | ❌ TODO | Efficiency |
+| E2 | `Template(skey)` rebuilt on every sort comparison | ✅ Fixed | Sort-key logic extracted to `_sort_key_function`; template compiled once per key. Tests added |
 | E3 | `_relships_by_type` N×R round-trips in `list --top-down` | ❌ TODO | Efficiency |
 | E4 | `_set_task_attribs` issues a fresh server `_select` per attribute | ❌ TODO | Efficiency |
 | E5 | `--uid` resolution keeps querying after a hit | ❌ TODO | Efficiency |

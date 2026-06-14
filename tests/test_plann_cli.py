@@ -1,10 +1,60 @@
 ## Check https://click.palletsprojects.com/en/8.1.x/testing/
 
+from unittest.mock import patch
+
+from caldav import Todo
 from click.testing import CliRunner
 
 import plann.cli as cli_mod
+import plann.commands as commands_mod
 from plann.cli import _LazyCalendars, cli, edit
-from plann.commands import _process_add_args
+from plann.commands import _process_add_args, _sort_key_function
+
+_TODO = """BEGIN:VCALENDAR
+VERSION:2.0
+PRODID:-//Example Corp.//CalDAV Client//EN
+BEGIN:VTODO
+UID:{uid}
+DTSTAMP:19970901T130000Z
+SUMMARY:task {uid}
+PRIORITY:{priority}
+END:VTODO
+END:VCALENDAR"""
+
+
+def _todo(uid, priority):
+    obj = Todo()
+    obj.data = _TODO.format(uid=uid, priority=priority)
+    return obj
+
+
+def test_sort_key_function_priority():
+    """A bare property name sorts on that icalendar property."""
+    reverse, fkey = _sort_key_function('PRIORITY')
+    assert reverse is False
+    objs = [_todo('a', 3), _todo('b', 1), _todo('c', 2)]
+    objs.sort(key=fkey)
+    assert [str(o.icalendar_component['UID']) for o in objs] == ['b', 'c', 'a']
+
+
+def test_sort_key_function_reverse():
+    """A leading '-' reverses the sort."""
+    reverse, fkey = _sort_key_function('-PRIORITY')
+    assert reverse is True
+    objs = [_todo('a', 3), _todo('b', 1), _todo('c', 2)]
+    objs.sort(key=fkey, reverse=reverse)
+    assert [str(o.icalendar_component['UID']) for o in objs] == ['a', 'c', 'b']
+
+
+def test_sort_key_function_compiles_template_once():
+    """A template sort key must be compiled once, not rebuilt on every
+    comparison during the sort (code review E2)."""
+    objs = [_todo(uid, p) for uid, p in (('a', 3), ('b', 1), ('c', 2), ('d', 5), ('e', 4))]
+    with patch('plann.commands.Template', wraps=commands_mod.Template) as template_cls:
+        reverse, fkey = _sort_key_function('{PRIORITY}')
+        objs.sort(key=fkey, reverse=reverse)
+    assert template_cls.call_count == 1
+    assert [str(o.icalendar_component['UID']) for o in objs] == ['b', 'c', 'a', 'e', 'd']
 
 
 def test_configure_command_registered():

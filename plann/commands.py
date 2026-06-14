@@ -67,6 +67,29 @@ def _select(ctx, interactive=False, mass_interactive=False, **kwargs):
                 if click.confirm(f"select {_summary(obj)}?"):
                     ctx.obj['objs'].append(obj)
 
+def _sort_key_function(skey):
+    """Build a ``(reverse, key_function)`` pair from a single sort-key spec.
+
+    A leading ``-`` reverses the sort.  A spec containing ``{`` is treated as
+    a template and compiled once here - not rebuilt on every comparison during
+    the sort (code review E2).  ``get_duration()`` is special-cased; any other
+    spec is a plain icalendar component property name.
+    """
+    reverse = skey.startswith('-')
+    if reverse:
+        skey = skey[1:]
+    if '{' in skey:
+        template = Template(skey)
+        def fkey(obj):
+            return template.format(**obj.icalendar_component)
+    elif skey == 'get_duration()':
+        def fkey(obj):
+            return obj.get_duration()
+    else:
+        def fkey(obj):
+            return obj.icalendar_component.get(skey)
+    return reverse, fkey
+
 def __select(ctx, extend_objects=False, all=None, uid=[], abort_on_missing_uid=None, sort_key=[], skip_parents=None, skip_children=None, limit=None, offset=None, freebusyhack=None, pinned_tasks=None, **kwargs_):
     """
     select/search/filter tasks/events, for listing/editing/deleting, etc
@@ -171,22 +194,7 @@ def __select(ctx, extend_objects=False, all=None, uid=[], abort_on_missing_uid=N
     ## OPTIMIZE TODO: sorting the list multiple times rather than once is a bit of brute force, if there are several sort keys and long list of objects, we should sort once and consider all sort keys while sorting
     ## TODO: Consider that an object may be expanded and contain lots of event instances.  We will then need to expand the caldav.Event object into multiple objects, each containing one recurrance instance.  This should probably be done on the caldav side of things.
     for skey in reversed(sort_key):
-        ## If the key starts with -, sorting should be reversed
-        if skey[0] == '-':
-            reverse = True
-            skey=skey[1:]
-        else:
-            reverse = False
-        ## if the key contains {}, it should be considered to be a template
-        if '{' in skey:
-            def fkey(obj):
-                return Template(skey).format(**obj.icalendar_component)
-        elif skey == 'get_duration()':
-            def fkey(obj):
-                return obj.get_duration()
-        else:
-            def fkey(obj):
-                return obj.icalendar_component.get(skey)
+        reverse, fkey = _sort_key_function(skey)
         ctx.obj['objs'].sort(key=fkey, reverse=reverse)
 
     ## OPTIMIZE TODO: this is also suboptimal, if ctx.obj is a very long list
