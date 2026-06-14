@@ -422,14 +422,55 @@ def _adjust_relations(parent, children):
         parent.save()
         _remove_reverse_relations(parent, pmutated['removed'])
 
+class _RelativeCache:
+    """Per-traversal cache for relationship listing.
+
+    A hierarchical ``list --top-down`` walks the parent/child graph and would
+    otherwise re-fetch the same task from the server once per edge (a parent
+    is fetched again for every child, and again on every recursion step):
+    ~N×R round-trips for N tasks with R relations each (code review E3).
+
+    This caches both the object-by-UID lookups and the per-object relationship
+    scan, so each task is fetched - and its consistency-checked - at most once
+    for the whole traversal.
+    """
+    def __init__(self):
+        self._objects = {}
+        self._relships = {}
+
+    def get_object(self, calendar, uid):
+        key = (getattr(calendar, 'url', None), str(uid))
+        if key not in self._objects:
+            self._objects[key] = calendar.get_object_by_uid(uid)
+        return self._objects[key]
+
+    def cached_relships(self, obj, reltype_wanted):
+        return self._relships.get((str(obj.icalendar_component['UID']), reltype_wanted))
+
+    def store_relships(self, obj, reltype_wanted, relships):
+        self._relships[(str(obj.icalendar_component['UID']), reltype_wanted)] = relships
+
 ## TODO: As for now, this one will throw the user into the python debugger if inconsistencies are found.
 ## It for sure cannot be like that when releasing plann 1.0!
-def _relships_by_type(obj, reltype_wanted=None):
+def _relships_by_type(obj, reltype_wanted=None, cache=None):
+    if cache is None:
+        cache = _RelativeCache()
+    cached = cache.cached_relships(obj, reltype_wanted)
+    if cached is not None:
+        return cached
+
     backreltypes = {'CHILD': 'PARENT', 'PARENT': 'CHILD', 'undefined': 'CHILD', 'SIBLING': 'SIBLING'}
-    rels_by_type = obj.get_relatives(reltype_wanted)
+    ## Parse the related UIDs straight from obj's ical (no network) and resolve
+    ## each one through the cache, rather than letting caldav fetch them anew.
+    rels_by_type = obj.get_relatives(reltype_wanted, fetch_objects=False)
     ret = defaultdict(list)
     for reltype in rels_by_type:
-        for other in rels_by_type[reltype]:
+        for other_uid in rels_by_type[reltype]:
+            try:
+                other = cache.get_object(obj.parent, other_uid)
+            except caldav.error.NotFoundError:
+                ## a dangling relation - mirrors get_relatives(ignore_missing=True)
+                continue
             ret[reltype].append(other)
 
             ## Consistency check ... TODO ... look more into breakages
@@ -451,6 +492,7 @@ def _relships_by_type(obj, reltype_wanted=None):
             else:
                 if back_rel_types != { backreltypes[reltype] }:
                     logging.error("Inconsistency issue in relationships - has to be manually resolved. Object and other points to each other, but reltype does not match")
+    cache.store_relships(obj, reltype_wanted, ret)
     return ret
 
 def _relationship_text(obj, reltype_wanted=None):
@@ -521,7 +563,7 @@ def _set_something(obj, arg, value):
 ## TODO: should be rewritten a bit, we should have a create_list method that does not call on click.echo directly
 ## let the caller decide if click is to be used or not.
 ## Use the yield method to avoid having to generate the full list prior to printing to screen
-def _list(objs, ics=False, template="{DTSTART:?{DUE:?(date missing)?}?%F %H:%M:%S %Z}: {SUMMARY:?{DESCRIPTION:?(no summary given)?}?}", top_down=False, bottom_up=False, indent=0, echo=True, uids=None, filter=lambda obj: True, separator="\n"):
+def _list(objs, ics=False, template="{DTSTART:?{DUE:?(date missing)?}?%F %H:%M:%S %Z}: {SUMMARY:?{DESCRIPTION:?(no summary given)?}?}", top_down=False, bottom_up=False, indent=0, echo=True, uids=None, filter=lambda obj: True, separator="\n", cache=None):
     """
     Actual implementation of list
 
@@ -530,6 +572,10 @@ def _list(objs, ics=False, template="{DTSTART:?{DUE:?(date missing)?}?%F %H:%M:%
     """
     if indent>32:
         raise NotImplementedError("too deep hierarchies, or circular links")
+    ## one relationship cache for the whole (recursive) traversal, so the same
+    ## task is not re-fetched from the server for every edge it touches (E3)
+    if cache is None and (top_down or bottom_up):
+        cache = _RelativeCache()
     if ics:
         accepted = [obj for obj in objs if filter(obj)]
         if not accepted:
@@ -562,7 +608,7 @@ def _list(objs, ics=False, template="{DTSTART:?{DUE:?(date missing)?}?%F %H:%M:%
         above = []
         below = []
         if top_down or bottom_up:
-            relations = _relships_by_type(obj)
+            relations = _relships_by_type(obj, cache=cache)
             parents = relations['PARENT']
             children = relations['CHILD']
             ## in a top-down view, the (grand)*parent should be shown as a top-level item rather than the object.
@@ -583,17 +629,17 @@ def _list(objs, ics=False, template="{DTSTART:?{DUE:?(date missing)?}?%F %H:%M:%
             more_info['calendar_url'] = obj.parent.url
             output.append(" "*indent + template.format(**obj.icalendar_component, **more_info))
             ## Recursively add children in an indented way
-            output.extend(_list(below, template=template, top_down=top_down, bottom_up=bottom_up, indent=indent+2, echo=False, filter=filter))
+            output.extend(_list(below, template=template, top_down=top_down, bottom_up=bottom_up, indent=indent+2, echo=False, filter=filter, cache=cache))
             if indent and top_down:
                 ## Include all siblings as same-level nodes
                 ## Use the top-level uids to avoid infinite recursion
                 ## TODO: siblings are probably not being handled correctly here.  Should write test code and investigate.
-                output.extend(_list(relations['SIBLING'], template=template, top_down=top_down, bottom_up=bottom_up, indent=indent, echo=False, uids=uids, filter=filter))
+                output.extend(_list(relations['SIBLING'], template=template, top_down=top_down, bottom_up=bottom_up, indent=indent, echo=False, uids=uids, filter=filter, cache=cache))
         for p in above:
             ## The item should be part of a sublist.  Find and add the top-level item, and the full indented list under there - recursively.
             puid = p.icalendar_component['UID']
             if puid not in uids:
-                output.extend(_list([p], template=template, top_down=top_down, bottom_up=bottom_up, indent=indent, echo=False, uids=uids, filter=filter))
+                output.extend(_list([p], template=template, top_down=top_down, bottom_up=bottom_up, indent=indent, echo=False, uids=uids, filter=filter, cache=cache))
     if echo:
         click.echo_via_pager(separator.join(output))
     return output

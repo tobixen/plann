@@ -407,7 +407,7 @@ then the remaining crash-on-edge-case items **#6-#15**. The duplication of
 | C11 | `_split_vcals` hand-rolls VCALENDAR parsing | ✅ Fixed | Now `icalendar.Calendar.from_ical(ical, multiple=True)`; handles CRLF (the LF-only scanner returned nothing on CRLF input). Tests added |
 | E1 | `find_calendars()` called unconditionally (even `--help`) | ✅ Fixed | Discovery deferred via `_LazyCalendars` wrapper; `plann <subcommand> --help` no longer connects |
 | E2 | `Template(skey)` rebuilt on every sort comparison | ✅ Fixed | Sort-key logic extracted to `_sort_key_function`; template compiled once per key. Tests added |
-| E3 | `_relships_by_type` N×R round-trips in `list --top-down` | ❌ TODO | Efficiency |
+| E3 | `_relships_by_type` N×R round-trips in `list --top-down` | ✅ Fixed | Per-traversal `_RelativeCache` memoizes object-by-UID fetches and the relationship scan; `_relships_by_type` now parses related UIDs locally (`fetch_objects=False`) and resolves them through the cache, threaded through the `_list` recursion. (Caching, not opt-in - relationships are still always scanned for the hierarchical view.) Test added |
 | E4 | `_set_task_attribs` issues a fresh server `_select` per attribute | ❌ TODO | Efficiency |
 | E5 | `--uid` resolution keeps querying after a hit | ❌ TODO | Efficiency |
 | D1 | `raise NotImplementedError` unreachable at `timespec.py:229` | ✅ Fixed | Removed unreachable statement |

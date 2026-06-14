@@ -26,6 +26,7 @@ and I do try to adhere to [Semantic Versioning](https://semver.org/spec/v2.0.0.h
 * `edit --set-category` is now flagged as deprecated in its `--help`: it *appends* rather than replaces (the name does not convey this).  Use `--add-category` to append or `--set-categories` to replace.
 * (internal) The `category`/`categories` (and now `resources`) handling on the edit path is driven by a single `COMMA_LIST_ATTRS` registry rather than being special-cased in several places.
 * (internal) A template sort key (`--sort-key`) is now compiled once per key instead of being rebuilt on every comparison while sorting.
+* (internal) A hierarchical `list --top-down`/`--bottom-up` now caches related tasks for the duration of the traversal instead of re-fetching the same task from the server once per relationship edge.
 * Config file parsing, connection parameter extraction and calendar lookup are now delegated to the caldav library instead of being duplicated in plann.  (The caldav library adopted this code from plann a while back; plann was still carrying its own copy.)  Visible side effects: environment variable references like `${SOME_VAR}` or `${SOME_VAR:-default}` in config values are now expanded, and a `features` key is resolved through the caldav library's profile lookup.
 
 ## [v1.1.1] - 2026-05-28

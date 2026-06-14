@@ -401,3 +401,65 @@ def test_split_vcal_yields_ical_strings():
         assert isinstance(part, str), f"expected ical text, got {type(part).__name__}"
         ## and the component type must survive the round-trip
         assert _caldav_objclass(part) is Todo
+
+
+class _FakeCalendar:
+    """A minimal in-memory calendar that counts get_object_by_uid lookups, so
+    tests can assert how many server round-trips a traversal would issue."""
+    def __init__(self):
+        import collections
+        self.objs = {}
+        self.fetch_counts = collections.Counter()
+        self.url = "http://cal.example/"
+
+    def add(self, todo):
+        todo.parent = self
+        self.objs[str(todo.icalendar_component['UID'])] = todo
+
+    def get_object_by_uid(self, uid):
+        import caldav
+        uid = str(uid)
+        self.fetch_counts[uid] += 1
+        if uid not in self.objs:
+            raise caldav.error.NotFoundError(uid)
+        return self.objs[uid]
+
+    def get_display_name(self):
+        return "Fake"
+
+
+def _todo_with_rels(uid, rels):
+    """Build a Todo with the given (reltype, target_uid) RELATED-TO links."""
+    rel_lines = "".join(f"RELATED-TO;RELTYPE={rt}:{target}\n" for rt, target in rels)
+    obj = Todo()
+    obj.data = (
+        "BEGIN:VCALENDAR\nVERSION:2.0\nPRODID:-//Example Corp.//CalDAV Client//EN\n"
+        "BEGIN:VTODO\n"
+        f"UID:{uid}\n"
+        f"SUMMARY:task {uid}\n"
+        f"{rel_lines}"
+        "END:VTODO\nEND:VCALENDAR"
+    )
+    return obj
+
+
+def test_list_top_down_caches_relative_fetches():
+    """A hierarchical `list --top-down` must not re-fetch the same task from
+    the server once per graph edge - each related object is fetched at most
+    once per traversal (code review E3)."""
+    from plann.lib import _list
+
+    cal = _FakeCalendar()
+    ## parent p with two children c1, c2 (bidirectionally linked)
+    p = _todo_with_rels('p', [('CHILD', 'c1'), ('CHILD', 'c2')])
+    c1 = _todo_with_rels('c1', [('PARENT', 'p')])
+    c2 = _todo_with_rels('c2', [('PARENT', 'p')])
+    for obj in (p, c1, c2):
+        cal.add(obj)
+
+    with patch('plann.lib.click.echo_via_pager'):
+        _list([c1, c2], top_down=True)
+
+    ## without caching, p is fetched once per child (and more via recursion)
+    assert cal.fetch_counts['p'] == 1, dict(cal.fetch_counts)
+    assert all(count <= 1 for count in cal.fetch_counts.values()), dict(cal.fetch_counts)
