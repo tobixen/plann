@@ -7,7 +7,7 @@ from click.testing import CliRunner
 
 import plann.cli as cli_mod
 import plann.commands as commands_mod
-from plann.cli import _LazyCalendars, cli, edit
+from plann.cli import _LazyCalendars, cli, delete, edit
 from plann.commands import _process_add_args, _set_task_attribs, _sort_key_function, _todos_missing
 
 
@@ -235,3 +235,24 @@ def test_process_add_args():
     ## add_* keys are consumed; unrelated keys are left untouched
     assert not any(k.startswith('add_') for k in kwargs)
     assert 'set_summary' in kwargs
+
+
+def test_delete_reports_deleted_item():
+    """delete must tell the user what it did - deleting a selected item should
+    name it and actually call .delete()
+    (https://github.com/tobixen/plann/issues/42)."""
+    todo = _make_todo('a')
+    with patch.object(todo, 'delete') as deleted:
+        res = CliRunner().invoke(delete, obj={'objs': [todo]})
+    assert res.exit_code == 0, res.output
+    deleted.assert_called_once()
+    assert 'task a' in res.output
+
+
+def test_delete_reports_empty_selection():
+    """delete on an empty selection (e.g. --uid matched nothing) must say so
+    rather than silently producing no output
+    (https://github.com/tobixen/plann/issues/42)."""
+    res = CliRunner().invoke(delete, obj={'objs': []})
+    assert res.exit_code == 0, res.output
+    assert res.output.strip(), "expected some feedback on an empty selection"

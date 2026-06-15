@@ -46,6 +46,7 @@ from plann.lib import (
     _list,
     _split_vcal,
     _split_vcals,
+    _summary,
     attr_int,
     attr_time,
     attr_txt_many,
@@ -349,11 +350,15 @@ def delete(ctx, multi_delete, **kwargs):
     Delete the selected item(s)
     """
     objs = ctx.obj['objs']
+    if not objs:
+        click.echo("No items selected for deletion")
+        return
     if multi_delete is None and len(objs)>1:
         multi_delete = click.confirm(f"OK to delete {len(objs)} items?")
     if len(objs)>1 and not multi_delete:
         _abort(f"Not going to delete {len(objs)} items")
     for obj in objs:
+        click.echo(f"Deleting {_summary(obj)}")
         obj.delete()
 
 ## TODO: reconsider the naming of the attributes and functions - --mass-interactive should probably be --interactive-editor - and the interactive reprioritization function needs to be renamed
