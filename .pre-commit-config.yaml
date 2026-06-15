@@ -61,8 +61,13 @@ repos:
       stages: [commit-msg]
 
  - repo: https://github.com/lycheeverse/lychee
-   rev: lychee-v0.23.0
+   rev: lychee-v0.24.2
    hooks:
-    - id: lychee-docker
-      args: ["--no-progress", "--timeout", "10", "--config", ".lychee.toml"]
-      types: [markdown, rst]
+    - id: lychee
+      # Check links across the whole working tree (all file types, not just
+      # md/rst).  pass_filenames: false -> pre-commit passes only '.', so the
+      # whole repo is scanned rather than just the changed files.  lychee
+      # auto-discovers lychee.toml, so no --config needed.
+      args: ["--no-progress", "--timeout", "10", "--cache", "--max-cache-age", "1d", "."]
+      pass_filenames: false
+      stages: [pre-push]

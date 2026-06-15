@@ -313,7 +313,7 @@ Those are not much relevant wrg of task handling in plann
 
 ## Daily task management and interactive mode
 
-This is specifically directed towards using plann for daily task management.  See also the [USER GUIDE](USER_GUIDE.md) for more generic user guide.  I will assume that your calendar server needs to support advanced CalDAV queries (see [CALENDAR SERVER RECOMMENDATIONS](docs/ALENDAR_SERVER_RECOMMENDATIONS.md)).
+This is specifically directed towards using plann for daily task management.  See also the [USER GUIDE](USER_GUIDE.md) for more generic user guide.  I will assume that your calendar server needs to support advanced CalDAV queries (see [CALENDAR SERVER RECOMMENDATIONS](docs/CALENDAR_SERVER_RECOMMENDATIONS.md)).
 
 ### Adding tasks
 

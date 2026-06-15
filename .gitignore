@@ -55,6 +55,9 @@ docs/build/
 tmp/
 *.log
 
+# lychee link checker local cache
+.lycheecache
+
 # OS
 .DS_Store
 Thumbs.db

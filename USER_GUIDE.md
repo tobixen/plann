@@ -32,7 +32,7 @@ Those commands are made mostly for making `plann` more convenient to use for the
 * interactive manage-tasks - go through your tasks and make suggestions
 * interactive update-config - (TODO: NOT IMPLEMENTED YET).  This one is not used by the primary author and is probably under-tested.  Its primary intention is to make it easy for others to use the tool.
 
-Note that many of those commands have only been tested on DAViCal (see the [`docs/ALENDAR_SERVER_RECOMMENDATIONS.md`](CALENDAR_SERVER_RECOMMENDATIONS.md) file)
+Note that many of those commands have only been tested on DAViCal (see the [`docs/CALENDAR_SERVER_RECOMMENDATIONS.md`](docs/CALENDAR_SERVER_RECOMMENDATIONS.md) file)
 
 
 ## Global options
