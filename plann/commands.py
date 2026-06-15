@@ -91,7 +91,7 @@ def _sort_key_function(skey):
             return obj.icalendar_component.get(skey)
     return reverse, fkey
 
-def __select(ctx, extend_objects=False, all=None, uid=[], abort_on_missing_uid=None, sort_key=[], skip_parents=None, skip_children=None, limit=None, offset=None, freebusyhack=None, pinned_tasks=None, **kwargs_):
+def __select(ctx, extend_objects=False, all=None, uid=[], abort_on_missing_uid=None, warn_on_missing_uid=True, sort_key=[], skip_parents=None, skip_children=None, limit=None, offset=None, freebusyhack=None, pinned_tasks=None, **kwargs_):
     """
     select/search/filter tasks/events, for listing/editing/deleting, etc
     """
@@ -136,8 +136,11 @@ def __select(ctx, extend_objects=False, all=None, uid=[], abort_on_missing_uid=N
                 pass
         if not cnt:
             missing_uids.append(uid_)
-    if abort_on_missing_uid and missing_uids:
-        _abort(f"Did not find the following uids in any calendars: {missing_uids}")
+    if missing_uids:
+        if abort_on_missing_uid:
+            _abort(f"Did not find the following uids in any calendars: {missing_uids}")
+        elif warn_on_missing_uid:
+            click.echo(f"Warning: did not find the following uids in any calendars: {missing_uids}", err=True)
     if uid:
         return
 

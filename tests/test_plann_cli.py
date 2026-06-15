@@ -2,6 +2,7 @@
 
 from unittest.mock import patch
 
+import caldav
 from caldav import Todo
 from click.testing import CliRunner
 
@@ -235,6 +236,50 @@ def test_process_add_args():
     ## add_* keys are consumed; unrelated keys are left untouched
     assert not any(k.startswith('add_') for k in kwargs)
     assert 'set_summary' in kwargs
+
+
+class _FakeCalNotFound:
+    """A calendar that never has the requested uid."""
+    def get_object_by_uid(self, uid):
+        raise caldav.error.NotFoundError(uid)
+
+
+def test_select_warns_on_missing_uid():
+    """By default, a --uid that matches nothing in any calendar produces a
+    warning naming the missing uid (https://github.com/tobixen/plann/issues/42)."""
+    ctx = _FakeCtx()
+    ctx.obj['calendars'] = [_FakeCalNotFound()]
+    with patch('plann.commands.click.echo') as echo:
+        commands_mod._select(ctx, uid=('asdf',))
+    assert any('asdf' in str(c.args[0]) for c in echo.call_args_list), \
+        "expected a warning naming the missing uid"
+    ## warnings go to stderr so they do not pollute scriptable stdout
+    assert all(c.kwargs.get('err') for c in echo.call_args_list)
+
+
+def test_select_no_warn_on_missing_uid():
+    """--no-warn-on-missing-uid restores the old silent behaviour."""
+    ctx = _FakeCtx()
+    ctx.obj['calendars'] = [_FakeCalNotFound()]
+    with patch('plann.commands.click.echo') as echo:
+        commands_mod._select(ctx, uid=('asdf',), warn_on_missing_uid=False)
+    assert echo.call_count == 0
+
+
+def test_select_no_warn_when_uid_found():
+    """A uid that is found produces no missing-uid warning."""
+    todo = _make_todo('a')
+
+    class _FakeCalFound:
+        def get_object_by_uid(self, uid):
+            return todo
+
+    ctx = _FakeCtx()
+    ctx.obj['calendars'] = [_FakeCalFound()]
+    with patch('plann.commands.click.echo') as echo:
+        commands_mod._select(ctx, uid=('a',))
+    assert echo.call_count == 0
+    assert ctx.obj['objs'] == [todo]
 
 
 def test_delete_reports_deleted_item():
