@@ -17,6 +17,7 @@ import caldav
 import click  ## TODO - this should be removed, eventually
 import icalendar
 
+from plann.config import password_from_command
 from plann.template import Template
 from plann.timespec import (
     _ensure_ts,
@@ -105,6 +106,9 @@ def find_calendars(args, raise_errors):
     for k in args:
         if k.startswith('caldav_') and args[k]:
             key = k[7:]
+            ## not a DAVClient parameter - resolved into `password` below
+            if key in ('pass_command', 'password_command'):
+                continue
             if key == 'pass':
                 key = 'password'
             if key == 'user':
@@ -116,6 +120,7 @@ def find_calendars(args, raise_errors):
     extra_params = {}
     if 'extra_params' in conn_params:
         extra_params = conn_params.pop('extra_params')
+    pass_command = args.get('caldav_pass_command') or args.get('caldav_password_command')
     calendars = []
     ## TODO: test this more thoroughly.
     ## The code above is supposed to remote the `caldav_`-prefix
@@ -123,6 +128,14 @@ def find_calendars(args, raise_errors):
     ## https://github.com/pycalendar/plann/issues/11, credits to @bergercookie
     if 'caldav_url' in conn_params:
         conn_params['url'] = conn_params.pop('caldav_url')
+    ## resolved as late as possible, so that the password command is only run
+    ## when we actually are about to connect somewhere - and never when an
+    ## explicitly configured password already takes precedence over it
+    if conn_params and pass_command:
+        if conn_params.get('password'):
+            logging.warning("both a caldav password and a caldav password command is configured - ignoring the password command")
+        else:
+            conn_params['password'] = password_from_command(pass_command)
     if conn_params:
         client = caldav.DAVClient(**conn_params)
         principal = _try(client.principal, {}, conn_params['url'])

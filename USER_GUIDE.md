@@ -77,6 +77,21 @@ private:
 
 Multiple config sections can be specified, which may be useful for selecting things from multiple calendars.
 
+To avoid storing the password in plaintext, replace `caldav_pass` with
+`caldav_pass_command`.  The command is run through the shell, and the first
+line printed on stdout is used as the password:
+
+```yaml
+---
+default:
+  caldav_url: "https://dav.example.com/"
+  caldav_user: luser
+  caldav_pass_command: "pass show caldav/dav.example.com"
+```
+
+Note that `caldav_pass` wins if both keys are present - remove it when
+switching over.
+
 ## Adding things to the calendar
 
 Generally it should be done like this:

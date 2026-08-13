@@ -1,6 +1,7 @@
 import json
 import logging
 import os
+import subprocess
 import time
 from fnmatch import fnmatch
 from getpass import getpass
@@ -151,6 +152,32 @@ def config_section(config, section='default'):
     if section in config:
         ret.update(config[section])
     return ret
+
+class PasswordCommandError(RuntimeError):
+    """Raised when a configured caldav_pass_command cannot deliver a password"""
+
+def password_from_command(command):
+    """
+    Run `command` and return the first line it prints on stdout.
+
+    `command` is run through the shell when given as a string, and executed
+    directly when given as a list.  Only stdout is captured - stdin and stderr
+    are inherited, so interactive helpers like gpg/pinentry keep working and
+    error messages from the command reach the user.
+
+    Only the first line is used, as password managers like `pass` print the
+    password on the first line followed by other metadata.
+    """
+    try:
+        completed = subprocess.run(command, shell=isinstance(command, str), stdout=subprocess.PIPE, text=True, check=True)
+    except OSError as error:
+        raise PasswordCommandError(f"could not run password command {command!r}: {error}") from error
+    except subprocess.CalledProcessError as error:
+        raise PasswordCommandError(f"password command {command!r} exited with status {error.returncode}") from error
+    lines = completed.stdout.splitlines()
+    if not lines or not lines[0]:
+        raise PasswordCommandError(f"password command {command!r} did not print a password")
+    return lines[0]
 
 def read_config(fn, interactive_error=False):
     ## This can probably be refactored into fewer lines ...

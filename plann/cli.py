@@ -38,7 +38,7 @@ from plann.commands import (
     _split_high_pri_tasks,
     _split_huge_tasks,
 )
-from plann.config import config_section, expand_config_section, read_config
+from plann.config import PasswordCommandError, config_section, expand_config_section, read_config
 from plann.interactive import _abort
 from plann.lib import _list, _split_vcal, _split_vcals, attr_int, attr_time, attr_txt_many, attr_txt_one, find_calendars
 from plann.lib import add_time_tracking as add_time_tracking_
@@ -73,6 +73,7 @@ list_type = list
 @click.option('--caldav-url', help="Full URL to the caldav server", metavar='URL')
 @click.option('--caldav-username', '--caldav-user', help="Full URL to the caldav server", metavar='URL')
 @click.option('--caldav-password', '--caldav-pass', help="Password for the caldav server", metavar='URL')
+@click.option('--caldav-password-command', '--caldav-pass-command', help="Command printing the caldav password to stdout", metavar='CMD')
 @click.option('--calendar-url', help="Calendar id, path or URL", metavar='cal', multiple=True)
 @click.option('--calendar-name', help="Calendar name", metavar='cal', multiple=True)
 @click.option('--raise-errors/--print-errors', help="Raise errors found on calendar discovery")
@@ -91,15 +92,18 @@ def cli(ctx, **kwargs):
     ## TODO: logic to read the config file and edit kwargs from config file
     ## TODO: delayed communication with caldav server (i.e. if --help is given to subcommand)
     ## TODO: catch errors, present nice error messages
-    ctx.obj['calendars'] = find_calendars(kwargs, kwargs['raise_errors'])
-    for flag in ('show_native_timezone', 'store_timezone', 'implicit_timezone'):
-        setattr(tz, flag, kwargs[flag])
-    if not kwargs['skip_config']:
-        config = read_config(kwargs['config_file'])
-        if config:
-            for meta_section in kwargs['config_section']:
-                for section in expand_config_section(config, meta_section):
-                    ctx.obj['calendars'].extend(find_calendars(config_section(config, section), raise_errors=kwargs['raise_errors']))
+    try:
+        ctx.obj['calendars'] = find_calendars(kwargs, kwargs['raise_errors'])
+        for flag in ('show_native_timezone', 'store_timezone', 'implicit_timezone'):
+            setattr(tz, flag, kwargs[flag])
+        if not kwargs['skip_config']:
+            config = read_config(kwargs['config_file'])
+            if config:
+                for meta_section in kwargs['config_section']:
+                    for section in expand_config_section(config, meta_section):
+                        ctx.obj['calendars'].extend(find_calendars(config_section(config, section), raise_errors=kwargs['raise_errors']))
+    except PasswordCommandError as error:
+        raise click.ClickException(str(error)) from error
 
 @cli.command()
 @click.pass_context

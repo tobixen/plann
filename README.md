@@ -76,6 +76,7 @@ The list below will only contain the most important options and may
 not be up-to-date and may contain features not implemented yet.
 
 * --caldav-url, --caldav-user, --caldav-pass: how to connect to the CalDAV server.  (Fits better into a configuration file)
+* --caldav-pass-command: command printing the CalDAV password on stdout, as an alternative to --caldav-pass.  (Fits better into a configuration file)
 * --calendar-url: url to the calendar one wants to use.  A relative URL (path) or a calendar-id is also accepted.
 * --config-file: use a specific configuration file (default: $HOME/.config/calendar.conf)
 * --config-section: use a specific section from the config file (i.e. to select a different caldav-server to connect to)
@@ -211,6 +212,37 @@ work:
 private:
   contains: [ 'private-calendar', 'brothel-appointments' ]
 ```
+
+### Keeping the password out of the config file
+
+If you'd rather not store the password in plaintext, use `caldav_pass_command`
+instead of `caldav_pass`.  The command is run through the shell and the first
+line it prints on stdout is used as the password:
+
+```yaml
+---
+default:
+  caldav_url: "https://dav.example.com/"
+  caldav_user: luser
+  caldav_pass_command: "pass show caldav/dav.example.com"
+```
+
+Only the first line is used, so `pass`-style entries with metadata on the
+following lines work as-is.  Other examples: `gpg --decrypt ~/.caldav.gpg`,
+`secret-tool lookup service caldav`, `cat ~/.caldav-password`.
+
+The command inherits stdin and stderr, so interactive passphrase prompts
+(gpg/pinentry) work, and error messages from the command are shown to the
+user.  A command that fails or prints nothing is a fatal error - `plann` will
+not silently fall back to connecting without a password.
+
+`caldav_pass` takes precedence if both are given, so adding
+`caldav_pass_command` to an existing configuration changes nothing until the
+old `caldav_pass` is removed.  A warning is logged if both are set.
+
+There is also a `--caldav-pass-command` command line option.  Note that
+passing a password directly with `--caldav-pass` is insecure, as the command
+line of a running process can be read by other users on the same machine.
 
 ## Usage example
 
