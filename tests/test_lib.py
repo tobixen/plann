@@ -463,3 +463,15 @@ def test_list_top_down_caches_relative_fetches():
     ## without caching, p is fetched once per child (and more via recursion)
     assert cal.fetch_counts['p'] == 1, dict(cal.fetch_counts)
     assert all(count <= 1 for count in cal.fetch_counts.values()), dict(cal.fetch_counts)
+
+
+def test_procrastinate_has_no_breakpoint():
+    """A stray breakpoint() drops the user into pdb (or appears to hang when
+    there is no tty).  Code review item #13 - the recursive postpone-parent
+    path in _procrastinate had one guarded by an inspect.stack() depth check,
+    which is reachable from `interactive check-due` / `dismiss-panic`."""
+    import inspect as _inspect
+
+    source = _inspect.getsource(_procrastinate)
+    assert 'breakpoint()' not in source
+    assert 'inspect.stack()' not in source

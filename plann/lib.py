@@ -327,10 +327,6 @@ def _procrastinate(objs, delay, check_dependent="error", with_children=False, wi
                     else:
                         err_callback(f"{summary} could not be postponed due to parent {_summary(p)} with due {_ensure_ts(p['DUE'])} and priority {p.get('priority', 0)}")
                     if p_postponable and (p_auto_postponable or confirm_callback("procrastinate parent?")):
-                        import inspect
-                        stack_depth = len(inspect.stack())
-                        if stack_depth > 13:
-                            breakpoint()
                         _procrastinate([parent], new_due+max(parent.get_duration()+x.get_duration()+datetime.timedelta(minutes=1), datetime.timedelta(minutes=1)), check_dependent=check_dependent, err_callback=err_callback, confirm_callback=confirm_callback, recursivity=recursivity+1)
                         _procrastinate([x], new_due, check_dependent=check_dependent, err_callback=err_callback, confirm_callback=confirm_callback, recursivity=recursivity+1)
             elif check_dependent == "return":

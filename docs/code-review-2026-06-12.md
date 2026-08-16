@@ -391,7 +391,7 @@ then the remaining crash-on-edge-case items **#6-#15**. The duplication of
 | 10 | `timeline_suggestion` crashes on all-day / DTEND-less events | ✅ Fixed | `panic_planning.py:112` |
 | 11 | `interactive check-due --limit` is a string, not int | ✅ Fixed | `cli.py:519` — added `type=int` |
 | 12 | `obj.icalendar_component_UID` crashes in inconsistency-log path | ✅ Fixed | `lib.py:355` |
-| 13 | Leftover `breakpoint()` in `_procrastinate` | ⏸ On hold | `lib.py:241-244` |
+| 13 | Leftover `breakpoint()` in `_procrastinate` | ✅ Fixed | `lib.py:241-244` |
 | 14 | `time_tracking` string iterated char-by-char | ✅ Fixed | `lib.py:165` — wrap scalar in list |
 | 15 | `dismiss-panic` double-prefixes lookahead (`++60d`) | ✅ Fixed | `cli.py:538` + `commands.py:466` |
 | C1 | `_interactive_edit` duplicated in `commands.py` (stale copy) | ✅ Fixed | Deleted copy, import canonical from `interactive` |
