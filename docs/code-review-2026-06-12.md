@@ -1,6 +1,6 @@
 # Code review — plann
 
-This code review was started with the Fable model, but the model [got yanked](https://www.anthropic.com/news/fable-mythos-access) pin the middle of the process, so the rest was done with Opus.  That's sad, the whole point of asking for a code review was to utilize the Fable model.
+This code review was started with the Fable model, but the model [got yanked](https://www.anthropic.com/news/fable-mythos-access) in the middle of the process, so the rest was done with Opus.  That's sad, the whole point of asking for a code review was to utilize the Fable model.
 
 - **Date:** 2026-06-13
 - **Branch:** `refactor/delegate-config-to-caldav`

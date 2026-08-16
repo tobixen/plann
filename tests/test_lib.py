@@ -295,7 +295,7 @@ def _one_vcal(uid):
         "PRODID:-//Example Corp.//CalDAV Client//EN\n"
         "BEGIN:VEVENT\n"
         f"UID:{uid}\n"
-        "SUMMARY:event {uid}\n"
+        f"SUMMARY:event {uid}\n"
         "DTSTART:20250101T100000Z\n"
         "END:VEVENT\n"
         "END:VCALENDAR"

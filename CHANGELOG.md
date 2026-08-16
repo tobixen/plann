@@ -7,7 +7,7 @@ and I do try to adhere to [Semantic Versioning](https://semver.org/spec/v2.0.0.h
 
 ### Added
 
-* `edit --add-categories`, `--add-resource` and `--add-resources` options (alongside the existing `--add-category`).  The plural forms (`--add-categories`/`--add-resources`) split the value on comma; the singular forms (`--add-category`/`--add-resource`) keep a comma literal - so you do not have to remember whether to use singular or plural.
+* `edit --add-categories`, `--add-resource` and `--add-resources` options (alongside the existing `--add-category`).  A single value containing commas is split by the plural forms (`--add-categories`/`--add-resources`) and kept literal by the singular forms (`--add-category`/`--add-resource`).
 * `select ... list --separator=...` to join the listed items with something other than a newline.  (Ported from the archived development branch.)
 * The interactive edit prompt now advertises the `start` command (kicks off time tracking for the task) and re-prompts afterwards so a follow-up command can be given for the same task.  (Ported from the archived development branch.)
 * `select --warn-on-missing-uid/--no-warn-on-missing-uid` (default: warn).  A `--uid` that matches nothing in any calendar now prints a warning naming the missing uid(s) to stderr, rather than being silently ignored.  `--abort-on-missing-uid` still takes precedence, and `--no-warn-on-missing-uid` restores the old fully-silent behaviour.  Ref https://github.com/tobixen/plann/issues/42
@@ -21,6 +21,20 @@ and I do try to adhere to [Semantic Versioning](https://semver.org/spec/v2.0.0.h
 * The time tracking integration (`"extra_config": {"time_tracking": ["timewarrior"]}` in a config section) did not work: the configuration was attached to the calendar objects under a different attribute name than the time tracking code read, and only the value `timew` was accepted - not `timewarrior` as the error message suggested.  (Fixes ported from the archived development branch.)
 * Exporting an event/task to timewarrior no longer removes the categories from the object.
 * `select ... delete` now reports what it did: it names each item as it is deleted, and says "No items selected for deletion" on an empty selection instead of silently producing no output regardless of whether anything matched.  Ref https://github.com/tobixen/plann/issues/42
+* `select ... add-time-tracking` could not be run at all - it aborted with an "Invalid start character for option" error before doing anything.
+* Durations were computed wrongly in several ways: `1y` came out as roughly 15 days rather than a year, and a compound duration such as `1h30m` kept only its last component (30 minutes).  Adding a year to a plain date, or to February 29, raised an error.
+* `interactive check-due --limit N` crashed instead of limiting the number of tasks shown.
+* `select --no-pinned-tasks` crashed when tasks were included in the selection.
+* `interactive split` did not postpone the task when asked to - the prompt was inverted, so answering with a duration did nothing and declining postponed it.
+* `postpone <duration> with parent` in interactive editing silently did nothing.
+* The relationship overview showed only the first kind of relation, so e.g. children were listed but parents were not.
+* `list --ics` exported the first matching object without applying the filter to it.
+* `dismiss-panic` built a malformed timestamp (`++60d`) and failed.
+* Checking due dates no longer crashes on all-day events that have relations.
+* Reporting an inconsistent relationship crashed instead of logging what was wrong.
+* A `time_tracking` setting written as a plain string rather than a list was read one character at a time.
+* Postponing a task with parents could drop the user into the Python debugger.
+* `edit` now reports clearly that no editor could be found, rather than failing in a confusing way further down.
 
 ### Changed
 
