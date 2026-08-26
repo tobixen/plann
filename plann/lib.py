@@ -17,6 +17,11 @@ import caldav
 import click  ## TODO - this should be removed, eventually
 import icalendar
 
+try:
+    from caldav.config import extract_conn_params_from_section
+except ImportError:  ## caldav <= 3.2.1 has it as a private function
+    from caldav.config import _extract_conn_params_from_section as extract_conn_params_from_section
+
 from plann.template import Template
 from plann.timespec import (
     _ensure_ts,
@@ -33,9 +38,80 @@ from plann.timespec import (
 
 ## TODO: maybe find those attributes through the icalendar library? icalendar.cal.singletons, icalendar.cal.multiple, etc
 attr_txt_one = ['location', 'description', 'geo', 'organizer', 'summary', 'class', 'rrule', 'status']
-attr_txt_many = ['category', 'comment', 'contact', 'resources', 'parent', 'child'] ## category is an odd-ball, it should be categories - but we need a lot more test code before we can change that.
+## NOTE: "category" (singular) looks like an odd-ball next to the plural
+## "resources", but it is intentional: in a *search* the singular form means a
+## substring match and the plural "categories" an exact match (this distinction
+## is implemented in the caldav library / icalendar-searcher).  For *editing*,
+## the singular/plural pair is a comma-literal/comma-split convenience handled
+## through COMMA_LIST_ATTRS below.
+attr_txt_many = ['category', 'comment', 'contact', 'resources', 'parent', 'child']
 attr_time = ['dtstamp', 'dtstart', 'due', 'dtend', 'duration']
 attr_int = ['priority']
+
+## RFC 5545 "comma-token list" properties: multi-valued text properties whose
+## value is a comma-separated list of short tokens.  Exposed on the CLI in both
+## plural (comma-split, exact) and singular (comma-literal, substring) form.
+## Maps the plural canonical property name -> the singular alias.  Adding a new
+## such property here is all it takes for the edit machinery to handle it.
+COMMA_LIST_ATTRS = {
+    'categories': 'category',
+    'resources': 'resource',
+}
+_COMMA_LIST_SINGULARS = {singular: plural for plural, singular in COMMA_LIST_ATTRS.items()}
+
+def _is_comma_list_attr(name):
+    return name in COMMA_LIST_ATTRS or name in _COMMA_LIST_SINGULARS
+
+def _comma_list_is_plural(name):
+    return name in COMMA_LIST_ATTRS
+
+def _comma_list_canonical(name):
+    """The plural canonical property name for a comma-list attr (either form)."""
+    return name if name in COMMA_LIST_ATTRS else _COMMA_LIST_SINGULARS[name]
+
+def _comma_list_tokens(name, value):
+    """Normalise a CLI/interactive value into a list of tokens.
+
+    A bare string (interactive ``set cat=a,b``) is always split on comma.  A
+    tuple/list (click ``multiple=True``) is split only for the *plural* form and
+    only when a lone value contains a comma - so ``--add-category a,b`` keeps the
+    literal ``a,b`` while ``--add-categories a,b`` yields ``a`` and ``b``.
+    """
+    if hasattr(value, 'split'):
+        return value.split(',')
+    value = list(value)
+    if _comma_list_is_plural(name) and len(value) == 1 and ',' in value[0]:
+        return value[0].split(',')
+    return value
+
+def _comma_list_existing(comp, canonical):
+    """Existing tokens of a comma-list property as a plain list of strings.
+
+    Handles icalendar storing CATEGORIES as a single ``vCategory`` (``.cats``)
+    but RESOURCES as a list of ``vText`` (one property per value).
+    """
+    if canonical not in comp:
+        return []
+    val = comp.pop(canonical)
+    if hasattr(val, 'cats'):
+        return [str(x) for x in val.cats]
+    if isinstance(val, list):
+        return [str(x) for x in val]
+    return [str(val)]
+
+def _add_comma_list(obj, canonical, tokens):
+    """Append ``tokens`` to a comma-list property (e.g. CATEGORIES, RESOURCES)."""
+    comp = _icalendar_component(obj)
+    existing = _comma_list_existing(comp, canonical)
+    existing.extend(tokens)
+    comp.add(canonical, existing)
+
+def _set_comma_list(obj, canonical, tokens):
+    """Replace a comma-list property with ``tokens``."""
+    comp = _icalendar_component(obj)
+    if canonical in comp:
+        comp.pop(canonical)
+    comp.add(canonical, tokens)
 
 def _split_vcal(ical):
     """
@@ -62,94 +138,47 @@ def _split_vcal(ical):
                 for tz in ical_cal_stripped.subcomponents:
                     split_by_uid[uid].add_component(tz)
             split_by_uid[uid].add_component(subcomponent)
-    return split_by_uid.values()
+    ## Return ical strings, like _split_vcals does - the callers hand the
+    ## result on to _caldav_objclass()/add_object(), which parse text.
+    return [cal.to_ical().decode() for cal in split_by_uid.values()]
 
 def _split_vcals(ical):
     """
     This method will take a string with multiple VCALENDAR entries and
-    split it into a list
+    split it into a list (one ical string per VCALENDAR).
+
+    Delegates the parsing to icalendar (which understands CRLF line endings
+    and line folding) rather than scanning the raw string by hand.
     """
-    ical = ical.strip()
-    icals = []
-    while ical.startswith("BEGIN:VCALENDAR\n"):
-        pos = ical.find("\nEND:VCALENDAR") + 14
-        icals.append(ical[:pos])
-        ical = ical[pos:].lstrip()
-    return icals
+    return [cal.to_ical().decode() for cal in icalendar.Calendar.from_ical(ical, multiple=True)]
 
 def find_calendars(args, raise_errors):
-    def list_(obj):
-        """
-        For backward compatibility, a string rather than a list can be given as
-        calendar_url, calendar_name.  Make it into a list.
-        """
-        if not obj:
-            obj = []
-        if isinstance(obj, str) or isinstance(obj, bytes):
-            obj = [ obj ]
-        return obj
+    """
+    Find calendars from a dict of connection parameters - typically a config
+    file section or the command line arguments.  The connection keys are
+    caldav_-prefixed (caldav_url, caldav_user, caldav_pass, ...), optionally
+    accompanied by `features` and the calendar_url/calendar_name filters.
 
-    def _try(meth, kwargs, errmsg):
-        try:
-            ret = meth(**kwargs)
-            assert(ret)
-            return ret
-        except Exception:
-            logging.error(f"Problems fetching calendar information: {errmsg} - skipping")
-            if raise_errors:
-                raise
-            else:
-                return None
-
-    conn_params = {}
-    for k in args:
-        if k.startswith('caldav_') and args[k]:
-            key = k[7:]
-            if key == 'pass':
-                key = 'password'
-            if key == 'user':
-                key = 'username'
-            conn_params[key] = args[k]
-    # Pass features parameter directly to DAVClient if specified
-    if args.get('features'):
-        conn_params['features'] = args['features']
-    extra_params = {}
-    if 'extra_params' in conn_params:
-        extra_params = conn_params.pop('extra_params')
-    calendars = []
-    ## TODO: test this more thoroughly.
-    ## The code above is supposed to remote the `caldav_`-prefix
-    ## Stil the lines below was added to fix
-    ## https://github.com/pycalendar/plann/issues/11, credits to @bergercookie
-    if 'caldav_url' in conn_params:
-        conn_params['url'] = conn_params.pop('caldav_url')
-    if conn_params:
-        client = caldav.DAVClient(**conn_params)
-        principal = _try(client.principal, {}, conn_params['url'])
-        if not principal:
-            return []
-        calendars = []
-        tries = 0
-        for calendar_url in list_(args.get('calendar_url')):
-            if '/' in calendar_url:
-                calendar = principal.calendar(cal_url=calendar_url)
-            else:
-                calendar = principal.calendar(cal_id=calendar_url)
-            tries += 1
-            if _try(calendar.get_display_name, {}, calendar.url):
-                calendars.append(calendar)
-        for calendar_name in list_(args.get('calendar_name')):
-            tries += 1
-            calendar = _try(principal.calendar, {'name': calendar_name}, '{} : calendar "{}"'.format(conn_params['url'], calendar_name))
-            calendars.append(calendar)
-        if not calendars and tries == 0:
-            calendars = _try(principal.calendars, {}, "conn_params['url'] - all calendars")
-
-    if extra_params:
-        for cal in calendars:
-            cal.extra_params = extra_params
-
-    return calendars or []
+    Connection parameter extraction (including resolving the URL from a
+    `features` server profile when no caldav_url is given) and the calendar
+    lookup itself are delegated to the caldav library.
+    """
+    conn_params = extract_conn_params_from_section(args)
+    if not conn_params:
+        return []
+    calendars = caldav.get_calendars(
+        check_config_file=False,
+        environment=False,
+        raise_errors=raise_errors,
+        calendar_url=args.get('calendar_url'),
+        calendar_name=args.get('calendar_name'),
+        **conn_params,
+    )
+    ## Non-connection configuration (i.a. the time tracking integration,
+    ## cf. add_time_tracking) is attached to the calendar objects
+    for cal in calendars:
+        cal.extra_config = args.get('extra_config', {})
+    return calendars
 
 def _icalendar_component(obj):
     try:
@@ -158,23 +187,40 @@ def _icalendar_component(obj):
         ## assume obj is an icalendar_component
         return obj
 
+def _component_type(obj):
+    """Return the iCalendar component name ('VEVENT', 'VTODO', 'VJOURNAL', ...)
+    for a caldav object or icalendar component.
+
+    Preferred over sniffing 'BEGIN:VEVENT' etc. in the raw .data, which also
+    matches the substring inside a description/summary text body.
+    """
+    return _icalendar_component(obj).name
+
+def _caldav_objclass(ical):
+    """Map a single iCalendar object (raw text) to its caldav class, parsing
+    it properly rather than substring-sniffing 'BEGIN:VTODO' etc. in the body.
+    """
+    classes = {'VTODO': caldav.Todo, 'VJOURNAL': caldav.Journal, 'VEVENT': caldav.Event}
+    for comp in icalendar.Calendar.from_ical(ical).subcomponents:
+        if comp.name in classes:
+            return classes[comp.name]
+    return caldav.Event
+
 def _add_category(obj, category):
-    comp = _icalendar_component(obj)
-    if 'categories' in comp:
-        cats = comp.pop('categories').cats
-    else:
-        cats = []
-    if hasattr(category, 'split'):
-        category = category.split(',')
-    cats.extend(category)
-    comp.add('categories', cats)
+    """Append one or more categories.
+
+    Back-compat wrapper around the generic comma-list helper; ``category`` may
+    be a comma-separated string or a list/tuple of categories.
+    """
+    tokens = category.split(',') if hasattr(category, 'split') else list(category)
+    _add_comma_list(obj, 'categories', tokens)
 
 def add_time_tracking_timew(obj, start=None, end=None):
     comp = _icalendar_component(obj)
     tags = ['plann-export']
 
     if 'categories' in comp:
-        for cat in comp.pop('categories').cats:
+        for cat in comp['categories'].cats:
             tags.append(f'category:{cat}')
     tags.append(f'uid:{comp["uid"]}')
     tags.append(f'summary:{_summary(obj)}')
@@ -193,12 +239,8 @@ def add_time_tracking_timew(obj, start=None, end=None):
         subprocess.run(["timew", "start"] + tags)
 
 def add_time_tracking(obj, start=None, end=None):
-    time_tracking = None
     comp = _icalendar_component(obj)
-    if hasattr(obj.parent, 'extra_config'):
-        cfg = obj.parent.extra_config
-        if 'time_tracking' in cfg:
-            time_tracking = cfg['time_tracking']
+    time_tracking = getattr(obj.parent, 'extra_config', {}).get('time_tracking')
     if time_tracking is None:
         raise NotImplementedError('Time tracking is so far not supported internally in plann, only through external tools, and only timewarrior as for now.  You have to set `time_tracking=timewarrior` in your calendar configuration')
 
@@ -207,9 +249,11 @@ def add_time_tracking(obj, start=None, end=None):
         start = comp.start
         end = comp.end
 
+    if isinstance(time_tracking, str):
+        time_tracking = [time_tracking]
     for tt in time_tracking:
         ## TODO: this must be done in a more clever way if introducing more time tracking types
-        if tt == 'timew':
+        if tt in ('timewarrior', 'Timewarrior', 'timew'):
             add_time_tracking_timew(obj, start, end)
         else:
             raise NotImplementedError('Only time tracking through taskw supported so far')
@@ -283,10 +327,6 @@ def _procrastinate(objs, delay, check_dependent="error", with_children=False, wi
                     else:
                         err_callback(f"{summary} could not be postponed due to parent {_summary(p)} with due {_ensure_ts(p['DUE'])} and priority {p.get('priority', 0)}")
                     if p_postponable and (p_auto_postponable or confirm_callback("procrastinate parent?")):
-                        import inspect
-                        stack_depth = len(inspect.stack())
-                        if stack_depth > 13:
-                            breakpoint()
                         _procrastinate([parent], new_due+max(parent.get_duration()+x.get_duration()+datetime.timedelta(minutes=1), datetime.timedelta(minutes=1)), check_dependent=check_dependent, err_callback=err_callback, confirm_callback=confirm_callback, recursivity=recursivity+1)
                         _procrastinate([x], new_due, check_dependent=check_dependent, err_callback=err_callback, confirm_callback=confirm_callback, recursivity=recursivity+1)
             elif check_dependent == "return":
@@ -378,14 +418,55 @@ def _adjust_relations(parent, children):
         parent.save()
         _remove_reverse_relations(parent, pmutated['removed'])
 
+class _RelativeCache:
+    """Per-traversal cache for relationship listing.
+
+    A hierarchical ``list --top-down`` walks the parent/child graph and would
+    otherwise re-fetch the same task from the server once per edge (a parent
+    is fetched again for every child, and again on every recursion step):
+    ~N×R round-trips for N tasks with R relations each (code review E3).
+
+    This caches both the object-by-UID lookups and the per-object relationship
+    scan, so each task is fetched - and its consistency-checked - at most once
+    for the whole traversal.
+    """
+    def __init__(self):
+        self._objects = {}
+        self._relships = {}
+
+    def get_object(self, calendar, uid):
+        key = (getattr(calendar, 'url', None), str(uid))
+        if key not in self._objects:
+            self._objects[key] = calendar.get_object_by_uid(uid)
+        return self._objects[key]
+
+    def cached_relships(self, obj, reltype_wanted):
+        return self._relships.get((str(obj.icalendar_component['UID']), reltype_wanted))
+
+    def store_relships(self, obj, reltype_wanted, relships):
+        self._relships[(str(obj.icalendar_component['UID']), reltype_wanted)] = relships
+
 ## TODO: As for now, this one will throw the user into the python debugger if inconsistencies are found.
 ## It for sure cannot be like that when releasing plann 1.0!
-def _relships_by_type(obj, reltype_wanted=None):
+def _relships_by_type(obj, reltype_wanted=None, cache=None):
+    if cache is None:
+        cache = _RelativeCache()
+    cached = cache.cached_relships(obj, reltype_wanted)
+    if cached is not None:
+        return cached
+
     backreltypes = {'CHILD': 'PARENT', 'PARENT': 'CHILD', 'undefined': 'CHILD', 'SIBLING': 'SIBLING'}
-    rels_by_type = obj.get_relatives(reltype_wanted)
+    ## Parse the related UIDs straight from obj's ical (no network) and resolve
+    ## each one through the cache, rather than letting caldav fetch them anew.
+    rels_by_type = obj.get_relatives(reltype_wanted, fetch_objects=False)
     ret = defaultdict(list)
     for reltype in rels_by_type:
-        for other in rels_by_type[reltype]:
+        for other_uid in rels_by_type[reltype]:
+            try:
+                other = cache.get_object(obj.parent, other_uid)
+            except caldav.error.NotFoundError:
+                ## a dangling relation - mirrors get_relatives(ignore_missing=True)
+                continue
             ret[reltype].append(other)
 
             ## Consistency check ... TODO ... look more into breakages
@@ -397,7 +478,7 @@ def _relships_by_type(obj, reltype_wanted=None):
                     back_rel_types.add(back_rel_type)
 
             if len(back_rel_types) > 1:
-                logging.error(f"Inconsistency issue in relationships - has to be manually resolved (UID={obj.icalendar_component_UID}, backrels: {back_rel_types})")
+                logging.error(f"Inconsistency issue in relationships - has to be manually resolved (UID={obj.icalendar_component['UID']}, backrels: {back_rel_types})")
                 ## Inconsistency has to be manually fixed: more than one related-to property pointing from other to obj
             if len(back_rel_types) == 0:
                 logging.error("Inconsistency issue in relationships - will be automatically fixed: no related-to property pointing from other to obj")
@@ -407,6 +488,7 @@ def _relships_by_type(obj, reltype_wanted=None):
             else:
                 if back_rel_types != { backreltypes[reltype] }:
                     logging.error("Inconsistency issue in relationships - has to be manually resolved. Object and other points to each other, but reltype does not match")
+    cache.store_relships(obj, reltype_wanted, ret)
     return ret
 
 def _relationship_text(obj, reltype_wanted=None):
@@ -419,7 +501,7 @@ def _relationship_text(obj, reltype_wanted=None):
         for relobj in rels[reltype]:
             objs.append(_summary(relobj))
         ret.append(reltype + "\n" + "\n".join(objs) + "\n")
-        return "\n".join(ret)
+    return "\n".join(ret)
 
 ## TODO - this needs to be better documented.  What's the difference between _process_set_arg and _set_something?  Do they overlap?  Are they intended to be used together?
 def _process_set_arg(arg, value, keep_category=False):
@@ -434,13 +516,13 @@ def _process_set_arg(arg, value, keep_category=False):
             k,v = split1.split('=')
             rrule[k] = v
         ret[arg] = rrule
-    elif arg in ('category', 'categories'):
-        if hasattr(value, 'split'):
-            value = value.split(',')
-        elif len(value) == 1 and arg == 'categories' and ',' in value[0]:
-            value = value[0].split(',')
-        if not keep_category:
-            arg = 'categories'
+    elif _is_comma_list_attr(arg):
+        value = _comma_list_tokens(arg, value)
+        ## Without keep_category the singular alias is canonicalised to its
+        ## plural (replace) form - used by the create path, which forwards
+        ## set_args straight to caldav's save_todo(categories=...) etc.
+        if not keep_category and not _comma_list_is_plural(arg):
+            arg = _comma_list_canonical(arg)
         ret[arg] = value
     else:
         ret[arg] = value
@@ -460,8 +542,14 @@ def _set_something(obj, arg, value):
         obj.set_duration(value)
     elif arg in ('due', 'dtend'): ## TODO: dtstart!
         getattr(obj, f"set_{arg}")(value, move_dtstart=True, check_dependent=True)
-    elif arg == 'category':
-        _add_category(obj, value)
+    elif _is_comma_list_attr(arg):
+        ## a list (already processed by _process_set_arg) or a raw comma string
+        tokens = _comma_list_tokens(arg, value)
+        canonical = _comma_list_canonical(arg)
+        if _comma_list_is_plural(arg):
+            _set_comma_list(obj, canonical, tokens)   ## plural -> replace
+        else:
+            _add_comma_list(obj, canonical, tokens)   ## singular -> append
     else:
         if arg in comp:
             comp.pop(arg)
@@ -471,7 +559,7 @@ def _set_something(obj, arg, value):
 ## TODO: should be rewritten a bit, we should have a create_list method that does not call on click.echo directly
 ## let the caller decide if click is to be used or not.
 ## Use the yield method to avoid having to generate the full list prior to printing to screen
-def _list(objs, ics=False, template="{DTSTART:?{DUE:?(date missing)?}?%F %H:%M:%S %Z}: {SUMMARY:?{DESCRIPTION:?(no summary given)?}?}", top_down=False, bottom_up=False, indent=0, echo=True, uids=None, filter=lambda obj: True):
+def _list(objs, ics=False, template="{DTSTART:?{DUE:?(date missing)?}?%F %H:%M:%S %Z}: {SUMMARY:?{DESCRIPTION:?(no summary given)?}?}", top_down=False, bottom_up=False, indent=0, echo=True, uids=None, filter=lambda obj: True, separator="\n", cache=None):
     """
     Actual implementation of list
 
@@ -480,13 +568,16 @@ def _list(objs, ics=False, template="{DTSTART:?{DUE:?(date missing)?}?%F %H:%M:%
     """
     if indent>32:
         raise NotImplementedError("too deep hierarchies, or circular links")
+    ## one relationship cache for the whole (recursive) traversal, so the same
+    ## task is not re-fetched from the server for every edge it touches (E3)
+    if cache is None and (top_down or bottom_up):
+        cache = _RelativeCache()
     if ics:
-        if not objs:
+        accepted = [obj for obj in objs if filter(obj)]
+        if not accepted:
             return
-        icalendar = objs.pop(0).icalendar_instance
-        for obj in objs:
-            if not filter(obj):
-                continue
+        icalendar = accepted[0].icalendar_instance
+        for obj in accepted[1:]:
             icalendar.subcomponents.extend(obj.icalendar_instance.subcomponents)
         click.echo(icalendar.to_ical())
         return
@@ -513,7 +604,7 @@ def _list(objs, ics=False, template="{DTSTART:?{DUE:?(date missing)?}?%F %H:%M:%
         above = []
         below = []
         if top_down or bottom_up:
-            relations = _relships_by_type(obj)
+            relations = _relships_by_type(obj, cache=cache)
             parents = relations['PARENT']
             children = relations['CHILD']
             ## in a top-down view, the (grand)*parent should be shown as a top-level item rather than the object.
@@ -534,17 +625,17 @@ def _list(objs, ics=False, template="{DTSTART:?{DUE:?(date missing)?}?%F %H:%M:%
             more_info['calendar_url'] = obj.parent.url
             output.append(" "*indent + template.format(**obj.icalendar_component, **more_info))
             ## Recursively add children in an indented way
-            output.extend(_list(below, template=template, top_down=top_down, bottom_up=bottom_up, indent=indent+2, echo=False, filter=filter))
+            output.extend(_list(below, template=template, top_down=top_down, bottom_up=bottom_up, indent=indent+2, echo=False, filter=filter, cache=cache))
             if indent and top_down:
                 ## Include all siblings as same-level nodes
                 ## Use the top-level uids to avoid infinite recursion
                 ## TODO: siblings are probably not being handled correctly here.  Should write test code and investigate.
-                output.extend(_list(relations['SIBLING'], template=template, top_down=top_down, bottom_up=bottom_up, indent=indent, echo=False, uids=uids, filter=filter))
+                output.extend(_list(relations['SIBLING'], template=template, top_down=top_down, bottom_up=bottom_up, indent=indent, echo=False, uids=uids, filter=filter, cache=cache))
         for p in above:
             ## The item should be part of a sublist.  Find and add the top-level item, and the full indented list under there - recursively.
             puid = p.icalendar_component['UID']
             if puid not in uids:
-                output.extend(_list([p], template=template, top_down=top_down, bottom_up=bottom_up, indent=indent, echo=False, uids=uids, filter=filter))
+                output.extend(_list([p], template=template, top_down=top_down, bottom_up=bottom_up, indent=indent, echo=False, uids=uids, filter=filter, cache=cache))
     if echo:
-        click.echo_via_pager("\n".join(output))
+        click.echo_via_pager(separator.join(output))
     return output

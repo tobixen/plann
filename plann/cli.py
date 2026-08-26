@@ -38,9 +38,21 @@ from plann.commands import (
     _split_high_pri_tasks,
     _split_huge_tasks,
 )
-from plann.config import config_section, expand_config_section, read_config
+from plann.config import config_section, expand_config_section, interactive_config, read_config
 from plann.interactive import _abort
-from plann.lib import _list, _split_vcal, _split_vcals, attr_int, attr_time, attr_txt_many, attr_txt_one, find_calendars
+from plann.lib import (
+    COMMA_LIST_ATTRS,
+    _caldav_objclass,
+    _list,
+    _split_vcal,
+    _split_vcals,
+    _summary,
+    attr_int,
+    attr_time,
+    attr_txt_many,
+    attr_txt_one,
+    find_calendars,
+)
 from plann.lib import add_time_tracking as add_time_tracking_
 from plann.timespec import _now, parse_dt, tz
 
@@ -59,6 +71,40 @@ list_type = list
 
 ## See https://click.palletsprojects.com/en/8.0.x/api/#click.ParamType and
 ## /usr/lib/*/site-packages/click/types.py on how to do this.
+
+class _LazyCalendars:
+    """A list-like wrapper that defers calendar discovery until first use.
+
+    Discovery hits the network (one connect per configured calendar), so we
+    only want to pay for it when a command actually uses the calendars - not
+    when click merely runs the group callback to e.g. show subcommand help
+    (code review E1).  Supports the handful of operations the commands use:
+    iteration, ``len()``, indexing and truthiness.
+    """
+    def __init__(self, discover):
+        self._discover = discover
+        self._resolved = None
+
+    @property
+    def _calendars(self):
+        if self._resolved is None:
+            self._resolved = self._discover()
+        return self._resolved
+
+    def __iter__(self):
+        return iter(self._calendars)
+
+    def __len__(self):
+        return len(self._calendars)
+
+    def __getitem__(self, index):
+        return self._calendars[index]
+
+    def __bool__(self):
+        return bool(self._calendars)
+
+    def extend(self, more):
+        self._calendars.extend(more)
 
 @click.group()
 @click.version_option(None, "--version", "-V", package_name="plann")
@@ -89,17 +135,29 @@ def cli(ctx, **kwargs):
     ctx.ensure_object(dict)
     ## TODO: add all relevant connection parameters for the DAVClient as options
     ## TODO: logic to read the config file and edit kwargs from config file
-    ## TODO: delayed communication with caldav server (i.e. if --help is given to subcommand)
     ## TODO: catch errors, present nice error messages
-    ctx.obj['calendars'] = find_calendars(kwargs, kwargs['raise_errors'])
+    ## Calendar discovery talks to the network; defer it (E1) so commands that
+    ## never touch the server - notably `plann <subcommand> --help` - don't
+    ## connect to every configured calendar.
+    ctx.obj['calendars'] = _LazyCalendars(lambda: _discover_calendars(kwargs))
+    ## stashed for the `configure` subcommand (and any other command that needs
+    ## to know which config file / section the user pointed at)
+    ctx.obj['config_file'] = kwargs['config_file']
+    ctx.obj['config_section'] = kwargs['config_section']
     for flag in ('show_native_timezone', 'store_timezone', 'implicit_timezone'):
         setattr(tz, flag, kwargs[flag])
+
+def _discover_calendars(kwargs):
+    """Find calendars from the command-line connection options and, unless
+    --skip-config is given, from every selected config-file section."""
+    calendars = find_calendars(kwargs, kwargs['raise_errors'])
     if not kwargs['skip_config']:
         config = read_config(kwargs['config_file'])
         if config:
             for meta_section in kwargs['config_section']:
                 for section in expand_config_section(config, meta_section):
-                    ctx.obj['calendars'].extend(find_calendars(config_section(config, section), raise_errors=kwargs['raise_errors']))
+                    calendars.extend(find_calendars(config_section(config, section), raise_errors=kwargs['raise_errors']))
+    return calendars
 
 @cli.command()
 @click.pass_context
@@ -116,6 +174,20 @@ def list_calendars(ctx):
         lines = [f"{name:<{max_display_name}} {url}" for name, url in calendar_info]
         click.echo_via_pager(output + "\n".join(lines) + "\n")
 
+@cli.command()
+@click.pass_context
+def configure(ctx):
+    """
+    Interactive configuration mode (EXPERIMENTAL - under-tested, here be dragons).
+
+    Prompts for connection parameters and writes them to the config file.
+    """
+    config_file = ctx.obj['config_file']
+    sections = ctx.obj['config_section']
+    section = sections[0] if sections else 'default'
+    config = read_config(config_file, interactive_error=True) or {}
+    interactive_config(config, config_file, config_section=section)
+
 def _set_attr_options_(func, verb, desc=""):
     """
     decorator that will add options --set-category, --set-description etc
@@ -129,6 +201,12 @@ def _set_attr_options_(func, verb, desc=""):
     if verb == 'no-':
         for foo in attr_txt_one + attr_txt_many + attr_time + attr_int:
             func = click.option(f"--{verb}{foo}/--has-{foo}", default=None, help=f"{desc} ical attribute {foo}")(func)
+    elif verb == 'add-':
+        ## append-options, only for the comma-list properties, in both the
+        ## plural (comma-split) and singular (comma-literal) form
+        for plural, singular in COMMA_LIST_ATTRS.items():
+            for foo in (singular, plural):
+                func = click.option(f"--{verb}{foo}", help=f"{desc} ical attribute {plural}", multiple=True)(func)
     else:
         if verb == 'set-':
             attr__one = attr_txt_one + attr_time + attr_int
@@ -136,8 +214,18 @@ def _set_attr_options_(func, verb, desc=""):
             attr__one = attr_txt_one
         for foo in attr__one:
             func = click.option(f"--{verb}{foo}", help=f"{desc} ical attribute {foo}")(func)
-        for foo in attr_txt_many + ['categories']: ## TODO: category is the oddball, not categories
-            func = click.option(f"--{verb}{foo}", help=f"{desc} ical attribute {foo}", multiple=True)(func)
+        ## the extra 'categories' gives the plural form for the comma-list
+        ## attributes (attr_txt_many carries the singular 'category' as that is
+        ## the substring-search form; see lib.COMMA_LIST_ATTRS)
+        singular_to_plural = {s: p for p, s in COMMA_LIST_ATTRS.items()}
+        for foo in attr_txt_many + ['categories']:
+            help_text = f"{desc} ical attribute {foo}"
+            if verb == 'set-' and foo in singular_to_plural:
+                ## e.g. --set-category: kept for backwards compatibility, but it
+                ## *appends* rather than replaces, which the name does not convey
+                help_text = (f"{desc} ical attribute {foo} (DEPRECATED - this appends; use "
+                             f"--add-{foo} to append or --set-{singular_to_plural[foo]} to replace)")
+            func = click.option(f"--{verb}{foo}", help=help_text, multiple=True)(func)
     return func
 
 def _set_attr_options(verb="", desc=""):
@@ -148,7 +236,8 @@ def _set_attr_options(verb="", desc=""):
 @click.option('--mass-interactive/--no-mass-interactive-select', help="editor based interactive filtering")
 @click.option('--all/--none', default=None, help='Select all (or none) of the objects.  Overrides all other selection options.')
 @click.option('--uid', multiple=True, help='select an object with a given uid (or select more object with given uids).  Overrides all other selection options')
-@click.option('--abort-on-missing-uid/--ignore-missing-uid', default=False, help='Abort if (one or more) uids are not found (default: silently ignore missing uids).  Only effective when used with --uid')
+@click.option('--abort-on-missing-uid/--ignore-missing-uid', default=False, help='Abort if (one or more) uids are not found (default: carry on with whatever was found).  Only effective when used with --uid')
+@click.option('--warn-on-missing-uid/--no-warn-on-missing-uid', default=True, help='Print a warning (to stderr) for uids that are not found (default: warn).  Has no effect when --abort-on-missing-uid is given.  Only effective when used with --uid')
 @click.option('--todo/--no-todo', default=None, help='select only todos (or no todos)')
 @click.option('--event/--no-event', default=None, help='select only events (or no events)')
 @click.option('--journal/--no-journal', default=None, help='select only journal entries (or no journal entries)')
@@ -189,7 +278,7 @@ def select(*largs, **kwargs):
 
 @select.command()
 @click.pass_context
-@click.option('startnow/track', help="the event starts now vs track the original timespan", default=True)
+@click.option('--startnow/--track', help="the event starts now vs track the original timespan", default=True)
 def add_time_tracking(ctx, startnow):
     """
     Track time spent on events/tasks
@@ -199,7 +288,7 @@ def add_time_tracking(ctx, startnow):
         start_time = _now()
     else:
         start_time = None
-    if not startnow and not all (x for x in objs if isinstance(x, caldav.calendarobjectresource.Event)):
+    if not startnow and not all(isinstance(x, caldav.Event) for x in objs):
         _abort("original timespan is only allowed for events - and you've selected tasks or journals")
     if len(objs)>1 and startnow:
         _abort("Only one event/task can be started at the time")
@@ -224,14 +313,15 @@ list_type = list
 @select.command()
 @click.option('--ics/--no-ics', default=False, help="Output in ics format")
 @click.option('--template', default="{DTSTART:?{DUE:?(date missing)?}?%F %H:%M:%S %Z}: {SUMMARY:?{DESCRIPTION:?(no summary given)?}?}")
+@click.option('--separator', default="\n", help="String to separate the listed items with (defaults to a newline)")
 @click.option('--top-down/--flat-list', help="Check relations and list the relations in a hierarchical way")
 @click.option('--bottom-up/--flat-list', help="List parents (dependencies) in a hierarchical way (cannot be combined with top-down)")
 @click.pass_context
-def list(ctx, ics, template, top_down=False, bottom_up=False):
+def list(ctx, ics, template, separator="\n", top_down=False, bottom_up=False):
     """
     Print out a list of tasks/events/journals
     """
-    return _list(ctx.obj['objs'], ics, template, top_down=top_down, bottom_up=bottom_up)
+    return _list(ctx.obj['objs'], ics, template, top_down=top_down, bottom_up=bottom_up, separator=separator)
 
 
 @select.command()
@@ -261,17 +351,20 @@ def delete(ctx, multi_delete, **kwargs):
     Delete the selected item(s)
     """
     objs = ctx.obj['objs']
+    if not objs:
+        click.echo("No items selected for deletion")
+        return
     if multi_delete is None and len(objs)>1:
         multi_delete = click.confirm(f"OK to delete {len(objs)} items?")
     if len(objs)>1 and not multi_delete:
         _abort(f"Not going to delete {len(objs)} items")
     for obj in objs:
+        click.echo(f"Deleting {_summary(obj)}")
         obj.delete()
 
 ## TODO: reconsider the naming of the attributes and functions - --mass-interactive should probably be --interactive-editor - and the interactive reprioritization function needs to be renamed
 @select.command()
 @click.option('--pdb/--no-pdb', default=None, help="Interactive edit through pdb (experts only)")
-@click.option('--add-category', default=None, help="Add a category (equivalent with --set-category, while --set-categories will overwrite existing categories))", multiple=True)
 @click.option('--postpone', help="Add something to the DTSTART and DTEND/DUE")
 @click.option('--postpone-with-children', help="Add something to the DTSTART and DTEND/DUE for this and children")
 @click.option('--interactive-ical/--no-interactive-ical', help="Edit the ical interactively")
@@ -284,6 +377,7 @@ def delete(ctx, multi_delete, **kwargs):
 @click.option('--complete/--uncomplete', default=None, help="Mark task(s) as completed")
 @click.option('--complete-recurrence-mode', default='safe', help="Completion of recurrent tasks, mode to use - can be 'safe', 'thisandfuture' or '' (see caldav library for details)")
 @_set_attr_options(verb='set')
+@_set_attr_options(verb='add', desc='append to')
 @click.pass_context
 def edit(*largs, **kwargs):
     """
@@ -400,7 +494,7 @@ def ical(ctx, ical_data, ical_file):
         for c in ctx.obj['calendars']:
             ## TODO: there is a TODO-comment in add_object that objclass should not be mandatory.
             ## when that one has been fixed, remove this additional logic
-            objclass = caldav.Todo if "BEGIN:VTODO" in ical else (caldav.Journal if "BEGIN:VJOURNAL" in ical else caldav.Event)
+            objclass = _caldav_objclass(ical)
             c.add_object(objclass, ical)
 
 @add.command()
@@ -515,7 +609,7 @@ def manage_tasks(ctx):
     _agenda(ctx)
 
 @interactive.command()
-@click.option('--limit', help='If more than limit overdue tasks are found, probably we should do a mass procrastination rather than going through one and one task')
+@click.option('--limit', type=int, help='If more than limit overdue tasks are found, probably we should do a mass procrastination rather than going through one and one task')
 @click.option('--lookahead', help='Look-ahead time - check tasks that needs to be completed in the near future', default='+16h')
 @click.pass_context
 def check_due(ctx, limit, lookahead):
@@ -534,7 +628,7 @@ def dismiss_panic(ctx, hours_per_day, lookahead='60d'):
     Search for panic points, checks if they can be solved by
     procrastinating tasks, comes up with suggestions
     """
-    return _dismiss_panic(ctx, hours_per_day, f"+{lookahead}")
+    return _dismiss_panic(ctx, hours_per_day, lookahead)
 
 
 @interactive.command()

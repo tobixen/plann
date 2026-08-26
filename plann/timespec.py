@@ -4,6 +4,7 @@ import zoneinfo
 from dataclasses import dataclass
 
 import dateparser
+from dateutil.relativedelta import relativedelta
 
 """
 Most important content:
@@ -17,6 +18,21 @@ while parse_timespec doesn't.
 
 The naming of those two are a bit arbitrary and may be changed in a future version of the library.  Old names will then continue working as legacy aliases.
 """
+
+## The relative-duration mini-grammar (e.g. "2h", "1y1w", "+2.5h").  Historically
+## this [smhdwy] unit set was duplicated in four places (parse_add_dur,
+## _parse_timespec, commands.__select and interactive._command_line_edit); it lives
+## here now so adding a new unit (e.g. months) only touches one spot.
+DURATION_UNITS = "smhdwy"
+## A single magnitude+unit token (signed/decimal), with the remainder captured in
+## group 3 so callers can tokenize a multi-unit duration one component at a time.
+DURATION_TOKEN_RE = re.compile(rf'([+-]?\d+(?:\.\d+)?)([{DURATION_UNITS}])(.*)')
+## A complete bare duration such as "1y1w2h" (one capturing group around the whole).
+DURATION_RE = re.compile(rf'((?:\d+(?:\.\d+)?[{DURATION_UNITS}])+)')
+
+def is_duration(text):
+    """True if the whole string is a bare relative duration like "1y1w2h"."""
+    return bool(re.fullmatch(DURATION_RE, text))
 
 ## Singleton (aka global variable)
 @dataclass
@@ -148,10 +164,11 @@ def parse_add_dur(dt, dur, for_storage=False, ts_allowed=False):
     time_units = {
         's': 1, 'm': 60, 'h': 3600,
         'd': 86400, 'w': 604800,
-        'y': 1314000
+        'y': 31536000
     }
+    diff = datetime.timedelta(0)
     while dur:
-        rx = re.match(r'([+-]?\d+(?:\.\d+)?)([smhdwy])(.*)', dur)
+        rx = DURATION_TOKEN_RE.match(dur)
         if not rx:
             if ts_allowed:
                 return parse_dt(dur)
@@ -160,12 +177,16 @@ def parse_add_dur(dt, dur, for_storage=False, ts_allowed=False):
         i = float(rx.group(1))
         u = rx.group(2)
         dur = rx.group(3)
-        if u=='y' and dt:
-            dt = datetime.datetime.combine(datetime.date(dt.year+int(i), dt.month, dt.day), dt.time(), tzinfo=dt.tzinfo)
-        else:
-            diff = datetime.timedelta(0, i*time_units[u])
+        if u=='y':
             if dt:
-                dt = dt + diff
+                dt = dt + relativedelta(years=int(i))
+            else:
+                diff += datetime.timedelta(seconds=int(i)*time_units['y'])
+        else:
+            component = datetime.timedelta(0, i*time_units[u])
+            diff += component
+            if dt:
+                dt = dt + component
     if dt:
         return dt.astimezone(tz.store_timezone) if for_storage else dt
     else:
@@ -206,7 +227,7 @@ def _parse_timespec(timespec):
 
     ## calendar-cli format, 1998-10-03 15:00+2h
     if '+' in timespec:
-        rx = re.match(r'(.*)\+((?:\d+(?:\.\d+)?[smhdwy])+)$', timespec)
+        rx = re.match(rf'(.*)\+{DURATION_RE.pattern}$', timespec)
         if rx:
             start = parse_dt(rx.group(1))
             end = parse_add_dur(start, rx.group(2))
@@ -225,5 +246,3 @@ def _parse_timespec(timespec):
             return (parse_dt(f"{split_by_space[0]} {split_by_space[1]}"), parse_dt(f"{split_by_space[2]} {split_by_space[3]}"))
         else:
             raise ValueError(f"couldn't parse time interval {timespec}")
-
-    raise NotImplementedError("possibly a ISO time interval")

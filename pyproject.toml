@@ -24,12 +24,14 @@ classifiers = [
 ]
 keywords = ["caldav", "calendar", "cli", "todo", "planning"]
 dependencies = [
-    "caldav>=3.2.1",
+    "caldav>=3.3.0",
     "Click",
     "PyYAML",
     "sortedcontainers",
     "dateparser>=1.2",
+    "python-dateutil",
     "icalendar",
+    "icalendar_searcher",
 ]
 
 [project.urls]
@@ -99,3 +101,8 @@ exclude_lines = [
 
 [tool.deptry]
 pep621_dev_dependency_groups = ["dev"]
+
+[tool.deptry.per_rule_ignores]
+## PyYAML is no longer imported directly, but it's still needed for yaml
+## config files - the caldav library imports it lazily without declaring it
+DEP002 = ["PyYAML"]

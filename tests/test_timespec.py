@@ -3,6 +3,7 @@ from datetime import date, datetime, timedelta, timezone
 import pytest
 
 from plann.lib import _ensure_ts, parse_add_dur, parse_dt, parse_timespec, tz
+from plann.timespec import DURATION_RE, is_duration
 
 utc = timezone.utc
 
@@ -47,7 +48,18 @@ class TestParseTimestamp:
         (datetime(2020,2,20),'4d', datetime(2020,2,24)),
         (datetime(2020,2,20),'1w1s', datetime(2020,2,27,0,0,1)),
         (datetime(2020,2,20),'2y1d', datetime(2022,2,21)),
-        (None, '1s', timedelta(seconds=1))
+        (None, '1s', timedelta(seconds=1)),
+        ## Regression tests for the code review bugs #6, #7 and #8.
+        ## #6: the year constant was 1314000 seconds (~15 days), not 31536000.
+        (None, '1y', timedelta(days=365)),
+        ## #8: `diff` was reassigned rather than accumulated, so only the
+        ## last unit of a compound duration survived.
+        (None, '1h30m', timedelta(minutes=90)),
+        (None, '2d3h', timedelta(days=2, hours=3)),
+        ## #7: the year branch used to do datetime arithmetic that blew up on
+        ## a plain date, and on a Feb 29 base date.
+        (date(2021,1,8), '1y', date(2022,1,8)),
+        (date(2020,2,29), '1y', date(2021,2,28)),
          ])
     def test_parseAddDur(self, dt, dur, expected):
          if isinstance(dt, datetime):
@@ -188,9 +200,47 @@ class TestNaturalLanguage:
         result = parse_dt("Monday")
         assert result.weekday() == 0  # Monday
 
+    def test_relative_future(self):
+        tz.implicit_timezone = "Europe/Oslo"
+        result = parse_dt("in 2 days")
+        expected = (datetime.now().astimezone() + timedelta(days=2)).date()
+        got = result.date() if isinstance(result, datetime) else result
+        assert got == expected
+
+    def test_yesterday_via_timespec(self):
+        """Natural-language dates should also flow through parse_timespec()."""
+        tz.implicit_timezone = "Europe/Oslo"
+        start, end = parse_timespec("yesterday")
+        expected = (datetime.now().astimezone() - timedelta(days=1)).date()
+        got = start.date() if isinstance(start, datetime) else start
+        assert got == expected
+        assert end is None
+
     def test_invalid_raises(self):
         with pytest.raises(ValueError):
             parse_dt("not a date at all !!!!")
+
+
+class TestDurationGrammar:
+    """The [smhdwy] relative-duration grammar is centralised in timespec.py."""
+
+    @pytest.mark.parametrize("text,expected", [
+        ("1y1w2h", True),
+        ("2.5h", True),
+        ("30m", True),
+        ("1s", True),
+        ("yesterday", False),
+        ("2021-01-08", False),
+        ("3M", False),   # months not part of the grammar (yet)
+        ("", False),
+    ])
+    def test_is_duration(self, text, expected):
+        assert is_duration(text) == expected
+
+    def test_duration_re_is_shared(self):
+        """The same compiled regex backs is_duration() and the suffix matcher."""
+        assert DURATION_RE.fullmatch("1y1w2h")
+        assert not DURATION_RE.fullmatch("1y1w2x")
 
 
 def test_ensure_ts():

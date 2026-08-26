@@ -2,20 +2,71 @@ import json
 import logging
 import os
 import time
-from fnmatch import fnmatch
 from getpass import getpass
 
-import yaml
+## The config handling logic originated in plann and has been adopted by the
+## caldav library - use the caldav implementation rather than carrying a copy.
+## (The redundant aliases mark config_section and expand_config_section as
+## intentional re-exports, they are used by cli.py)
+from caldav.config import config_section as config_section
+from caldav.config import expand_config_section as expand_config_section
+from caldav.config import read_config as _read_config
+
+try:
+    from caldav.config import CONNKEYS as _CONNKEYS
+except ImportError:  ## older caldav releases don't export CONNKEYS
+    _CONNKEYS = None
+
+## Connection parameters are written caldav_-prefixed; caldav's reader
+## (extract_conn_params_from_section) maps caldav_user/caldav_pass to
+## username/password.  Deriving the prompt list from caldav.config.CONNKEYS
+## (rather than hardcoding an independent list) keeps the writer from drifting
+## away from the reader - the historical bug was writing `ssl_verify_cert`
+## without the caldav_ prefix, which the reader silently dropped (code review
+## C8).
+_CONN_ALIASES = {'user': 'username', 'pass': 'password'}
+_CONN_PROMPT_KEYS = ('caldav_url', 'caldav_user', 'caldav_pass', 'caldav_proxy', 'caldav_ssl_verify_cert')
+
+if _CONNKEYS is not None:
+    ## fail fast if a prompt key stops mapping to a real caldav connection
+    ## parameter - i.e. if this list ever drifts from the reader again
+    for _k in _CONN_PROMPT_KEYS:
+        _bare = _k[len('caldav_'):]
+        assert _CONN_ALIASES.get(_bare, _bare) in _CONNKEYS, \
+            f"prompt key {_k!r} is not a caldav connection parameter"
+
+## calendar_url/calendar_name are read directly by find_calendars; features is
+## the caldav server-compatibility profile; inherits is the config meta-key
+## resolved by config_section.  (language/timezone are intentionally NOT
+## prompted for - plann does not read them from the config file.)
+CONFIG_PROMPT_KEYS = _CONN_PROMPT_KEYS + ('calendar_url', 'calendar_name', 'features', 'inherits')
 
 
-def interactive_config(args, config, remaining_argv):
+def _prompt_value(label, current, secret=False):
+    if secret:
+        print(f"Config option {label} - old value: **HIDDEN**")
+        return getpass(prompt="Enter new value (or just enter to keep the old): ")
+    print("Config option {} - old value: {}".format(label, current if current is not None else '(None)'))
+    return input("Enter new value (or just enter to keep the old): ")
 
-    section = 'default'
+
+def interactive_config(config, config_file, config_section='default', allow_use=False):
+    """Interactively edit a configuration section and optionally save it.
+
+    EXPERIMENTAL / under-tested - see the disclaimer printed at runtime.
+
+    `config` is the parsed config dict (may be empty), `config_file` the path
+    to write to, `config_section` the section to edit, and `allow_use` whether
+    to offer using the config without saving (only meaningful when a follow-up
+    command will consume the returned config).  Returns the modified config.
+    """
+    section = config_section
     backup = {}
     modified = False
 
     print("Welcome to the interactive calendar configuration mode")
-    print("Warning - untested code ahead, raise issues at config-issues@plann.no or the github issue tracker")
+    print("WARNING - here be dragons: this interactive configuration is under-tested.")
+    print("Please raise issues at config-issues@plann.no or the github issue tracker.")
     print("It might be a good idea to read the documentation in parallel if running this for your first time")
     if not config or not hasattr(config, 'keys'):
         config = {}
@@ -23,8 +74,8 @@ def interactive_config(args, config, remaining_argv):
     if config:
         print("The following sections have been found: ")
         print("\n".join(config.keys()))
-        if args.config_section and args.config_section != 'default':
-            section = args.config_section
+        if config_section and config_section != 'default':
+            section = config_section
         else:
             ## TODO: tab completion
             section = input("Chose one of those, or a new name / no name for a new configuration section: ")
@@ -37,18 +88,20 @@ def interactive_config(args, config, remaining_argv):
     if section not in config:
         config[section] = {}
 
-    for config_key in ('caldav_url', 'calendar_url', 'caldav_user', 'caldav_pass', 'caldav_proxy', 'ssl_verify_cert', 'language', 'timezone', 'inherits'):
-
-        if config_key == 'caldav_pass':
-            print("Config option caldav_pass - old value: **HIDDEN**")
-            value = getpass(prompt="Enter new value (or just enter to keep the old): ")
-        else:
-            print("Config option {} - old value: {}".format(config_key, config[section].get(config_key, '(None)')))
-            value = input("Enter new value (or just enter to keep the old): ")
-
+    sect = config[section]
+    for config_key in CONFIG_PROMPT_KEYS:
+        value = _prompt_value(config_key, sect.get(config_key), secret=(config_key == 'caldav_pass'))
         if value:
-            config[section][config_key] = value
+            sect[config_key] = value
             modified = True
+
+    ## time_tracking is non-connection config; find_calendars passes the whole
+    ## extra_config sub-dict through to add_time_tracking (see lib.py)
+    tt_current = sect.get('extra_config', {}).get('time_tracking')
+    tt_value = _prompt_value('time_tracking (e.g. timewarrior)', tt_current)
+    if tt_value:
+        sect.setdefault('extra_config', {})['time_tracking'] = tt_value
+        modified = True
 
     if not modified:
         print("No configuration changes have been done")
@@ -60,7 +113,7 @@ def interactive_config(args, config, remaining_argv):
                 options.append(('save', f'save configuration into section {section}'))
             if backup or not section:
                 options.append(('save_other', 'add this new configuration into a new section in the configuration file'))
-            if remaining_argv:
+            if allow_use:
                 options.append(('use', 'use this configuration without saving'))
             options.append(('abort', 'abort without saving'))
             print("CONFIGURATION DONE ...")
@@ -79,9 +132,9 @@ def interactive_config(args, config, remaining_argv):
                         del config[section]
                     section = new_section
                 try:
-                    if os.path.isfile(args.config_file):
-                        os.rename(args.config_file, f"{args.config_file}.{int(time.time())}.bak")
-                    with open(args.config_file, 'w') as outfile:
+                    if os.path.isfile(config_file):
+                        os.rename(config_file, f"{config_file}.{int(time.time())}.bak")
+                    with open(config_file, 'w') as outfile:
                         json.dump(config, outfile, indent=4)
                 except Exception as e:
                     print(e)
@@ -89,85 +142,18 @@ def interactive_config(args, config, remaining_argv):
                     print("Saved config")
                     state = 'done'
 
-    if args.config_section == 'default' and section != 'default':
+    if config_section == 'default' and section != 'default':
         config['default'] = config[section]
     return config
 
-## TODO TODO TODO - write test code for all the corner cases
-## TODO TODO TODO - write documentation of config format
-def expand_config_section(config, section='default', blacklist=None):
-    """
-    In the "normal" case, will return [ section ]
-
-    We allow:
-
-    * * includes all sections in config file
-    * "Meta"-sections in the config file with the keyword "contains" followed by a list of section names
-    * Recursive "meta"-sections
-    * Glob patterns (work_* for all sections starting with work_)
-    * Glob patterns in "meta"-sections
-    """
-    ## Optimizating for a special case.  The results should be the same without this optimization.
-    if section == '*':
-        return [x for x in config if not config[x].get('disable', False)]
-
-    ## If it's not a glob-pattern ...
-    if set(section).isdisjoint(set('[*?')):
-        ## If it's referring to a "meta section" with the "contains" keyword
-        if 'contains' in config[section]:
-            results = []
-            if not blacklist:
-                blacklist = set()
-            blacklist.add(section)
-            for subsection in config[section]['contains']:
-                if subsection not in results and subsection not in blacklist:
-                    for recursivesubsection in expand_config_section(config, subsection, blacklist):
-                        if recursivesubsection not in results:
-                            results.append(recursivesubsection)
-            return results
-        else:
-            ## Disabled sections should be ignored
-            if config.get('section', {}).get('disable', False):
-                return []
-
-            ## NORMAL CASE - return [ section ]
-            return [ section ]
-    ## section name is a glob pattern
-    matching_sections = [x for x in config if fnmatch(x, section)]
-    results = set()
-    for s in matching_sections:
-        if set(s).isdisjoint(set('[*?')):
-            results.update(expand_config_section(config, s))
-        else:
-            ## Section names shouldn't contain []?* ... but in case they do ... don't recurse
-            results.add(s)
-    return results
-
-def config_section(config, section='default'):
-    if section in config and 'inherits' in config[section]:
-        ret = config_section(config, config[section]['inherits'])
-    else:
-        ret = {}
-    if section in config:
-        ret.update(config[section])
-    return ret
-
 def read_config(fn, interactive_error=False):
-    ## This can probably be refactored into fewer lines ...
+    """
+    Thin wrapper around the caldav library's read_config.  The caldav
+    version raises ValueError on a broken config file - plann should
+    rather log the problem and carry on.
+    """
     try:
-        try:
-            with open(fn, 'rb') as config_file:
-                return json.load(config_file)
-        except json.decoder.JSONDecodeError:
-            try:
-                with open(fn, 'rb') as config_file:
-                    return yaml.load(config_file, yaml.Loader)
-            except yaml.scanner.ScannerError:
-                logging.error(f"config file {fn!r} exists but is neither valid json nor yaml.  Check the syntax.")
-
-    except FileNotFoundError:
-        ## File not found
-        logging.info("no config file found")
+        return _read_config(fn) or {}
     except ValueError:
         if interactive_error:
             logging.error("error in config file.  Be aware that the interactive configuration will ignore and overwrite the current broken config file", exc_info=True)

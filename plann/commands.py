@@ -7,21 +7,27 @@ import caldav
 
 ## TODO: can we remove the click-dependency?
 import click
+from icalendar_searcher import Searcher
 
 from plann.interactive import (
     _abort,
     _editor,
     _get_obj_from_line,
+    _interactive_edit,
     _interactive_ical_edit,
     _interactive_relation_edit,
     _mass_interactive_edit,
     _mass_reprioritize,
+    _pdb_edit,
     _strip_line,
-    command_edit,
     interactive_split_task,
 )
 from plann.lib import (
-    _add_category,
+    _add_comma_list,
+    _comma_list_canonical,
+    _comma_list_tokens,
+    _component_type,
+    _is_comma_list_attr,
     _list,
     _process_set_arg,
     _procrastinate,
@@ -34,7 +40,7 @@ from plann.lib import (
 )
 from plann.panic_planning import timeline_suggestion
 from plann.template import Template
-from plann.timespec import _ensure_ts, _now, parse_add_dur, parse_dt, parse_timespec, tz
+from plann.timespec import DURATION_RE, _ensure_ts, _now, parse_add_dur, parse_dt, parse_timespec, tz
 
 
 def _select(ctx, interactive=False, mass_interactive=False, **kwargs):
@@ -62,7 +68,30 @@ def _select(ctx, interactive=False, mass_interactive=False, **kwargs):
                 if click.confirm(f"select {_summary(obj)}?"):
                     ctx.obj['objs'].append(obj)
 
-def __select(ctx, extend_objects=False, all=None, uid=[], abort_on_missing_uid=None, sort_key=[], skip_parents=None, skip_children=None, limit=None, offset=None, freebusyhack=None, pinned_tasks=None, **kwargs_):
+def _sort_key_function(skey):
+    """Build a ``(reverse, key_function)`` pair from a single sort-key spec.
+
+    A leading ``-`` reverses the sort.  A spec containing ``{`` is treated as
+    a template and compiled once here - not rebuilt on every comparison during
+    the sort (code review E2).  ``get_duration()`` is special-cased; any other
+    spec is a plain icalendar component property name.
+    """
+    reverse = skey.startswith('-')
+    if reverse:
+        skey = skey[1:]
+    if '{' in skey:
+        template = Template(skey)
+        def fkey(obj):
+            return template.format(**obj.icalendar_component)
+    elif skey == 'get_duration()':
+        def fkey(obj):
+            return obj.get_duration()
+    else:
+        def fkey(obj):
+            return obj.icalendar_component.get(skey)
+    return reverse, fkey
+
+def __select(ctx, extend_objects=False, all=None, uid=[], abort_on_missing_uid=None, warn_on_missing_uid=True, sort_key=[], skip_parents=None, skip_children=None, limit=None, offset=None, freebusyhack=None, pinned_tasks=None, **kwargs_):
     """
     select/search/filter tasks/events, for listing/editing/deleting, etc
     """
@@ -88,6 +117,14 @@ def __select(ctx, extend_objects=False, all=None, uid=[], abort_on_missing_uid=N
             kwargs[kw] = kwargs_[kw]
 
     ## uid(s)
+    ## NB: we deliberately query every calendar and collect every match rather
+    ## than stopping at the first hit - the same UID may legitimately exist in
+    ## more than one calendar (e.g. a copied event/task), and the caller may
+    ## want to act on all of them.  This costs one lookup per (uid, calendar),
+    ## but that is inherent to "find this UID in any of my calendars": to know
+    ## whether a UID is in a calendar you have to ask that calendar.  Do not
+    ## "optimise" this into a break-on-first-match - it would silently drop the
+    ## cross-calendar duplicates.
     missing_uids = []
     for uid_ in uid:
         cnt = 0
@@ -99,8 +136,11 @@ def __select(ctx, extend_objects=False, all=None, uid=[], abort_on_missing_uid=N
                 pass
         if not cnt:
             missing_uids.append(uid_)
-    if abort_on_missing_uid and missing_uids:
-        _abort(f"Did not find the following uids in any calendars: {missing_uids}")
+    if missing_uids:
+        if abort_on_missing_uid:
+            _abort(f"Did not find the following uids in any calendars: {missing_uids}")
+        elif warn_on_missing_uid:
+            click.echo(f"Warning: did not find the following uids in any calendars: {missing_uids}", err=True)
     if uid:
         return
 
@@ -112,7 +152,7 @@ def __select(ctx, extend_objects=False, all=None, uid=[], abort_on_missing_uid=N
         if kwargs_.get('start'):
             kwargs['start'] = parse_dt(kwargs['start'])
         if kwargs_.get('end') and not isinstance(kwargs_.get('end'), datetime.date):
-            rx = re.match(r'\+((\d+(\.\d+)?[smhdwy])+)', kwargs['end'])
+            rx = re.match(rf'\+{DURATION_RE.pattern}', kwargs['end'])
             if rx:
                 kwargs['end'] = parse_add_dur(kwargs.get('start', datetime.datetime.now()), rx.group(1))
             else:
@@ -158,30 +198,15 @@ def __select(ctx, extend_objects=False, all=None, uid=[], abort_on_missing_uid=N
                         else:
                             ret_objs.append(obj)
             if isinstance(obj, caldav.Todo) and not pinned_tasks:
-                _relships_by_type(obj, 'CHILD').get('CHILD',[])
-                if not any(x.icalendar_comp.get('STATUS', '')!='CANCELLED' for x in parents if isinstance(x, caldav.Event)):
+                children = _relships_by_type(obj, 'CHILD').get('CHILD',[])
+                if not any(x.icalendar_component.get('STATUS', '')!='CANCELLED' for x in children if isinstance(x, caldav.Event)):
                     ret_objs.append(obj)
         ctx.obj['objs'] = ret_objs
 
     ## OPTIMIZE TODO: sorting the list multiple times rather than once is a bit of brute force, if there are several sort keys and long list of objects, we should sort once and consider all sort keys while sorting
     ## TODO: Consider that an object may be expanded and contain lots of event instances.  We will then need to expand the caldav.Event object into multiple objects, each containing one recurrance instance.  This should probably be done on the caldav side of things.
     for skey in reversed(sort_key):
-        ## If the key starts with -, sorting should be reversed
-        if skey[0] == '-':
-            reverse = True
-            skey=skey[1:]
-        else:
-            reverse = False
-        ## if the key contains {}, it should be considered to be a template
-        if '{' in skey:
-            def fkey(obj):
-                return Template(skey).format(**obj.icalendar_component)
-        elif skey == 'get_duration()':
-            def fkey(obj):
-                return obj.get_duration()
-        else:
-            def fkey(obj):
-                return obj.icalendar_component.get(skey)
+        reverse, fkey = _sort_key_function(skey)
         ctx.obj['objs'].sort(key=fkey, reverse=reverse)
 
     ## OPTIMIZE TODO: this is also suboptimal, if ctx.obj is a very long list
@@ -215,45 +240,44 @@ def __select(ctx, extend_objects=False, all=None, uid=[], abort_on_missing_uid=N
                 if attr == 'SUMMARY':
                     comp[attr] = freebusyhack
 
-def _cats(ctx):
+def _categories_in_use(objs):
     categories = set()
-    for obj in ctx.obj['objs']:
+    for obj in objs:
         cats = obj.icalendar_component.get('categories')
         if cats:
             categories.update(cats.cats)
     return categories
 
-def _interactive_edit(obj):
-    if 'BEGIN:VEVENT' in obj.data:
-        objtype = 'event'
-    elif 'BEGIN:VTODO' in obj.data:
-        objtype = 'todo'
-    elif 'BEGIN:VJOURNAL' in obj.data:
-        objtype = 'journal'
-    else:
-        assert False
-    if objtype != 'todo':
-        raise NotImplementedError("interactive editing only implemented for tasks")
-    comp = obj.icalendar_component
-    summary = _summary(comp)
-    dtstart = comp.get('DTSTART')
-    pri = comp.get('PRIORITY', 0)
-    due = obj.get_due()
-    if not dtstart or not due:
-        click.echo(f"task without dtstart or due found, please run set-task-attribs subcommand.  Ignoring {summary}")
-        return
-    dtstart = _ensure_ts(dtstart)
-    click.echo(f"pri={pri} {dtstart:%F %H:%M:%S %Z} - {due:%F %H:%M:%S %Z}: {summary}")
-    input = click.prompt("postpone <n>d / ignore / part(ially-complete) / complete / split / cancel / set foo=bar / edit / family / pdb?", default='ignore')
-    command_edit(obj, input, interactive=True)
+def _cats(ctx):
+    return _categories_in_use(ctx.obj['objs'])
 
-def _edit(ctx, add_category=None, cancel=None, interactive_ical=False, interactive_relations=False, mass_interactive_default='ignore', mass_interactive=False, interactive=False, complete=None, complete_recurrence_mode='safe', postpone=None, postpone_with_children=None, interactive_reprioritize=False, **kwargs):
+def _todos_missing(objs, prop):
+    """Return the objects from ``objs`` that have no ``prop`` property set.
+
+    Client-side filtering via icalendar_searcher's ``undef`` operator - the
+    same semantics the caldav library uses for the server-side ``no_<prop>``
+    search, so we can fetch the task list once and filter locally rather than
+    issuing one server query per attribute (code review E4)."""
+    searcher = Searcher(todo=True)
+    searcher.add_property_filter(prop, None, operator="undef")
+
+    def _missing(obj):
+        ## "undef" only catches a property that is absent altogether.  An
+        ## empty value is no value, and RFC 5545 PRIORITY:0 means "undefined
+        ## priority" - plann treats it that way everywhere else, so those
+        ## tasks must still be offered for editing.
+        return searcher.check_component(obj) or not obj.icalendar_component.get(prop)
+
+    return [obj for obj in objs if _missing(obj)]
+
+def _edit(ctx, cancel=None, interactive_ical=False, interactive_relations=False, mass_interactive_default='ignore', mass_interactive=False, interactive=False, complete=None, complete_recurrence_mode='safe', postpone=None, postpone_with_children=None, interactive_reprioritize=False, **kwargs):
     """
     Edits a task/event/journal
     """
     ## TODO: consolidate with command_edit
     if 'recurrence_mode' in kwargs:
         complete_recurrence_mode = kwargs.pop('recurrence_mode')
+    add_args = _process_add_args(kwargs)
     _process_set_args(ctx, kwargs, keep_category=True)
     if interactive_ical:
         _interactive_ical_edit(ctx.obj['objs'])
@@ -280,15 +304,11 @@ def _edit(ctx, add_category=None, cancel=None, interactive_ical=False, interacti
             _interactive_edit(obj)
         comp = obj.icalendar_component
         if kwargs.get('pdb'):
-            click.echo("icalendar component available as comp")
-            click.echo("caldav object available as obj")
-            click.echo("do the necessary changes and press c to continue normal code execution")
-            click.echo("happy hacking")
-            breakpoint()
+            _pdb_edit(obj)
         for arg in ctx.obj['set_args']:
             _set_something(obj, arg, ctx.obj['set_args'][arg])
-        if add_category:
-            _add_category(obj, add_category)
+        for canonical, tokens in add_args:
+            _add_comma_list(obj, canonical, tokens)
         if complete:
             obj.complete(handle_rrule=complete_recurrence_mode, rrule_mode=complete_recurrence_mode)
         elif complete is False:
@@ -313,7 +333,7 @@ def _check_for_panic(ctx, hours_per_day, output=True, print_timeline=True, fix_t
     timeline_end = parse_dt(timeline_end, datetime.datetime)
     if include_all_events:
         ## Remove events from the list to prevent duplicates ...
-        ctx.obj['objs'] = [x for x in ctx.obj['objs'] if 'BEGIN:VEVENT' not in x.data]
+        ctx.obj['objs'] = [x for x in ctx.obj['objs'] if _component_type(x) != 'VEVENT']
         ## ... and then add all events
         _select(ctx, event=True, start=timeline_start, end=timeline_end, extend_objects=True)
     possible_timeline = timeline_suggestion(ctx, hours_per_day=hours_per_day, timeline_end=timeline_end)
@@ -375,6 +395,20 @@ def _check_for_panic(ctx, hours_per_day, output=True, print_timeline=True, fix_t
             _add_event(ctx, summary=summary, timespec=f"{begin} {end}", set_status='TENTATIVE', first_calendar=True, set_parent=[uid])
 
     return possible_timeline
+
+def _process_add_args(kwargs):
+    """Pop the --add-<attr> options out of kwargs and return a list of
+    ``(canonical_property, tokens)`` pairs to append.  Only comma-list
+    properties (categories, resources) have add-options; the plural form splits
+    on comma, the singular form keeps the comma literal."""
+    ret = []
+    for key in [k for k in kwargs if k.startswith('add_')]:
+        value = kwargs.pop(key)
+        attr = key[4:]
+        if not value or not _is_comma_list_attr(attr):
+            continue
+        ret.append((_comma_list_canonical(attr), _comma_list_tokens(attr, value)))
+    return ret
 
 def _process_set_args(ctx, kwargs, keep_category=False):
     ctx.obj['set_args'] = {}
@@ -550,40 +584,36 @@ def _set_task_attribs(ctx):
     """
     actual implementation of set_task_attribs
     """
-    ## Tasks missing a category
     LIMIT = 16
 
+    ## Fetch the pending todos once, then filter client-side per attribute -
+    ## rather than issuing a fresh server select for each attribute (E4).
+    _select(ctx=ctx, todo=True, sort_key=['{DTSTART:?{DUE:?(0000)?}?%F %H:%M:%S}', '{PRIORITY:?0?}'])
+    todos = list(ctx.obj['objs'])
+
     def _set_something_(something, help_text, help_url=None, default=None, objs=None):
-        cond = {f"no_{something}": True}
-        something_ = 'categories' if something == 'category' else something
+        something_ = _comma_list_canonical(something) if _is_comma_list_attr(something) else something
         if something == 'duration':
             something_ = 'dtstart'
-            cond['no_dtstart'] = True
-        _select(ctx=ctx, todo=True, limit=LIMIT, sort_key=['{DTSTART:?{DUE:?(0000)?}?%F %H:%M:%S}', '{PRIORITY:?0?}'], **cond)
-        ## Doing some client-side filtering due to calendar servers that don't support the RFC properly
-        ## TODO: "Incompatibility workarounds" should be moved to the caldav library
-        objs_ = [x for x in ctx.obj['objs'] if not x.icalendar_component.get(something_)]
+        objs_ = _todos_missing(todos, something_)
 
         ## add all non-duplicated objects from objs to objs_
         uids_ = {x.icalendar_component['UID'] for x in objs_}
         for obj in objs or []:
             if obj.icalendar_component['UID'] not in uids_:
-                obj.load()
                 objs_.append(obj)
         objs = objs_
+        if something == 'duration':
+            objs = [x for x in objs if x.icalendar_component.get('due')]
 
         if objs:
-            if something == 'duration':
-                objs = [x for x in objs if x.icalendar_component.get('due')]
-            num = len(objs)
-            if num == LIMIT:
-                num = f"{LIMIT} or more"
+            capped = len(objs) > LIMIT
+            objs = objs[:LIMIT]
+            num = f"{LIMIT} or more" if capped else len(objs)
             click.echo(f"There are {num} tasks with no {something} set.")
             click.echo(help_url)
             if something == 'category':
-                _select(ctx=ctx, todo=True)
-                cats = list(_cats(ctx))
-                cats.sort()
+                cats = sorted(_categories_in_use(todos))
                 click.echo("List of existing categories in use (if any):")
                 click.echo("\n".join(cats))
             click.echo(f"For each task, {help_text}")
@@ -596,8 +626,8 @@ def _set_task_attribs(ctx):
                     obj.complete()
                     obj.save()
                     continue
-                if something == 'category':
-                    comp.add(something_, value.split(','))
+                if _is_comma_list_attr(something):
+                    comp.add(something_, _comma_list_tokens(something, value))
                 elif something == 'due':
                     _procrastinate([obj], parse_dt(value, datetime.datetime), check_dependent='interactive', err_callback=click.echo, confirm_callback=click.confirm)
                 elif something == 'duration':

@@ -16,6 +16,7 @@ doing them.
 
 import os
 import re
+import shutil
 import subprocess
 import tempfile
 
@@ -24,6 +25,7 @@ from icalendar.prop import vRecur
 
 from plann.lib import (
     _adjust_relations,
+    _component_type,
     _list,
     _now,
     _process_set_arg,
@@ -35,8 +37,17 @@ from plann.lib import (
     add_time_tracking,
 )
 from plann.template import Template
-from plann.timespec import _ensure_ts, parse_add_dur
+from plann.timespec import DURATION_UNITS, _ensure_ts, parse_add_dur
 
+
+def _pdb_edit(obj, interactive=True):
+    comp = obj.icalendar_component  # noqa: F841 — visible in pdb session
+    if interactive:
+        click.echo("icalendar component available as comp")
+        click.echo("caldav object available as obj")
+        click.echo("do the necessary changes and press c to continue normal code execution")
+        click.echo("happy hacking")
+    breakpoint()
 
 def command_edit(obj, command, interactive=True):
     if command == 'ignore':
@@ -60,8 +71,8 @@ def command_edit(obj, command, interactive=True):
                 with_params['with_family'] = true
             if 'with children' in command:
                 with_params['with_children'] = true
-            if 'with family' in command:
-                with_params['with_family'] = true
+            if 'with parent' in command:
+                with_params['with_parent'] = true
         ## TODO: we probably shouldn't be doing this interactively here?
         _procrastinate([obj], command.split(' ')[1], **with_params)
     elif command == 'complete':
@@ -86,12 +97,7 @@ def command_edit(obj, command, interactive=True):
         ## TODO - experimental and very incomplete!
         add_time_tracking(obj)
     elif command == 'pdb':
-        if interactive:
-            click.echo("icalendar component available as comp")
-            click.echo("caldav object available as obj")
-            click.echo("do the necessary changes and press c to continue normal code execution")
-            click.echo("happy hacking")
-        breakpoint()
+        _pdb_edit(obj, interactive=interactive)
     else:
         if interactive:
             click.echo(f"unknown instruction '{command}' - ignoring")
@@ -150,13 +156,6 @@ def _set_relations_from_text_list(calendar, some_list, parent=None, indent=0):
                 return j
         return None
 
-    def get_obj(line):
-        """Check the uuid on the line and return the caldav object"""
-        uid = line.lstrip().split(':')[0]
-        if not uid:
-            raise NotImplementedError("No uid - what now?")
-        return calendar.object_by_uid(uid)
-
     i=0
     children = []
     while i<len(some_list):
@@ -185,13 +184,22 @@ def _set_relations_from_text_list(calendar, some_list, parent=None, indent=0):
                 if new_indent < line_indent and new_indent != indent:
                     raise NotImplementedError("unexpected indentation 2")
                 j+=1
-            _set_relations_from_text_list(calendar, some_list[i:j], parent=get_obj(some_list[i-1]), indent=line_indent)
+            ## _get_obj_from_line returns None for a blank or comment line.
+            ## Passing that on as the parent would make _adjust_relations
+            ## strip the PARENT relation off every child below it, so abort
+            ## rather than silently mutating the user's data.
+            parent_obj = _get_obj_from_line(some_list[i-1], calendar)
+            if parent_obj is None:
+                raise NotImplementedError(f"no task found on the line above the indented section: {some_list[i-1]!r}")
+            _set_relations_from_text_list(calendar, some_list[i:j], parent=parent_obj, indent=line_indent)
             i=j
             continue
 
         ## Unindented line.  Should be a direct child under parent
         if line_indent == indent:
-            children.append(get_obj(some_list[i]))
+            obj = _get_obj_from_line(some_list[i], calendar)
+            if obj is not None:
+                children.append(obj)
             i+=1
             continue
 
@@ -206,15 +214,7 @@ def _abort(message):
     raise click.Abort(message)
 
 def _interactive_edit(obj):
-    if 'BEGIN:VEVENT' in obj.data:
-        objtype = 'event'
-    elif 'BEGIN:VTODO' in obj.data:
-        objtype = 'todo'
-    elif 'BEGIN:VJOURNAL' in obj.data:
-        objtype = 'journal'
-    else:
-        assert False
-    if objtype != 'todo':
+    if _component_type(obj) != 'VTODO':
         raise NotImplementedError("interactive editing only implemented for tasks")
     comp = obj.icalendar_component
     summary = _summary(comp)
@@ -226,8 +226,18 @@ def _interactive_edit(obj):
         return
     dtstart = _ensure_ts(dtstart)
     click.echo(f"pri={pri} {dtstart:%F %H:%M:%S %Z} - {due:%F %H:%M:%S %Z}: {summary}")
-    input = click.prompt("postpone <n>d / ignore / part(ially-complete) / complete / split / cancel / set foo=bar / edit / family / pdb?", default='ignore')
-    command_edit(obj, input, interactive=True)
+    input = click.prompt("postpone <n>d / ignore / part(ially-complete) / complete / split / cancel / set foo=bar / edit / family / start / pdb?", default='ignore')
+    try:
+        command_edit(obj, input, interactive=True)
+    except NotImplementedError as e:
+        ## e.g. `start` when extra_config.time_tracking is not configured -
+        ## the prompt advertises the command, so report why it did not work
+        ## rather than tearing down the rest of the session with a traceback
+        click.echo(f"Could not run '{input}': {e}")
+        return
+    if input == 'start':
+        ## time tracking has been started - re-prompt so a follow-up command can be given for the same task
+        _interactive_edit(obj)
 
 def _mass_reprioritize(objs):
     text = """\
@@ -295,7 +305,7 @@ def _mass_interactive_edit(objs, default='ignore'):
 
 def interactive_split_task(obj, partially_complete=False, too_big=True):
     comp = obj.icalendar_component
-    summary = comp.get('summary') or comp.get('description') or comp.get('uid')
+    summary = _summary(obj)
     estimate = obj.get_duration()
     tbm = ""
     if too_big:
@@ -330,7 +340,7 @@ def interactive_split_task(obj, partially_complete=False, too_big=True):
         new_summary = click.prompt("Summary of the parent task?", default=obj.icalendar_component['SUMMARY'])
         obj.icalendar_component['SUMMARY'] = new_summary
         postpone = click.prompt("Should we postpone the parent task?", default='0h')
-        if postpone in ('0h', '0'): ## TODO: regexp?
+        if postpone not in ('0h', '0'): ## TODO: regexp?
             _procrastinate([obj], postpone, check_dependent='interactive', err_callback=click.echo, confirm_callback=click.confirm)
         obj.save()
 
@@ -338,16 +348,12 @@ def _editor(sometext):
     with tempfile.NamedTemporaryFile(mode='w', encoding='UTF-8', delete=False) as tmpfile:
         tmpfile.write(sometext)
         fn = tmpfile.name
-    editor = os.environ.get("VISUAL") or os.environ.get("EDITOR") or ""
-    if '/' not in editor:
-        for path in os.environ.get("PATH", "").split(os.pathsep):
-            full_path = os.path.join(path, editor)
-            if os.path.exists(full_path) and os.access(full_path, os.X_OK):
-                editor = full_path
-                break
-    for ed in (editor, '/usr/bin/vim', '/usr/bin/vi', '/usr/bin/emacs', '/usr/bin/nano', '/usr/bin/pico', '/bin/vi'):
-        if os.path.isfile(ed) and os.access(ed, os.X_OK):
-            break
+    candidates = (os.environ.get("VISUAL"), os.environ.get("EDITOR"),
+                  'vim', 'vi', 'emacs', 'nano', 'pico')
+    ed = next((found for c in candidates if c and (found := shutil.which(c))), None)
+    if not ed:
+        os.unlink(fn)
+        raise FileNotFoundError("no usable editor found; set the EDITOR or VISUAL environment variable")
     subprocess.run([ed, fn])
     with open(fn) as tmpfile:
         ret = tmpfile.read()
@@ -375,7 +381,7 @@ def _get_obj_from_line(line, calendar):
     return obj
 
 def _command_line_edit(line, calendar, interactive=True):
-    regexp = re.compile("((?:set [^ ]*=[^ ]*)|(?:postpone (?:[0-9]+[smhdwy]|20[0-9][0-9]-[0-9][0-9]-[0-9][0-9]))|[^ ]*) (.*)$")
+    regexp = re.compile(rf"((?:set [^ ]*=[^ ]*)|(?:postpone (?:[0-9]+[{DURATION_UNITS}]|20[0-9][0-9]-[0-9][0-9]-[0-9][0-9]))|[^ ]*) (.*)$")
     line = _strip_line(line)
     if not line:
         return

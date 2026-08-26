@@ -2,10 +2,19 @@ name: Link check
 
 on:
   push:
+    branches:
+      - master
   pull_request:
   workflow_dispatch:
   schedule:
    - cron: "03 22 * * *"
+
+# Serialise runs that share a ref so two link-check runs never race to create
+# the "Link Checker Report" issue.  (The old setup let a push and the matching
+# pull_request run both file an issue at the same second - cf. issues #44/#45.)
+concurrency:
+  group: linkcheck-${{ github.ref }}
+  cancel-in-progress: false
 
 jobs:
   linkcheck:
@@ -26,29 +35,43 @@ jobs:
       with:
         fail: false
         args: >-
-          --config .lychee.toml
-          --timeout 20
-          --max-retries 3
+          --config lychee.toml
+          --timeout 30
+          --max-retries 6
+          --retry-wait-time 2
           --cache
           --max-cache-age 14d
           .
+
+    # Issue management only happens on the default branch (scheduled run, push
+    # to master, or manual dispatch).  PR and feature-branch runs only surface
+    # the lychee output in the job log: this avoids issue noise from transient
+    # branch states and removes the duplicate-issue race entirely, since only
+    # master-ref runs touch issues and the concurrency group serialises those.
     - name: Create or update Link Checker issue
-      if: steps.lychee.outputs.exit_code != 0
+      if: steps.lychee.outputs.exit_code != 0 && github.ref == 'refs/heads/master'
       env:
         GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       run: |
-        EXISTING=$(gh issue list --label "report" --state open --json number --jq '.[0].number' 2>/dev/null || echo "")
-        if [ -n "$EXISTING" ]; then
-          gh issue edit "$EXISTING" --body-file ./lychee/out.md
+        # Keep the oldest open report issue as the canonical one and fold any
+        # duplicates into it, so accumulated dupes self-heal over time.
+        ISSUES=$(gh issue list --label "report" --state open --json number --jq '.[].number' | sort -n)
+        CANON=$(printf '%s\n' "$ISSUES" | head -1)
+        for n in $(printf '%s\n' "$ISSUES" | tail -n +2); do
+          gh issue close "$n" --comment "Duplicate of #${CANON} - auto-closed by the link checker."
+        done
+        if [ -n "$CANON" ]; then
+          gh issue edit "$CANON" --body-file ./lychee/out.md
         else
           gh issue create --title "Link Checker Report" --body-file ./lychee/out.md --label "report"
         fi
     - name: Close Link Checker issue if all links are healthy
-      if: steps.lychee.outputs.exit_code == 0
+      if: steps.lychee.outputs.exit_code == 0 && github.ref == 'refs/heads/master'
       env:
         GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       run: |
-        EXISTING=$(gh issue list --label "report" --state open --json number --jq '.[0].number' 2>/dev/null || echo "")
-        if [ -n "$EXISTING" ]; then
-          gh issue close "$EXISTING" --comment "All links are now healthy."
-        fi
+        # Close every open report issue, not just the first, so stragglers from
+        # earlier races also get cleaned up.
+        for n in $(gh issue list --label "report" --state open --json number --jq '.[].number'); do
+          gh issue close "$n" --comment "All links are now healthy."
+        done
