@@ -13,7 +13,7 @@ fund established by [NLnet](https://nlnet.nl/) with financial support from the
 European Commission's [Next Generation Internet](https://ngi.eu/) programme, under
 the aegis of DG Communications Networks, Content and Technology.
 
-The funded scope is 156 hours.  This was based on an initial
+The funded scope is 144 hours.  This was based on an initial
 human-made rough plan of five task buckets.  I asked Claude Opus to
 make me a roadmap based on the human-made plan, open issues, existing
 design documents and the code itself.  The buckets have been
@@ -113,7 +113,7 @@ library - see the scope note in [#49](https://github.com/pycalendar/plann/issues
 
 ---
 
-## Phase 2: Quality assurance (54 hours)
+## Phase 2: Quality assurance (48 hours)
 
 The largest block by a wide margin, and the one the project most needs.  98 tests
 pass at **50% statement coverage**, with the modules holding the actual logic covered
@@ -134,8 +134,8 @@ read during this review.
 
 | Item | Deliverable | h | € | Issue |
 |---|---|---|---|---|
-| 2.1 Coverage for `commands.py` / `interactive.py` | Both modules at or above 70%, with a CI coverage floor so it cannot drift back | 20 | 1000 | [#50](https://github.com/pycalendar/plann/issues/50) |
-| 2.2 End-to-end command-line tests | An executable suite exercising the documented command lines against a real server | 12 | 600 | [#13](https://github.com/pycalendar/plann/issues/13) |
+| 2.1 Coverage for `commands.py` / `interactive.py` | Both modules at or above 70%, with a CI coverage floor so it cannot drift back | 16 | 800 | [#50](https://github.com/pycalendar/plann/issues/50) |
+| 2.2 End-to-end command-line tests | An executable suite exercising the documented command lines against a real server | 10 | 500 | [#13](https://github.com/pycalendar/plann/issues/13) |
 | 2.3 Type annotations and static checking | Annotated public functions, mypy running clean in CI | 12 | 600 | [#51](https://github.com/pycalendar/plann/issues/51) |
 | 2.4 TODO triage | TODO count reduced to genuinely local notes; everything else an issue or deleted | 6 | 300 | [#52](https://github.com/pycalendar/plann/issues/52) |
 | 2.5 Remaining code-review debt | The last open item (`C9`) from the June 2026 review closed | 4 | 200 | [#53](https://github.com/pycalendar/plann/issues/53) |
@@ -146,7 +146,7 @@ the object was fetched cannot carry a reporting feature.
 
 ---
 
-## Phase 3: Migration to calendaring-client (22 hours)
+## Phase 3: Migration to calendaring-client (16 hours)
 
 `calendaring-client` is a general Python client library for calendaring **and task**
 data with one API across CalDAV, JMAP, local `.ics` files, iCalendar feeds and task
@@ -154,18 +154,20 @@ trackers.  plann is named in its roadmap as the designated dogfooding consumer, 
 multi-backend support - notably issue trackers - has been on plann's own wish list
 since [`DESIGN.md`](../DESIGN.md) was written.
 
-This item grew from 16 to 22 hours as 1.3 and 4.1 shed work onto it.  Both concluded
-that the logic belongs in the library rather than in plann, which does not make the
-work disappear - it makes plann a *consumer* of an API that has to exist.  The added
-hours buy plann's side of that: specifying what plann needs, reviewing it, and
-integrating against it.  Writing the library code is `calendaring-client`'s budget.
+1.3 and 4.1 both concluded that logic they used to own belongs in the library rather
+than in plann.  That does not make the work disappear - it makes plann a *consumer*
+of an API that has to exist.  Rather than budget that here, **600 EUR (12 hours) was
+moved from this grant to the `calendaring-client` grant**, which now carries an
+explicit "Time-tracking model and API" item alongside its existing configuration and
+credentials item.  This roadmap therefore totals 144 hours rather than 156, and the
+library work is funded where it will be written.
 
-**These 22 hours do not buy a completed migration.**  `calendaring-client`'s roadmap
+**These 16 hours do not buy a completed migration.**  `calendaring-client`'s roadmap
 estimates the full port at 24-40 hours and places it outside its own funded scope.
 
 | Item | Deliverable | h | € | Issue |
 |---|---|---|---|---|
-| 3.1 Port plann onto calendaring-client | A meaningful subset running on the new library, one non-trivial command proven against a non-CalDAV backend, and a written API critique delivered before its 1.0 freeze | 22 | 1100 | [#55](https://github.com/pycalendar/plann/issues/55) |
+| 3.1 Port plann onto calendaring-client | A meaningful subset running on the new library, one non-trivial command proven against a non-CalDAV backend, and a written API critique delivered before its 1.0 freeze | 16 | 800 | [#55](https://github.com/pycalendar/plann/issues/55) |
 
 ---
 
@@ -246,20 +248,24 @@ Per-item hours are in the phase tables above.
 
 | Phase | Hours | EUR | Share |
 |---|---|---|---|
-| 1 - Bug fixing and user-facing gaps | 20 | 1000 | 13% |
-| 2 - Quality assurance | 54 | 2700 | 35% |
-| 3 - Migration to calendaring-client | 22 | 1100 | 14% |
-| 4 - Time tracking and milestone reporting | 18 | 900 | 12% |
-| 5 - Documentation | 42 | 2100 | 27% |
-| **Total** | **156** | **7800** | |
+| 1 - Bug fixing and user-facing gaps | 20 | 1000 | 14% |
+| 2 - Quality assurance | 48 | 2400 | 33% |
+| 3 - Migration to calendaring-client | 16 | 800 | 11% |
+| 4 - Time tracking and milestone reporting | 18 | 900 | 13% |
+| 5 - Documentation | 42 | 2100 | 29% |
+| **Total** | **144** | **7200** | |
 
 ### Changes from the original five-bucket plan
+
+The original plan was 156 hours (7800 EUR).  It is now **144 hours (7200 EUR)**: 600
+EUR was moved to the `calendaring-client` grant to fund the library work that 1.3 and
+4.1 shed.  The total across the two grants is unchanged.
 
 | Original bucket | Was | Now | Why |
 |---|---|---|---|
 | Bug fixes and downstream improvements | 12 | 20 | Two open user-reported server-compatibility bugs, an unmerged community PR, a multi-calendar data-integrity bug found during this review, and the configuration/credentials path - which is where a new user meets plann and where an advertised command raises `NotImplementedError`.  The v1.2.0 release itself is **not** charged here: it ships before the funded period begins |
-| QA | 48 | 54 | Now the largest bucket, and the one the whole plan leans on.  Coverage is 50%, there are no type annotations at all, and two of the 88 TODO comments turned out to be unreported bugs |
-| Migration to calendaring-client | 16 | 22 | Rescoped and moved ahead of the time-tracking work, which now depends on it.  It grew because configuration and time-tracking logic moved out of plann and into the library, making plann a consumer of an API that has to be specified and integrated.  It still buys a partial port and a design critique, not a completed migration |
+| QA | 48 | 48 | Unchanged in the end, and still the largest bucket by a wide margin: coverage is 50%, there are no type annotations at all, and two of the 88 TODO comments turned out to be unreported bugs.  It was briefly raised to 54 before 600 EUR moved to the sibling grant |
+| Migration to calendaring-client | 16 | 16 | Unchanged in size, but moved ahead of the time-tracking work, which now depends on it.  The library-side APIs that plann became a consumer of are funded in the `calendaring-client` grant rather than here.  It buys a partial port and a design critique, not a completed migration |
 | Milestone reporting | 32 | 18 | The iCalendar representation of "time spent" is library work, not plann's.  And the report itself is an export format over an aggregated task list rather than a feature of its own - once the aggregation groups a selection into budget lines and totals each one, the rendering is a template |
 | Documentation | 48 | 42 | Six hours moved to Phase 1.  Documentation is still the second-largest block |
 
@@ -286,13 +292,13 @@ below.
 
 **This risk grew when time tracking was made to depend on the migration.**  The
 migration was originally last and load-bearing for nothing; it is now a prerequisite
-for all 18 hours of Phase 4.  That puts **40 hours - 26% of the grant** behind an
+for all 18 hours of Phase 4.  That puts **34 hours - 24% of the grant** behind an
 external project that has not yet written a line of code, and it removes the release
 valve: dropping the migration now drops time tracking and milestone reporting with
 it.
 
 **Mitigation:** Phase 3 is scheduled as early as its dependency allows, and Phases 1,
-2 and 5 (116 hours, 74%) are deliberately independent of it, so the grant keeps
+2 and 5 (110 hours, 76%) are deliberately independent of it, so the grant keeps
 delivering while it is blocked.  Its own deliverable stays defined as *evidence and a
 critique* rather than a finished port, so partial delivery is still delivery.
 
@@ -321,14 +327,14 @@ room for it.
   time spent".  There is no implementation line for a time-tracking API, and 4.1
   depends on one existing.
 
-**Resolution:** `calendaring-client` is reprojected before its MoU is finalised, with
-an implementation item for the time-tracking model that 0.1 recommends.  If its 216
-hours cannot absorb that, hours move from this grant to that one - the work is the
-same work, and which grant pays for it is an accounting question rather than a
-technical one.  What must not happen is both roadmaps assuming the other is paying:
-that is how 4.1 ends up blocked on an API nobody budgeted to write.
+**Resolved:** `calendaring-client` has been reprojected, with an explicit
+"Time-tracking model and API" item (12 h), funded by moving 600 EUR from this grant.
+plann's scope drops from 156 to 144 hours accordingly, and the total across the two
+grants is unchanged.  The work is the same work; which grant pays for it was an
+accounting question rather than a technical one.
 
-This is a decision to take while both plans are still drafts, not after.
+The failure mode this avoids is both roadmaps assuming the other is paying - which is
+how 4.1 would have ended up blocked on an API nobody had budgeted to write.
 
 ### Milestone reporting has an audience of one
 
@@ -390,7 +396,7 @@ ready.
 
 Everything below is in plann's ambition - most of it argued for at length in
 [`DESIGN.md`](../DESIGN.md), [`NEXT_LEVEL.md`](../NEXT_LEVEL.md) or
-[`TASK_MANAGEMENT.md`](../TASK_MANAGEMENT.md) - but **outside the 156 funded hours**.
+[`TASK_MANAGEMENT.md`](../TASK_MANAGEMENT.md) - but **outside the 144 funded hours**.
 The maintainer intends to continue developing plann with or without funding, though
 the first priority will always be to get food on the table.
 
